@@ -94,26 +94,16 @@ async function writableBridgeRoots(): Promise<BridgeRoot[]> {
   if (writableRootsPromise) return writableRootsPromise
   writableRootsPromise = (async () => {
     const fm = Scripting.FileManager
-    const roots = bridgeRootCandidates()
-    if (!roots.length) throw new Error("Scripting.FileManager 没有暴露可写共享目录。")
-    const writable: BridgeRoot[] = []
-    const failures: string[] = []
-    for (const root of roots) {
-      const directory = `${root.path}/${BRIDGE_DIRECTORY}`
-      const probe = `${directory}/.bridge-probe-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`
-      try {
-        await fm.createDirectory(directory, true)
-        await fm.writeAsString(probe, "ok")
-        if (!await fm.exists(probe)) throw new Error("写入探针后文件不存在")
-        await fm.readAsString(probe)
-        await fm.remove(probe)
-        writable.push(root)
-      } catch (error) {
-        failures.push(`${root.type}: ${errorSummary(error)}`)
-      }
-    }
-    if (!writable.length) throw new Error(`Safari 登录桥找不到可写共享目录。${failures.join(" | ")}`)
-    return writable
+    const canonical = bridgeRootCandidates().find(root => root.type === "safariBrowserStorageDirectory")
+    if (!canonical) throw new Error("Scripting.FileManager 未提供 safariBrowserStorageDirectory。")
+    const directory = `${canonical.path}/${BRIDGE_DIRECTORY}`
+    const probe = `${directory}/.bridge-probe-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`
+    await fm.createDirectory(directory, true)
+    await fm.writeAsString(probe, "ok")
+    if (!await fm.exists(probe)) throw new Error("官方 Safari Browser Storage Directory 写入探针后文件不存在")
+    await fm.readAsString(probe)
+    await fm.remove(probe)
+    return [canonical]
   })()
   return writableRootsPromise
 }
