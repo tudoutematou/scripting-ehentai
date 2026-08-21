@@ -1,12 +1,12 @@
 {
-  "time": "2026-08-21T09:41:11.411Z",
+  "time": "2026-08-21T09:53:09.382Z",
   "scriptVersion": "0.1.9",
-  "stage": "gallery-home",
+  "stage": "manual-diagnostic",
   "ok": true,
   "request": {
-    "url": "https://e-hentai.org/",
+    "url": "",
     "status": 0,
     "statusText": ""
   },
-  "notes": "items=25; firstTitleLen=140; firstCategoryLen=9; firstUploaderLen=8"
+  "notes": "用户手动上传诊断"
 }
