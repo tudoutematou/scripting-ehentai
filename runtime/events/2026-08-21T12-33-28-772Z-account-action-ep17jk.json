@@ -1,0 +1,17 @@
+{
+  "time": "2026-08-21T12:33:28.772Z",
+  "scriptVersion": "0.2.3",
+  "stage": "account-action",
+  "ok": false,
+  "error": {
+    "name": "Error",
+    "message": "已打开 Safari。完成论坛登录后，登录桥会自动跳到 e-hentai.org 同步 Cookie；看到绿色“✓ Scripting 已捕获登录状态”后返回本脚本，再点一次“网页登录”完成导入。",
+    "stack": "@\nfulfilled@"
+  },
+  "request": {
+    "url": "",
+    "status": 0,
+    "statusText": ""
+  },
+  "notes": ""
+}
