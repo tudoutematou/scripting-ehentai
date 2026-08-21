@@ -26,8 +26,8 @@ export type GalleryPageLink = {
   thumbHeight: number
 }
 
-export function buildSearchUrl(keyword: string): string {
-  const url = new URL(E_HENTAI_BASE)
+export function buildSearchUrl(keyword: string, baseUrl = E_HENTAI_BASE): string {
+  const url = new URL(baseUrl)
   const value = keyword.trim()
   if (value) {
     url.searchParams.set("f_search", value)

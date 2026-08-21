@@ -34,6 +34,15 @@ import {
   readSetupRules,
   reportDiagnostic,
 } from "./githubBridge"
+import {
+  AccountStatus,
+  getAccountStatus,
+  getBaseUrl,
+  refreshAccountStatus,
+  setActiveSite,
+  signInWithWebView,
+  signOut,
+} from "./account"
 
 const fileManager: any = (globalThis as any).FileManager
 const spritePathCache = new Map<string, Promise<string>>()
@@ -179,16 +188,22 @@ function GalleryRow({ item }: { item: GallerySummary }) {
           systemName="photo"
           frame={{ width: 76, height: 106 }}
           foregroundStyle="secondaryLabel"
-        />
-    <VStack alignment="leading" spacing={5} frame={{ maxWidth: "infinity" }}>
-      <Text font="headline" foregroundStyle="label" lineLimit={3}>{item.title || "未命名画廊"}</Text>
+        />}
+    <VStack alignment="leading" spacing={6}>
+      <Text font="headline" lineLimit={3}>{item.title || "未命名画廊"}</Text>
+      {item.category
+        ? <Text
+            font="caption"
+            padding={{ horizontal: 7, vertical: 3 }}
+            background="secondarySystemBackground"
+            cornerRadius={6}
+          >{item.category}</Text>
+        : null}
       <Text font="caption" foregroundStyle="secondaryLabel">
-        {[item.category, item.uploader].filter(Boolean).join(" · ")}
-      </Text>
-      <Text font="caption2" foregroundStyle="secondaryLabel">
-        {[item.pages ? `${item.pages} 页` : "", item.posted].filter(Boolean).join(" · ")}
+        {[item.uploader, item.pages ? `${item.pages} 页` : "", item.posted].filter(Boolean).join(" · ")}
       </Text>
     </VStack>
+    <Spacer />
   </HStack>
 }
 
@@ -203,6 +218,8 @@ function HomeView() {
   const [nextHref, setNextHref] = useState("")
   const [syncing, setSyncing] = useState(false)
   const [bridgeStatus, setBridgeStatus] = useState("")
+  const [accountBusy, setAccountBusy] = useState(false)
+  const [account, setAccount] = useState<AccountStatus>(getAccountStatus())
 
   const reportWithoutBreakingUI = async (input: Parameters<typeof reportDiagnostic>[0]) => {
     try {
@@ -216,7 +233,7 @@ function HomeView() {
   const runSearch = async (directUrl?: string) => {
     if (loading) return
     const stage = directUrl ? "gallery-page" : (keyword.trim() ? "gallery-search" : "gallery-home")
-    const requestUrl = directUrl || `https://e-hentai.org/?f_search=${encodeURIComponent(keyword)}`
+    const requestUrl = directUrl || `${getBaseUrl()}?f_search=${encodeURIComponent(keyword)}`
     setLoading(true)
     setError("")
     try {
@@ -252,6 +269,59 @@ function HomeView() {
     }
   }
 
+  const resetListAndSearch = async () => {
+    setPrevHref("")
+    setNextHref("")
+    await runSearch()
+  }
+
+  const runAccountAction = async (action: "login" | "refresh" | "logout" | "site-e" | "site-ex") => {
+    if (accountBusy) return
+    setAccountBusy(true)
+    setError("")
+    try {
+      if (action === "login") {
+        const status = await signInWithWebView()
+        setAccount(status)
+        await reportWithoutBreakingUI({
+          stage: "account-login",
+          ok: status.loggedIn,
+          notes: `loggedIn=${status.loggedIn}; exAvailable=${String(status.exAvailable)}; igneous=${status.igneousPresent}`,
+        })
+        await resetListAndSearch()
+      } else if (action === "refresh") {
+        const status = await refreshAccountStatus()
+        setAccount(status)
+        await reportWithoutBreakingUI({
+          stage: "account-status",
+          ok: true,
+          notes: `loggedIn=${status.loggedIn}; exAvailable=${String(status.exAvailable)}; site=${status.site}`,
+        })
+      } else if (action === "logout") {
+        signOut()
+        const status = getAccountStatus()
+        setAccount(status)
+        await reportWithoutBreakingUI({ stage: "account-logout", ok: true, notes: "local session cleared" })
+        await resetListAndSearch()
+      } else {
+        const site = action === "site-ex" ? "ex" : "e"
+        if (site === "ex" && account.exAvailable !== true) {
+          throw new Error("当前账号尚未验证可访问 ExHentai。")
+        }
+        setActiveSite(site)
+        setAccount({ ...account, site })
+        await reportWithoutBreakingUI({ stage: "account-site", ok: true, notes: `site=${site}` })
+        await resetListAndSearch()
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      setError(message)
+      await reportWithoutBreakingUI({ stage: "account-action", ok: false, error: e })
+    } finally {
+      setAccountBusy(false)
+    }
+  }
+
   const runBridgeAction = async (action: "push" | "pull" | "diagnostic") => {
     if (syncing) return
     setSyncing(true)
@@ -282,6 +352,17 @@ function HomeView() {
   useEffect(() => {
     void (async () => {
       try {
+        const status = await refreshAccountStatus()
+        setAccount(status)
+      } catch {
+        // 登录状态检测失败不影响游客浏览。
+      }
+    })()
+  }, [])
+
+  useEffect(() => {
+    void (async () => {
+      try {
         const setup = await readSetupRules()
         setBridgeStatus(`GitHub 已连接；已读取联调规则（${setup.text.length} 字符）。`)
       } catch (e) {
@@ -290,6 +371,8 @@ function HomeView() {
       }
     })()
   }, [])
+
+  const siteLabel = account.site === "ex" ? "exhentai.org" : "e-hentai.org"
 
   return <List
     navigationTitle="E-Hentai 浏览器"
@@ -300,7 +383,63 @@ function HomeView() {
       ? <ProgressView title="正在加载…" progressViewStyle="circular" />
       : undefined}
   >
-    <Section header={<Text textCase={null}>游客模式 · e-hentai.org</Text>}>
+    <Section header={<Text textCase={null}>账户</Text>}>
+      <VStack alignment="leading" spacing={8}>
+        <HStack>
+          <Text font="headline">{account.loggedIn ? "已登录" : "游客模式"}</Text>
+          <Spacer />
+          <Text font="caption" foregroundStyle="secondaryLabel">{siteLabel}</Text>
+        </HStack>
+        <Text font="caption" foregroundStyle="secondaryLabel">
+          {account.loggedIn
+            ? `登录 Cookie 仅保存在本机 Keychain · ExHentai：${account.exAvailable === true ? "可用" : account.exAvailable === false ? "不可用" : "待检测"}`
+            : "网页登录只在 E-Hentai 官方页面输入账号，脚本不读取密码。"}
+        </Text>
+        <HStack spacing={8}>
+          {!account.loggedIn
+            ? <Button
+                title={accountBusy ? "等待登录…" : "网页登录"}
+                systemImage="person.crop.circle.badge.plus"
+                buttonStyle="borderedProminent"
+                disabled={accountBusy}
+                action={() => { void runAccountAction("login") }}
+              />
+            : <>
+                <Button
+                  title="刷新状态"
+                  systemImage="arrow.clockwise"
+                  disabled={accountBusy}
+                  action={() => { void runAccountAction("refresh") }}
+                />
+                <Button
+                  title="退出脚本账号"
+                  systemImage="rectangle.portrait.and.arrow.right"
+                  disabled={accountBusy}
+                  action={() => { void runAccountAction("logout") }}
+                />
+              </>}
+        </HStack>
+        {account.loggedIn
+          ? <HStack spacing={8}>
+              <Button
+                title="E-Hentai"
+                buttonStyle={account.site === "e" ? "borderedProminent" : "bordered"}
+                disabled={accountBusy || account.site === "e"}
+                action={() => { void runAccountAction("site-e") }}
+              />
+              <Button
+                title="ExHentai"
+                buttonStyle={account.site === "ex" ? "borderedProminent" : "bordered"}
+                disabled={accountBusy || account.site === "ex" || account.exAvailable !== true}
+                action={() => { void runAccountAction("site-ex") }}
+              />
+            </HStack>
+          : null}
+        {accountBusy ? <ProgressView title="正在处理账号状态…" progressViewStyle="circular" /> : null}
+      </VStack>
+    </Section>
+
+    <Section header={<Text textCase={null}>{account.loggedIn ? "账号浏览" : "游客模式"} · {siteLabel}</Text>}>
       <VStack alignment="leading" spacing={8}>
         <TextField
           title="搜索"

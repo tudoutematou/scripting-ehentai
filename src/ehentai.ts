@@ -16,6 +16,7 @@ import { parseSearchHtml } from "./searchHtml"
 import { parseDetailHtml, parsePreviewPageHtml } from "./detailHtml"
 import { parseImagePageHtml } from "./pageHtml"
 import { reportDiagnostic } from "./githubBridge"
+import { getBaseUrl, getCookieHeader } from "./account"
 
 export type { GalleryPageLink, GallerySummary }
 
@@ -64,10 +65,16 @@ async function reportSafely(input: Parameters<typeof reportDiagnostic>[0]) {
   }
 }
 
+function requestOptions(url: string): Record<string, any> | undefined {
+  const cookie = getCookieHeader(url)
+  if (!cookie) return undefined
+  return { headers: { Cookie: cookie } }
+}
+
 async function fetchHtml(url: string, stagePrefix: string): Promise<{ html: string; finalUrl: string; response: Response }> {
   let response: Response
   try {
-    response = await fetch(url)
+    response = await fetch(url, requestOptions(url))
   } catch (error) {
     throw stageError(`${stagePrefix}.fetch`, error)
   }
@@ -91,7 +98,7 @@ async function fetchHtml(url: string, stagePrefix: string): Promise<{ html: stri
 }
 
 export async function searchGalleries(keyword: string, directUrl?: string): Promise<SearchPage> {
-  const url = directUrl || buildSearchUrl(keyword)
+  const url = directUrl || buildSearchUrl(keyword, getBaseUrl())
   const { html, finalUrl, response } = await fetchHtml(url, "search")
 
   let page: SearchExtractData
@@ -223,14 +230,17 @@ export async function resolveImagePage(pageUrl: string): Promise<ResolvedImagePa
   }
 }
 
+// 保留给后续需要自定义 Referer/下载原图的场景；当前 ReaderView 已直接使用 Image.imageUrl。
 export async function fetchPageImage(imageUrl: string, referer: string): Promise<UIImage> {
   try {
     let response: Response
     try {
+      const cookie = getCookieHeader(imageUrl)
       response = await fetch(imageUrl, {
         headers: {
           Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
           Referer: referer,
+          ...(cookie ? { Cookie: cookie } : {}),
         },
       })
     } catch (error) {
@@ -251,8 +261,8 @@ export async function fetchPageImage(imageUrl: string, referer: string): Promise
       throw stageError("image.response.data", error)
     }
 
-    const image = UIImage.fromData(data)
-    if (!image) throw new Error("图片数据已下载，但无法解码。")
+    const image = (UIImage as any).fromData?.(data)
+    if (!image) throw new Error("当前 Scripting 运行时不支持 UIImage.fromData；ReaderView 将继续使用 imageUrl。")
 
     await reportSafely({
       stage: "gallery-image-binary",
