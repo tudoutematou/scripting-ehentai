@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name E-Hentai Login Bridge
 // @namespace scripting-ehentai
-// @version 0.2.3
+// @version 0.2.4
 // @description Capture E-Hentai login cookies from real Safari for the Scripting app.
 // @match https://forums.e-hentai.org/*
 // @match https://e-hentai.org/*
@@ -9,9 +9,9 @@
 // @grant GM.cookie
 // @grant GM.log
 // @grant Scripting.FileManager
-// @connect forums.e-hentai.org
-// @connect e-hentai.org
-// @connect exhentai.org
+// @connect https://forums.e-hentai.org/*
+// @connect https://e-hentai.org/*
+// @connect https://exhentai.org/*
 // @run-at document-idle
 // @inject-into content
 // @noframes
@@ -40,30 +40,86 @@ function normalizeCookie(raw: any) {
   }
 }
 
-function bridgeRoot(): string {
-  const fm = Scripting.FileManager
-  return String(fm.safariBrowserDirectory || fm.appGroupDocumentsDirectory || fm.documentsDirectory)
+function errorSummary(error: unknown): string {
+  const value = error as { code?: unknown; name?: unknown; message?: unknown }
+  const code = String(value?.code || value?.name || "Error")
+  const message = String(value?.message || error || "未知错误")
+  return `${code}: ${message}`
 }
 
-function bridgePath(file: string): string {
-  return `${bridgeRoot()}/${BRIDGE_DIRECTORY}/${file}`
+function bridgeRootCandidates(): string[] {
+  const fm = Scripting.FileManager as any
+  const values = [
+    fm.appGroupDocumentsDirectory,
+    fm.safariBrowserDirectory,
+    fm.documentsDirectory,
+  ]
+    .map((value: unknown) => String(value || "").trim())
+    .filter(Boolean)
+  return [...new Set(values)]
 }
 
-async function ensureBridgeDirectory() {
-  await Scripting.FileManager.createDirectory(`${bridgeRoot()}/${BRIDGE_DIRECTORY}`, true)
+let writableRootsPromise: Promise<string[]> | null = null
+
+async function writableBridgeRoots(): Promise<string[]> {
+  if (writableRootsPromise) return writableRootsPromise
+
+  writableRootsPromise = (async () => {
+    const fm = Scripting.FileManager
+    const roots = bridgeRootCandidates()
+    if (!roots.length) throw new Error("Scripting.FileManager 没有暴露可写共享目录。")
+
+    const writable: string[] = []
+    const failures: string[] = []
+    for (const root of roots) {
+      const directory = `${root}/${BRIDGE_DIRECTORY}`
+      const probe = `${directory}/.bridge-probe-${Date.now()}-${Math.random().toString(36).slice(2)}.txt`
+      try {
+        await fm.createDirectory(directory, true)
+        await fm.writeAsString(probe, "ok")
+        if (await fm.exists(probe)) await fm.remove(probe)
+        writable.push(root)
+      } catch (error) {
+        failures.push(`${root}: ${errorSummary(error)}`)
+      }
+    }
+
+    if (!writable.length) {
+      throw new Error(`Safari 登录桥找不到可写共享目录。${failures.join(" | ")}`)
+    }
+    return writable
+  })()
+
+  return writableRootsPromise
+}
+
+async function writeBridgeFile(file: string, payload: unknown) {
+  const roots = await writableBridgeRoots()
+  const text = JSON.stringify(payload)
+  const failures: string[] = []
+  let success = 0
+
+  for (const root of roots) {
+    try {
+      const directory = `${root}/${BRIDGE_DIRECTORY}`
+      await Scripting.FileManager.createDirectory(directory, true)
+      await Scripting.FileManager.writeAsString(`${directory}/${file}`, text)
+      success += 1
+    } catch (error) {
+      failures.push(`${root}: ${errorSummary(error)}`)
+    }
+  }
+
+  if (!success) throw new Error(`共享文件写入失败。${failures.join(" | ")}`)
 }
 
 async function writeStatus(input: Record<string, unknown>) {
-  await ensureBridgeDirectory()
-  await Scripting.FileManager.writeAsString(
-    bridgePath(STATUS_FILE),
-    JSON.stringify({
-      time: new Date().toISOString(),
-      host: location.hostname,
-      href: `${location.origin}${location.pathname}`,
-      ...input,
-    }),
-  )
+  await writeBridgeFile(STATUS_FILE, {
+    time: new Date().toISOString(),
+    host: location.hostname,
+    href: `${location.origin}${location.pathname}`,
+    ...input,
+  })
 }
 
 function setBadge(text: string, background: string) {
@@ -76,13 +132,17 @@ function setBadge(text: string, background: string) {
       right: "12px",
       bottom: "12px",
       zIndex: "2147483647",
+      maxWidth: "min(560px, calc(100vw - 24px))",
       padding: "8px 12px",
       borderRadius: "10px",
       color: "white",
       fontSize: "13px",
+      lineHeight: "1.35",
       fontFamily: "-apple-system, BlinkMacSystemFont, sans-serif",
       boxShadow: "0 2px 10px rgba(0,0,0,.22)",
       pointerEvents: "none",
+      whiteSpace: "normal",
+      overflowWrap: "anywhere",
     })
     document.documentElement.appendChild(badge)
   }
@@ -117,18 +177,19 @@ function loginState(cookies: Array<{ name: string }>) {
 }
 
 async function writeLogin(cookies: any[]) {
-  await ensureBridgeDirectory()
-  await Scripting.FileManager.writeAsString(bridgePath(LOGIN_FILE), JSON.stringify({
+  await writeBridgeFile(LOGIN_FILE, {
     time: new Date().toISOString(),
     source: location.hostname,
     cookies,
-  }))
+  })
 }
 
 async function runBridge() {
-  setBadge("Scripting 登录桥已运行", "rgba(35, 105, 210, 0.92)")
+  setBadge("Scripting 登录桥已运行 · 0.2.4", "rgba(35, 105, 210, 0.92)")
   try {
-    await writeStatus({ phase: "running", version: "0.2.3" })
+    const roots = await writableBridgeRoots()
+    await writeStatus({ phase: "running", version: "0.2.4", writableRootCount: roots.length })
+
     const cookies = await collectAuthCookies()
     const state = loginState(cookies)
     const cookieNames = [...state.names]
@@ -136,11 +197,12 @@ async function runBridge() {
     if (!state.complete) {
       await writeStatus({
         phase: "waiting-cookie",
-        version: "0.2.3",
+        version: "0.2.4",
         cookieNames,
         hasMemberId: state.names.has("ipb_member_id"),
         hasPassHash: state.names.has("ipb_pass_hash"),
         hasIgneous: state.names.has("igneous"),
+        writableRootCount: roots.length,
       })
       setBadge("Scripting 登录桥已运行 · 等待登录 Cookie", "rgba(210, 130, 20, 0.94)")
       return
@@ -149,27 +211,27 @@ async function runBridge() {
     await writeLogin(cookies)
     await writeStatus({
       phase: "captured",
-      version: "0.2.3",
+      version: "0.2.4",
       cookieNames,
       hasMemberId: true,
       hasPassHash: true,
       hasIgneous: state.names.has("igneous"),
+      writableRootCount: roots.length,
     })
     setBadge("✓ Scripting 已捕获登录状态", "rgba(20, 130, 70, 0.94)")
     GM.log("E-Hentai login captured", cookieNames)
   } catch (error) {
-    const value = error as { code?: unknown; message?: unknown }
+    const summary = errorSummary(error)
     try {
       await writeStatus({
         phase: "error",
-        version: "0.2.3",
-        errorCode: String(value?.code || ""),
-        errorMessage: String(value?.message || error),
+        version: "0.2.4",
+        errorMessage: summary,
       })
     } catch {
-      // 状态文件自身写入失败时只保留页面提示。
+      // 如果共享目录本身不可写，页面上的错误详情就是最终诊断渠道。
     }
-    setBadge("Scripting 登录桥运行失败", "rgba(190, 45, 45, 0.94)")
+    setBadge(`Scripting 登录桥失败 · ${summary}`.slice(0, 420), "rgba(190, 45, 45, 0.96)")
     GM.log("E-Hentai login bridge failed", error)
   }
 }
