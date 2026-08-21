@@ -13,7 +13,6 @@ import {
   Spacer,
   Text,
   TextField,
-  UIImage,
   VStack,
   useEffect,
   useState,
@@ -23,7 +22,6 @@ import {
   GalleryDetail,
   GalleryPageLink,
   GallerySummary,
-  fetchPageImage,
   loadGalleryDetail,
   resolveImagePage,
   searchGalleries,
@@ -55,7 +53,7 @@ function GalleryRow({ item }: { item: GallerySummary }) {
           systemName="photo"
           frame={{ width: 76, height: 106 }}
           foregroundStyle="secondaryLabel"
-        />}
+        />
     <VStack alignment="leading" spacing={5}>
       <Text font="headline" lineLimit={3}>{item.title || "未命名画廊"}</Text>
       <Text font="caption" foregroundStyle="secondaryLabel">
@@ -343,7 +341,6 @@ function GalleryDetailView({ summary }: { summary: GallerySummary }) {
 
 function ReaderView({ pages, startIndex }: { pages: GalleryPageLink[]; startIndex: number }) {
   const [index, setIndex] = useState(startIndex)
-  const [image, setImage] = useState<UIImage | null>(null)
   const [imageUrl, setImageUrl] = useState("")
   const [originalUrl, setOriginalUrl] = useState("")
   const [loading, setLoading] = useState(true)
@@ -356,7 +353,6 @@ function ReaderView({ pages, startIndex }: { pages: GalleryPageLink[]; startInde
     ;(async () => {
       if (!current) return
       setLoading(true)
-      setImage(null)
       setImageUrl("")
       setOriginalUrl("")
       setError("")
@@ -365,8 +361,6 @@ function ReaderView({ pages, startIndex }: { pages: GalleryPageLink[]; startInde
         if (cancelled) return
         setImageUrl(resolved.imageUrl)
         setOriginalUrl(resolved.originalUrl)
-        const uiImage = await fetchPageImage(resolved.imageUrl, resolved.pageUrl)
-        if (!cancelled) setImage(uiImage)
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
       } finally {
@@ -381,13 +375,14 @@ function ReaderView({ pages, startIndex }: { pages: GalleryPageLink[]; startInde
     navigationBarTitleDisplayMode="inline"
   >
     <VStack alignment="center" spacing={14} padding>
-      {loading ? <ProgressView title="读取图片…" progressViewStyle="circular" /> : null}
-      {image
+      {loading ? <ProgressView title="解析图片地址…" progressViewStyle="circular" /> : null}
+      {imageUrl
         ? <Image
-            image={image}
+            imageUrl={imageUrl}
             resizable
             scaleToFit
             frame={{ maxWidth: "infinity" }}
+            placeholder={<ProgressView title="加载图片…" progressViewStyle="circular" />}
           />
         : null}
       <ErrorText message={error} />
@@ -395,7 +390,7 @@ function ReaderView({ pages, startIndex }: { pages: GalleryPageLink[]; startInde
         ? <Text font="caption2" foregroundStyle="secondaryLabel" lineLimit={2}>{imageUrl}</Text>
         : null}
       {originalUrl
-        ? <Text font="caption2" foregroundStyle="secondaryLabel">检测到原图链接（第二阶段再加入原图切换/下载）</Text>
+        ? <Text font="caption2" foregroundStyle="secondaryLabel">检测到原图链接（后续加入原图切换/下载）</Text>
         : null}
       <HStack spacing={18}>
         <Button
