@@ -33,7 +33,9 @@ export type AccountStatus = {
 }
 
 export type SafariBridgeRootProbe = {
-  root: "safariBrowserDirectory" | "appGroupDocumentsDirectory" | "documentsDirectory"
+  root: "safariBrowserStorageDirectory" | "safariBrowserDirectory" | "appGroupDocumentsDirectory" | "documentsDirectory"
+  rootHash: string
+  basename: string
   available: boolean
   statusExists: boolean
   loginExists: boolean
@@ -41,6 +43,9 @@ export type SafariBridgeRootProbe = {
 
 export type SafariBridgeProbe = {
   roots: SafariBridgeRootProbe[]
+  gmStorageFiles: string[]
+  gmStorageProbeFound: boolean
+  gmStorageProbeNonce: string
   loginCaptured: boolean
 }
 
@@ -64,7 +69,7 @@ export type AccountDiagnostic = {
 let latestDiagnostic: AccountDiagnostic = {
   stage: "startup",
   searchedPaths: [],
-  bridgeProbe: { roots: [], loginCaptured: false },
+  bridgeProbe: { roots: [], gmStorageFiles: [], gmStorageProbeFound: false, gmStorageProbeNonce: "", loginCaptured: false },
   loginPath: "",
   loginExists: false,
   jsonParsed: false,
@@ -201,8 +206,22 @@ function saveCookies(cookies: StoredCookie[]): void {
   if (!ok) throw new Error("登录 Cookie 写入 Keychain 失败。")
 }
 
+function stableHash(value: string): string {
+  let hash = 2166136261
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(16)
+}
+
+function rootBasename(path: string): string {
+  return path.split("/").filter(Boolean).pop() || ""
+}
+
 function safariBridgeRootEntries() {
   return [
+    { root: "safariBrowserStorageDirectory" as const, path: String(fileManager?.safariBrowserStorageDirectory || "").trim() },
     { root: "safariBrowserDirectory" as const, path: String(fileManager?.safariBrowserDirectory || "").trim() },
     { root: "appGroupDocumentsDirectory" as const, path: String(fileManager?.appGroupDocumentsDirectory || "").trim() },
     { root: "documentsDirectory" as const, path: String(fileManager?.documentsDirectory || "").trim() },
@@ -252,6 +271,25 @@ async function safariBridgeExists(): Promise<boolean> {
   return Boolean(await findSafariBridgeFile(SAFARI_LOGIN_FILE))
 }
 
+async function safariBrowserStorageProbe() {
+  const root = String(fileManager?.safariBrowserStorageDirectory || "").trim()
+  if (!root) return { files: [] as string[], found: false, nonce: "" }
+  try {
+    const paths: string[] = await fileManager.readDirectory(root, true)
+    const files = paths.map(path => rootBasename(String(path))).filter(Boolean).sort().slice(0, 64)
+    for (const path of paths.slice(0, 64)) {
+      try {
+        const data = JSON.parse(String(await fileManager.readAsString(String(path)) || "{}"))
+        const probe = data?.ehentai_bridge_probe
+        if (probe && typeof probe.nonce === "string") return { files, found: true, nonce: probe.nonce }
+      } catch { /* 非 JSON 或非本桥接的 GM storage 文件 */ }
+    }
+    return { files, found: false, nonce: "" }
+  } catch {
+    return { files: [] as string[], found: false, nonce: "" }
+  }
+}
+
 export async function probeSafariBridge(): Promise<SafariBridgeProbe> {
   const roots: SafariBridgeRootProbe[] = []
   for (const entry of safariBridgeRootEntries()) {
@@ -259,13 +297,16 @@ export async function probeSafariBridge(): Promise<SafariBridgeProbe> {
     const directory = available ? `${entry.path}/${SAFARI_BRIDGE_DIRECTORY}` : ""
     roots.push({
       root: entry.root,
+      rootHash: entry.path ? stableHash(entry.path) : "",
+      basename: entry.path ? rootBasename(entry.path) : "",
       available,
       statusExists: available && await fileExists(`${directory}/${SAFARI_STATUS_FILE}`),
       loginExists: available && await fileExists(`${directory}/${SAFARI_LOGIN_FILE}`),
     })
   }
-  const probe = { roots, loginCaptured: roots.some(root => root.loginExists) }
-  updateDiagnostic({ stage: "safari-bridge-probe", bridgeProbe: probe, searchedPaths: roots.map(root => `${root.root}/login.json`), loginExists: probe.loginCaptured, notes: "Safari Bridge Probe complete; paths are root labels only." })
+  const gmStorage = await safariBrowserStorageProbe()
+  const probe = { roots, gmStorageFiles: gmStorage.files, gmStorageProbeFound: gmStorage.found, gmStorageProbeNonce: gmStorage.nonce, loginCaptured: roots.some(root => root.loginExists) }
+  updateDiagnostic({ stage: "safari-bridge-probe", bridgeProbe: probe, searchedPaths: roots.map(root => `${root.root}/login.json`), loginExists: probe.loginCaptured, notes: `Safari Bridge Probe complete; canonicalRootHash=${roots.find(root => root.root === "safariBrowserStorageDirectory")?.rootHash || ""}; gmStorageProbeFound=${gmStorage.found}; gmStorageProbeNonce=${gmStorage.nonce || "none"}; paths are root labels only.` })
   return probe
 }
 
