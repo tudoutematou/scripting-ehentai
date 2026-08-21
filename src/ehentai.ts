@@ -1,11 +1,8 @@
 import { Script, UIImage } from "scripting"
 
 import {
-  DETAIL_EXTRACT_SCRIPT,
-  DetailExtractData,
   GallerySummary,
   PAGE_EXTRACT_SCRIPT,
-  PREVIEW_EXTRACT_SCRIPT,
   PageExtractData,
   SearchExtractData,
 } from "./extractors"
@@ -17,6 +14,8 @@ import {
   withPreviewPage,
 } from "./pure"
 import { parseSearchHtml } from "./searchHtml"
+import { parseDetailHtml, parsePreviewPageHtml } from "./detailHtml"
+import { reportDiagnostic } from "./githubBridge"
 
 export type { GalleryPageLink, GallerySummary }
 
@@ -24,7 +23,7 @@ export type SearchPage = SearchExtractData & {
   url: string
 }
 
-export type GalleryDetail = Omit<DetailExtractData, "pageLinks"> & {
+export type GalleryDetail = ReturnType<typeof parseDetailHtml> & {
   pageLinks: GalleryPageLink[]
   sourceUrl: string
   truncatedPreviewPages: boolean
@@ -45,7 +44,7 @@ function scraperError(result: any): string {
 
 function requirePro(): void {
   if (!Script.hasFullAccess()) {
-    throw new Error("详情与图片页当前仍使用 Scripting WebScraper，需要 Scripting PRO。")
+    throw new Error("图片页当前仍使用 Scripting WebScraper，需要 Scripting PRO。")
   }
 }
 
@@ -70,16 +69,20 @@ function stageError(stage: string, error: unknown): Error {
   return wrapped
 }
 
-export async function searchGalleries(keyword: string, directUrl?: string): Promise<SearchPage> {
-  const url = directUrl || buildSearchUrl(keyword)
+async function reportSafely(input: Parameters<typeof reportDiagnostic>[0]) {
+  try {
+    await reportDiagnostic(input)
+  } catch {
+    // 诊断通道失败不能覆盖真实业务错误。
+  }
+}
 
+async function fetchHtml(url: string, stagePrefix: string): Promise<{ html: string; finalUrl: string; response: Response }> {
   let response: Response
   try {
-    // 刻意使用 Scripting 官方文档中的最小 fetch 调用，先排除 globalThis、
-    // 自定义 User-Agent/header、timeout/debugLabel 等运行时兼容因素。
     response = await fetch(url)
   } catch (error) {
-    throw stageError("fetch", error)
+    throw stageError(`${stagePrefix}.fetch`, error)
   }
 
   const finalUrl = String(response?.url || url)
@@ -90,18 +93,25 @@ export async function searchGalleries(keyword: string, directUrl?: string): Prom
   try {
     html = await response.text()
   } catch (error) {
-    throw stageError("response.text", error)
+    throw stageError(`${stagePrefix}.response.text`, error)
   }
 
   if (!response.ok) {
     throw httpError(`E-Hentai 请求失败：HTTP ${status}${statusText ? ` ${statusText}` : ""}`, response, finalUrl)
   }
 
+  return { html, finalUrl, response }
+}
+
+export async function searchGalleries(keyword: string, directUrl?: string): Promise<SearchPage> {
+  const url = directUrl || buildSearchUrl(keyword)
+  const { html, finalUrl, response } = await fetchHtml(url, "search")
+
   let page: SearchExtractData
   try {
     page = parseSearchHtml(html, finalUrl)
   } catch (error) {
-    throw stageError("parseSearchHtml", error)
+    throw stageError("search.parseSearchHtml", error)
   }
 
   if (page.error) {
@@ -116,41 +126,69 @@ export async function searchGalleries(keyword: string, directUrl?: string): Prom
   }
 }
 
-async function scrapePreviewPage(url: string, previewPageIndex: number): Promise<GalleryPageLink[]> {
-  const result = await WebScraper.scrape<{ pageLinks: Array<{ index?: number; pageUrl?: string; thumb?: string }> }>({
-    url,
-    wait: "domComplete",
-    extractScript: PREVIEW_EXTRACT_SCRIPT,
-  })
-  if (!result.ok || !result.data) throw new Error(scraperError(result))
-  return normalizePageLinks(result.data.pageLinks || [], previewPageIndex)
+async function fetchPreviewPage(url: string, previewPageIndex: number): Promise<GalleryPageLink[]> {
+  const { html, finalUrl } = await fetchHtml(url, `preview[${previewPageIndex}]`)
+  try {
+    return normalizePageLinks(parsePreviewPageHtml(html, finalUrl), previewPageIndex)
+  } catch (error) {
+    throw stageError(`preview[${previewPageIndex}].parse`, error)
+  }
 }
 
 export async function loadGalleryDetail(url: string): Promise<GalleryDetail> {
-  requirePro()
-  const result = await WebScraper.scrape<DetailExtractData>({
-    url,
-    wait: "domComplete",
-    extractScript: DETAIL_EXTRACT_SCRIPT,
-  })
-  if (!result.ok || !result.data) throw new Error(scraperError(result))
-  if (result.data.error) throw new Error(result.data.error)
+  try {
+    const { html, finalUrl, response } = await fetchHtml(url, "detail")
 
-  const firstLinks = normalizePageLinks(result.data.pageLinks || [], 0)
-  const allLinks: GalleryPageLink[] = [...firstLinks]
-  const previewPages = Math.max(1, Number(result.data.previewPages || 1))
-  const pagesToLoad = Math.min(previewPages, MAX_PREVIEW_LIST_PAGES)
+    let parsed: ReturnType<typeof parseDetailHtml>
+    try {
+      parsed = parseDetailHtml(html, finalUrl)
+    } catch (error) {
+      throw stageError("detail.parseDetailHtml", error)
+    }
 
-  for (let p = 1; p < pagesToLoad; p += 1) {
-    const links = await scrapePreviewPage(withPreviewPage(url, p), p)
-    allLinks.push(...links)
-  }
+    if (parsed.error) {
+      const error = httpError(parsed.error, response, finalUrl)
+      ;(error as any).responseLength = html.length
+      throw error
+    }
 
-  return {
-    ...result.data,
-    pageLinks: dedupeAndSortPageLinks(allLinks),
-    sourceUrl: result.url || url,
-    truncatedPreviewPages: previewPages > MAX_PREVIEW_LIST_PAGES,
+    const firstLinks = normalizePageLinks(parsed.pageLinks || [], 0)
+    const allLinks: GalleryPageLink[] = [...firstLinks]
+    const previewPages = Math.max(1, Number(parsed.previewPages || 1))
+    const pagesToLoad = Math.min(previewPages, MAX_PREVIEW_LIST_PAGES)
+
+    for (let p = 1; p < pagesToLoad; p += 1) {
+      const links = await fetchPreviewPage(withPreviewPage(finalUrl, p), p)
+      allLinks.push(...links)
+    }
+
+    const detail: GalleryDetail = {
+      ...parsed,
+      pageLinks: dedupeAndSortPageLinks(allLinks),
+      sourceUrl: finalUrl,
+      truncatedPreviewPages: previewPages > MAX_PREVIEW_LIST_PAGES,
+    }
+
+    await reportSafely({
+      stage: "gallery-detail",
+      ok: true,
+      request: { url: finalUrl, status: Number(response?.status || 0), statusText: String(response?.statusText || "") },
+      notes: `title=${detail.title ? "yes" : "no"}; tags=${detail.tags.length}; images=${detail.pageLinks.length}; previewPages=${previewPages}`,
+    })
+    return detail
+  } catch (error) {
+    const value = error as { status?: number; statusText?: string; url?: string }
+    await reportSafely({
+      stage: "gallery-detail",
+      ok: false,
+      error,
+      request: {
+        url: String(value?.url || url),
+        status: Number(value?.status || 0),
+        statusText: String(value?.statusText || ""),
+      },
+    })
+    throw error
   }
 }
 

@@ -8,12 +8,11 @@ function decodeHtml(value: string): string {
     quot: '"',
     apos: "'",
     nbsp: " ",
-    '#039': "'",
   }
   return String(value || "")
     .replace(/&#(\d+);/g, (_, code) => String.fromCharCode(Number(code)))
     .replace(/&#x([0-9a-f]+);/gi, (_, code) => String.fromCharCode(parseInt(code, 16)))
-    .replace(/&([a-z]+|#039);/gi, (all, name) => named[String(name).toLowerCase()] ?? all)
+    .replace(/&([a-z]+);/gi, (all, name) => named[String(name).toLowerCase()] ?? all)
 }
 
 function cleanText(value: string): string {
@@ -56,10 +55,22 @@ function findElementTextById(html: string, id: string): string {
   return cleanText(findElementInnerById(html, id))
 }
 
-function findElementOpenTagById(html: string, id: string): string {
+function findIdStart(html: string, id: string, fromIndex = 0): number {
   const escaped = escapeRegex(id)
-  const match = html.match(new RegExp(`<([a-z0-9]+)\\b(?=[^>]*\\bid\\s*=\\s*(["'])${escaped}\\2)[^>]*>`, "i"))
-  return match ? match[0] : ""
+  const pattern = new RegExp(`<[a-z0-9]+\\b[^>]*\\bid\\s*=\\s*(["'])${escaped}\\1[^>]*>`, "i")
+  const match = pattern.exec(html.slice(fromIndex))
+  return match ? fromIndex + (match.index || 0) : -1
+}
+
+function sliceSection(html: string, startId: string, endIds: string[]): string {
+  const start = findIdStart(html, startId)
+  if (start < 0) return ""
+  let end = html.length
+  for (const endId of endIds) {
+    const candidate = findIdStart(html, endId, start + 1)
+    if (candidate >= 0 && candidate < end) end = candidate
+  }
+  return html.slice(start, end)
 }
 
 function cssUrl(style: string, baseUrl: string): string {
@@ -75,7 +86,7 @@ function findClassText(html: string, className: string): string {
 }
 
 function parseMetadata(html: string): Record<string, string> {
-  const block = findElementInnerById(html, "gdd")
+  const block = sliceSection(html, "gdd", ["gdr", "gdf", "gd4"])
   const metadata: Record<string, string> = {}
   const rows = block.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) || []
   for (const row of rows) {
@@ -89,7 +100,9 @@ function parseMetadata(html: string): Record<string, string> {
 }
 
 function parseTags(html: string): Array<{ namespace: string; tags: string[] }> {
-  const block = findElementInnerById(html, "taglist")
+  // taglist 内部本身包含大量嵌套 div，不能用“首个 </div>”式正则截取。
+  // 直接按相邻固定 id 切片，兼容 Ehviewer 测试样本中的 E/Ex 页面结构。
+  const block = sliceSection(html, "taglist", ["tagmenu_act", "tagmenu_new", "gwrd", "gd5"])
   const result: Array<{ namespace: string; tags: string[] }> = []
   const rows = block.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) || []
   for (const row of rows) {
@@ -149,9 +162,14 @@ export function parsePreviewPageHtml(html: string, baseUrl: string): Array<{ ind
 }
 
 function parseCover(html: string, baseUrl: string): string {
-  const gd1 = findElementInnerById(html, "gd1")
-  const styled = gd1.match(/<[^>]+\bstyle\s*=\s*(["'])(.*?)\1[^>]*>/i)
+  const block = sliceSection(html, "gd1", ["gd2", "gmid"])
+  const styled = block.match(/<[^>]+\bstyle\s*=\s*(["'])(.*?)\1[^>]*>/i)
   return styled ? cssUrl(styled[2], baseUrl) : ""
+}
+
+function parseCategory(html: string): string {
+  const block = sliceSection(html, "gdc", ["gdn", "gdd"])
+  return findClassText(block, "cn") || findClassText(block, "cs")
 }
 
 function detectPageError(bodyText: string): string {
@@ -167,13 +185,12 @@ export function parseDetailHtml(html: string, baseUrl: string): DetailExtractDat
   const ratingLabel = findElementTextById(html, "rating_label")
   const ratingMatch = ratingLabel.match(/([0-9]+(?:\.[0-9]+)?)/)
   const ratingCount = Number(findElementTextById(html, "rating_count").replace(/,/g, "")) || 0
-  const gdc = findElementInnerById(html, "gdc")
 
   return {
     title,
     titleJpn: findElementTextById(html, "gj"),
     cover: parseCover(html, baseUrl),
-    category: findClassText(gdc, "cn") || findClassText(gdc, "cs"),
+    category: parseCategory(html),
     uploader: findElementTextById(html, "gdn"),
     rating: ratingMatch ? Number(ratingMatch[1]) : null,
     ratingCount,

@@ -6,6 +6,7 @@ const scriptDirectory: string = (Script as any).directory
 const REPO = { owner: "tudoutematou", repo: "scripting-ehentai", branch: "main" }
 const SOURCE_ROOT = "src"
 const DIAGNOSTIC_PATH = "runtime/latest.json"
+const SCRIPT_VERSION = "0.1.3"
 const SOURCE_EXTENSIONS = [".ts", ".tsx", ".json"]
 const EXCLUDED_SEGMENTS = new Set([".git", "node_modules", "tests", "runtime", "bridge"])
 
@@ -88,7 +89,6 @@ function isShaConflict(error: unknown) {
 
 async function putTextContent(path: string, message: string, content: string) {
   const put = async () => {
-    // 每次提交前即时读取 SHA，绝不复用之前的值。
     const sha = await getRemoteSha(path)
     return GitHub.putContent({ ...REPO, path, message, content, sha, branch: REPO.branch })
   }
@@ -96,7 +96,6 @@ async function putTextContent(path: string, message: string, content: string) {
     return await put()
   } catch (error) {
     if (!isShaConflict(error)) throw error
-    // 乐观锁冲突时重新读取最新 SHA，并且只重试一次。
     return put()
   }
 }
@@ -142,7 +141,7 @@ export async function readSetupRules() {
 export async function reportDiagnostic(input: DiagnosticInput) {
   const payload = {
     time: new Date().toISOString(),
-    scriptVersion: "0.1.0",
+    scriptVersion: SCRIPT_VERSION,
     stage: input.stage,
     ok: input.ok,
     error: errorData(input.error),
