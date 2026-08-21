@@ -1,17 +1,12 @@
 {
-  "time": "2026-08-21T07:46:53.480Z",
+  "time": "2026-08-21T07:51:22.342Z",
   "scriptVersion": "0.1.0",
   "stage": "gallery-home",
-  "ok": false,
-  "error": {
-    "name": "Error",
-    "message": "发生了JavaScript异常",
-    "stack": "@\nfulfilled@"
-  },
+  "ok": true,
   "request": {
-    "url": "https://e-hentai.org/?f_search=%5Bredacted%5D",
+    "url": "https://e-hentai.org/",
     "status": 0,
     "statusText": ""
   },
-  "notes": ""
+  "notes": "items=25"
 }
