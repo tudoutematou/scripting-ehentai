@@ -1,0 +1,17 @@
+{
+  "time": "2026-08-21T12:25:01.318Z",
+  "scriptVersion": "0.2.3",
+  "stage": "account-action",
+  "ok": false,
+  "error": {
+    "name": "Error",
+    "message": "已打开 Safari。完成登录后请刷新一次已登录页面：如果页面右下角出现“✓ Scripting 已捕获登录状态”，返回本脚本再点一次“网页登录”。如果连“Scripting 登录桥已运行”都看不到，请检查 Safari 的 Scripting 扩展与网站访问权限。",
+    "stack": "@\nfulfilled@"
+  },
+  "request": {
+    "url": "",
+    "status": 0,
+    "statusText": ""
+  },
+  "notes": ""
+}
