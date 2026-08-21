@@ -1,0 +1,17 @@
+{
+  "time": "2026-08-21T10:09:09.798Z",
+  "scriptVersion": "0.2.1",
+  "stage": "account-action",
+  "ok": false,
+  "error": {
+    "name": "TypeError",
+    "message": "undefined is not an object (evaluating 'scripting_1.Safari.openURL')",
+    "stack": "@\n@\nPromise@[native code]\n@\nopenSafariLogin@\n@\nfulfilled@"
+  },
+  "request": {
+    "url": "",
+    "status": 0,
+    "statusText": ""
+  },
+  "notes": ""
+}
