@@ -1,0 +1,17 @@
+{
+  "time": "2026-08-21T08:10:47.855Z",
+  "scriptVersion": "0.1.5",
+  "stage": "gallery-image-binary",
+  "ok": false,
+  "error": {
+    "name": "TypeError",
+    "message": "undefined is not an object (evaluating 'scripting_1.UIImage.fromData')",
+    "stack": "@\nfulfilled@"
+  },
+  "request": {
+    "url": "https://yxqsfiu.dsysbxxfmucb.hath.network/h/5dabe1608f489a65b5060b14207110d8eeb17da3-88068-800-1135-wbp/keystamp=1787300400-336fdf380d;fileindex=108319187;xres=800/2_6.webp",
+    "status": 0,
+    "statusText": ""
+  },
+  "notes": ""
+}
