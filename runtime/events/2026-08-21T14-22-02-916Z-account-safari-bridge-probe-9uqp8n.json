@@ -1,0 +1,12 @@
+{
+  "time": "2026-08-21T14:22:02.915Z",
+  "scriptVersion": "0.3.0",
+  "stage": "account-safari-bridge-probe",
+  "ok": true,
+  "request": {
+    "url": "",
+    "status": 0,
+    "statusText": ""
+  },
+  "notes": "{\"stage\":\"safari-bridge-probe\",\"searchedPaths\":[\"safariBrowserStorageDirectory/login.json\",\"safariBrowserDirectory/login.json\",\"appGroupDocumentsDirectory/login.json\",\"documentsDirectory/login.json\"],\"bridgeProbe\":{\"roots\":[{\"root\":\"safariBrowserStorageDirectory\",\"rootHash\":\"e1b7265d\",\"basename\":\"storages\",\"available\":true,\"statusExists\":false,\"loginExists\":false},{\"root\":\"safariBrowserDirectory\",\"rootHash\":\"4ba47572\",\"basename\":\"scripting-safari-extension\",\"available\":true,\"statusExists\":false,\"loginExists\":false},{\"root\":\"appGroupDocumentsDirectory\",\"rootHash\":\"f238bcc9\",\"basename\":\"Documents\",\"available\":true,\"statusExists\":false,\"loginExists\":false},{\"root\":\"documentsDirectory\",\"rootHash\":\"81a032ac\",\"basename\":\"Documents\",\"available\":true,\"statusExists\":false,\"loginExists\":false}],\"gmStorageFiles\":[\"ehentai%2Dbrowser.json\"],\"gmStorageProbeFound\":false,\"gmStorageProbeNonce\":\"\",\"loginCaptured\":false},\"loginPath\":\"\",\"loginExists\":false,\"jsonParsed\":false,\"hasMemberId\":false,\"hasPassHash\":false,\"keychainSet\":false,\"keychainRoundTrip\":false,\"loggedIn\":false,\"eHentaiReachable\":null,\"exAvailable\":null,\"notes\":\"Safari Bridge Probe complete; canonicalRootHash=e1b7265d; gmStorageProbeFound=false; gmStorageProbeNonce=none; paths are root labels only.\"}"
+}
