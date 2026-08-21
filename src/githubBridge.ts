@@ -1,0 +1,191 @@
+import { Script } from "scripting"
+
+const fileManager: any = (globalThis as any).FileManager
+const scriptDirectory: string = (Script as any).directory
+
+const REPO = { owner: "tudoutematou", repo: "scripting-ehentai", branch: "main" }
+const SOURCE_ROOT = "src"
+const DIAGNOSTIC_PATH = "runtime/latest.json"
+const SOURCE_EXTENSIONS = [".ts", ".tsx", ".json"]
+const EXCLUDED_SEGMENTS = new Set([".git", "node_modules", "tests", "runtime", "bridge"])
+
+let diagnosticQueue: Promise<void> = Promise.resolve()
+
+export type DiagnosticInput = {
+  stage: string
+  ok: boolean
+  error?: unknown
+  request?: { url?: string; status?: number; statusText?: string }
+  notes?: string
+}
+
+function joinPath(...parts: string[]) {
+  return parts.filter(Boolean).join("/").replace(/\/+/g, "/")
+}
+
+function errorData(error: unknown) {
+  if (!error) return undefined
+  const value = error as { name?: unknown; message?: unknown; stack?: unknown }
+  return {
+    name: String(value.name || "Error"),
+    message: String(value.message || error),
+    stack: String(value.stack || ""),
+  }
+}
+
+function safeRequestUrl(value?: string) {
+  if (!value) return ""
+  try {
+    const url = new URL(value)
+    if (url.searchParams.has("f_search")) {
+      url.searchParams.set("f_search", url.searchParams.get("f_search") === "naruto" ? "naruto" : "[redacted]")
+    }
+    return url.toString()
+  } catch {
+    return ""
+  }
+}
+
+function isBusinessSource(relativePath: string) {
+  const parts = relativePath.split("/")
+  if (parts.some(part => EXCLUDED_SEGMENTS.has(part) || part.startsWith("."))) return false
+  return SOURCE_EXTENSIONS.some(extension => relativePath.endsWith(extension))
+}
+
+async function listLocalSource(relativeDirectory = ""): Promise<string[]> {
+  const absoluteDirectory = joinPath(scriptDirectory, relativeDirectory)
+  const entries = await fileManager.readDirectory(absoluteDirectory)
+  const files: string[] = []
+  for (const entry of entries) {
+    const relativePath = joinPath(relativeDirectory, entry.split("/").pop() || entry)
+    const absolutePath = joinPath(scriptDirectory, relativePath)
+    if (await fileManager.isDirectory(absolutePath)) {
+      if (!relativePath.split("/").some(part => EXCLUDED_SEGMENTS.has(part) || part.startsWith("."))) {
+        files.push(...await listLocalSource(relativePath))
+      }
+    } else if (await fileManager.isFile(absolutePath) && !await fileManager.isBinaryFile(absolutePath) && isBusinessSource(relativePath)) {
+      files.push(relativePath)
+    }
+  }
+  return files
+}
+
+async function getRemoteSha(path: string): Promise<string | undefined> {
+  try {
+    const content = await GitHub.getContent({ ...REPO, path, ref: REPO.branch }) as Record<string, any>
+    return typeof content.sha === "string" ? content.sha : undefined
+  } catch (error) {
+    const message = String((error as Error)?.message || error)
+    if (/404|not found/i.test(message)) return undefined
+    throw error
+  }
+}
+
+function isShaConflict(error: unknown) {
+  const value = error as { status?: unknown; message?: unknown }
+  return Number(value?.status) === 409 || /\b409\b|does not match.*sha/i.test(String(value?.message || error))
+}
+
+async function putTextContent(path: string, message: string, content: string) {
+  const put = async () => {
+    // 每次提交前即时读取 SHA，绝不复用之前的值。
+    const sha = await getRemoteSha(path)
+    return GitHub.putContent({ ...REPO, path, message, content, sha, branch: REPO.branch })
+  }
+  try {
+    return await put()
+  } catch (error) {
+    if (!isShaConflict(error)) throw error
+    // 乐观锁冲突时重新读取最新 SHA，并且只重试一次。
+    return put()
+  }
+}
+
+async function listRemoteSource(relativeDirectory = ""): Promise<string[]> {
+  const path = joinPath(SOURCE_ROOT, relativeDirectory)
+  let entries: Record<string, any> | Record<string, any>[]
+  try {
+    entries = await GitHub.getContent({ ...REPO, path, ref: REPO.branch })
+  } catch (error) {
+    if (/404|not found/i.test(String((error as Error)?.message || error))) return []
+    throw error
+  }
+  if (!Array.isArray(entries)) return []
+  const files: string[] = []
+  for (const entry of entries) {
+    const relativePath = joinPath(relativeDirectory, String(entry.name || ""))
+    if (entry.type === "dir") {
+      files.push(...await listRemoteSource(relativePath))
+    } else if (entry.type === "file" && isBusinessSource(relativePath)) {
+      files.push(relativePath)
+    }
+  }
+  return files
+}
+
+export async function ensureGitHubPermissions() {
+  if (!GitHub.isAvailable()) {
+    throw new Error("GitHub 不可用：请确认 Scripting PRO 已启用且已在设置中配置 GitHub Token。")
+  }
+  const requested = ["read_contents", "write_contents", "read_issues", "write_issues"] as const
+  const allowed = await GitHub.requestPermissions([...requested])
+  const missing = requested.filter(permission => !allowed.includes(permission))
+  if (missing.length) throw new Error(`GitHub 权限未授予：${missing.join(", ")}`)
+  return allowed
+}
+
+export async function readSetupRules() {
+  await ensureGitHubPermissions()
+  return GitHub.getTextContent({ ...REPO, path: "bridge/SCRIPTING_SETUP.md", ref: REPO.branch })
+}
+
+export async function reportDiagnostic(input: DiagnosticInput) {
+  const payload = {
+    time: new Date().toISOString(),
+    scriptVersion: "0.1.0",
+    stage: input.stage,
+    ok: input.ok,
+    error: errorData(input.error),
+    request: {
+      url: safeRequestUrl(input.request?.url),
+      status: Number(input.request?.status || 0),
+      statusText: String(input.request?.statusText || ""),
+    },
+    notes: String(input.notes || ""),
+  }
+  const content = JSON.stringify(payload, null, 2)
+  const task = diagnosticQueue.then(async () => {
+    await putTextContent(
+      DIAGNOSTIC_PATH,
+      `runtime: ${payload.stage} ${payload.ok ? "ok" : "failed"}`,
+      content,
+    )
+  })
+  diagnosticQueue = task.then(() => undefined, () => undefined)
+  await task
+  return payload
+}
+
+export async function pushSourceToGitHub() {
+  await ensureGitHubPermissions()
+  const files = await listLocalSource()
+  for (const relativePath of files) {
+    const content = await fileManager.readAsString(joinPath(scriptDirectory, relativePath))
+    const path = joinPath(SOURCE_ROOT, relativePath)
+    await putTextContent(path, `sync: ${relativePath}`, content)
+  }
+  return files
+}
+
+export async function pullSourceFromGitHub() {
+  await ensureGitHubPermissions()
+  const files = await listRemoteSource()
+  for (const relativePath of files) {
+    const remote = await GitHub.getTextContent({ ...REPO, path: joinPath(SOURCE_ROOT, relativePath), ref: REPO.branch })
+    const localPath = joinPath(scriptDirectory, relativePath)
+    const parent = localPath.split("/").slice(0, -1).join("/")
+    if (parent) await fileManager.createDirectory(parent, true)
+    await fileManager.writeAsString(localPath, remote.text)
+  }
+  return files
+}
