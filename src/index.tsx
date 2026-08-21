@@ -3,6 +3,7 @@ import {
   Canvas,
   HStack,
   Image,
+  LazyVGrid,
   List,
   Navigation,
   NavigationLink,
@@ -36,6 +37,8 @@ import {
 
 const fileManager: any = (globalThis as any).FileManager
 const spritePathCache = new Map<string, Promise<string>>()
+const PREVIEW_WIDTH = 96
+const PREVIEW_HEIGHT = 128
 
 function ErrorText({ message }: { message: string }) {
   if (!message) return null
@@ -99,31 +102,41 @@ function PreviewThumbnail({ page }: { page: GalleryPageLink }) {
   }, [page.thumb, page.thumbX, page.thumbY, page.thumbWidth, page.thumbHeight])
 
   if (!page.thumb) {
-    return <Image systemName="photo" frame={{ width: 72, height: 96 }} foregroundStyle="secondaryLabel" />
+    return <Image
+      systemName="photo"
+      frame={{ width: PREVIEW_WIDTH, height: PREVIEW_HEIGHT }}
+      foregroundStyle="secondaryLabel"
+    />
   }
 
-  // 独立缩略图直接显示；E-Hentai 普通预览则使用雪碧图裁剪。
   if (!isSprite) {
     return <Image
       imageUrl={page.thumb}
       resizable
       scaleToFill
-      frame={{ width: 72, height: 96 }}
-      cornerRadius={6}
+      frame={{ width: PREVIEW_WIDTH, height: PREVIEW_HEIGHT }}
+      cornerRadius={7}
       placeholder={<ProgressView progressViewStyle="circular" />}
     />
   }
 
   if (error) {
-    return <Image systemName="exclamationmark.triangle" frame={{ width: 72, height: 96 }} foregroundStyle="systemOrange" />
+    return <Image
+      systemName="exclamationmark.triangle"
+      frame={{ width: PREVIEW_WIDTH, height: PREVIEW_HEIGHT }}
+      foregroundStyle="systemOrange"
+    />
   }
 
   if (!filePath) {
-    return <ProgressView progressViewStyle="circular" frame={{ width: 72, height: 96 }} />
+    return <ProgressView
+      progressViewStyle="circular"
+      frame={{ width: PREVIEW_WIDTH, height: PREVIEW_HEIGHT }}
+    />
   }
 
   return <Canvas
-    frame={{ width: 72, height: 96 }}
+    frame={{ width: PREVIEW_WIDTH, height: PREVIEW_HEIGHT }}
     draw={(ctx, size) => {
       ctx.fillStyle = "systemGray6"
       ctx.fillRect(0, 0, size.width, size.height)
@@ -372,19 +385,20 @@ function GalleryDetailView({ summary }: { summary: GallerySummary }) {
     return () => { cancelled = true }
   }, [summary.url])
 
-  return <List
+  return <ScrollView
     navigationTitle="画廊详情"
     navigationBarTitleDisplayMode="inline"
     overlay={loading ? <ProgressView title="读取详情与图片列表…" progressViewStyle="circular" /> : undefined}
   >
-    <Section>
-      <VStack alignment="leading" spacing={8}>
+    <VStack alignment="leading" spacing={18} padding={{ horizontal: 16, vertical: 12 }}>
+      <VStack alignment="leading" spacing={8} frame={{ maxWidth: "infinity" }}>
         {(detail?.cover || summary.thumb)
           ? <Image
               imageUrl={detail?.cover || summary.thumb}
               resizable
               scaleToFit
               frame={{ maxWidth: "infinity", height: 260 }}
+              cornerRadius={10}
               placeholder={<ProgressView progressViewStyle="circular" />}
             />
           : null}
@@ -398,46 +412,63 @@ function GalleryDetailView({ summary }: { summary: GallerySummary }) {
           : null}
         <ErrorText message={error} />
       </VStack>
-    </Section>
 
-    {detail ? <Section header={<Text textCase={null}>信息</Text>}>
-      {Object.entries(detail.metadata).map(([key, value]) =>
-        <HStack key={key}>
-          <Text foregroundStyle="secondaryLabel">{key}</Text>
-          <Spacer />
-          <Text>{value}</Text>
-        </HStack>
-      )}
-    </Section> : null}
-
-    {detail && detail.tags.length ? <Section header={<Text textCase={null}>标签</Text>}>
-      {detail.tags.map(group =>
-        <VStack key={group.namespace} alignment="leading" spacing={3}>
-          <Text font="caption" foregroundStyle="secondaryLabel">{group.namespace}</Text>
-          <Text>{group.tags.join(" · ")}</Text>
-        </VStack>
-      )}
-    </Section> : null}
-
-    {detail ? <Section header={<Text textCase={null}>图片 · {detail.pageLinks.length}</Text>}>
-      {detail.truncatedPreviewPages
-        ? <Text foregroundStyle="systemOrange" font="caption">画廊预览分页过多，第一版最多读取前 50 个预览分页。</Text>
+      {detail && Object.keys(detail.metadata).length
+        ? <VStack alignment="leading" spacing={7} frame={{ maxWidth: "infinity" }}>
+            <Text font="headline">信息</Text>
+            {Object.entries(detail.metadata).map(([key, value]) =>
+              <HStack key={key} frame={{ maxWidth: "infinity" }}>
+                <Text foregroundStyle="secondaryLabel">{key}</Text>
+                <Spacer />
+                <Text>{value}</Text>
+              </HStack>
+            )}
+          </VStack>
         : null}
-      {detail.pageLinks.map((page, index) =>
-        <NavigationLink key={page.id} destination={<ReaderView pages={detail.pageLinks} startIndex={index} />}>
-          <HStack spacing={12}>
-            <PreviewThumbnail page={page} />
-            <VStack alignment="leading" spacing={4}>
-              <Text font="body">第 {page.index} 页</Text>
-              {page.thumbWidth > 0 && page.thumbHeight > 0
-                ? <Text font="caption2" foregroundStyle="secondaryLabel">逐页裁剪预览</Text>
-                : null}
-            </VStack>
-          </HStack>
-        </NavigationLink>
-      )}
-    </Section> : null}
-  </List>
+
+      {detail && detail.tags.length
+        ? <VStack alignment="leading" spacing={8} frame={{ maxWidth: "infinity" }}>
+            <Text font="headline">标签</Text>
+            {detail.tags.map(group =>
+              <VStack key={group.namespace} alignment="leading" spacing={3}>
+                <Text font="caption" foregroundStyle="secondaryLabel">{group.namespace}</Text>
+                <Text>{group.tags.join(" · ")}</Text>
+              </VStack>
+            )}
+          </VStack>
+        : null}
+
+      {detail
+        ? <VStack alignment="leading" spacing={10} frame={{ maxWidth: "infinity" }}>
+            <HStack frame={{ maxWidth: "infinity" }}>
+              <Text font="headline">图片 · {detail.pageLinks.length}</Text>
+              <Spacer />
+              <Text font="caption" foregroundStyle="secondaryLabel">点击缩略图阅读</Text>
+            </HStack>
+            {detail.truncatedPreviewPages
+              ? <Text foregroundStyle="systemOrange" font="caption">画廊预览分页过多，第一版最多读取前 50 个预览分页。</Text>
+              : null}
+            <LazyVGrid
+              columns={[{ size: { type: "adaptive", min: 112, max: 150 } }]}
+              alignment="leading"
+              spacing={12}
+            >
+              {detail.pageLinks.map((page, index) =>
+                <NavigationLink
+                  key={page.id}
+                  destination={<ReaderView pages={detail.pageLinks} startIndex={index} />}
+                >
+                  <VStack spacing={6} frame={{ maxWidth: "infinity" }}>
+                    <PreviewThumbnail page={page} />
+                    <Text font="caption" foregroundStyle="secondaryLabel">第 {page.index} 页</Text>
+                  </VStack>
+                </NavigationLink>
+              )}
+            </LazyVGrid>
+          </VStack>
+        : null}
+    </VStack>
+  </ScrollView>
 }
 
 function ReaderView({ pages, startIndex }: { pages: GalleryPageLink[]; startIndex: number }) {
