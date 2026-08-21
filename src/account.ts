@@ -3,6 +3,7 @@ const E_BASE = "https://e-hentai.org/"
 const EX_BASE = "https://exhentai.org/"
 const COOKIE_KEY = "ehentai.account.cookies.v1"
 const SITE_KEY = "ehentai.account.site.v1"
+const AUTH_COOKIE_NAMES = new Set(["ipb_member_id", "ipb_pass_hash", "igneous"])
 
 export type GallerySite = "e" | "ex"
 
@@ -123,6 +124,14 @@ export function getBaseUrl(site = getActiveSite()): string {
   return site === "ex" ? EX_BASE : E_BASE
 }
 
+function currentAuthCookieByName(cookies: StoredCookie[], name: string): StoredCookie | undefined {
+  const candidates = cookies.filter(cookie => cookie.name === name && cookie.value)
+  // 优先选 e-hentai.org 根域 Cookie，其次 forums，最后使用任意同名 Cookie。
+  return candidates.find(cookie => normalizeDomain(cookie.domain) === "e-hentai.org")
+    || candidates.find(cookie => normalizeDomain(cookie.domain) === "forums.e-hentai.org")
+    || candidates[0]
+}
+
 export function getCookieHeader(url: string): string {
   let target: URL
   try {
@@ -131,21 +140,31 @@ export function getCookieHeader(url: string): string {
     return ""
   }
 
+  const cookies = loadCookies()
   const now = Date.now()
-  const pairs = loadCookies()
-    .filter(cookie => {
-      if (!domainMatches(target.hostname, cookie.domain)) return false
-      if (!cookiePathMatches(target.pathname || "/", cookie.path || "/")) return false
-      if (cookie.expiresDate && Number.isFinite(Date.parse(cookie.expiresDate)) && Date.parse(cookie.expiresDate) <= now) return false
-      return true
-    })
-    .map(cookie => `${cookie.name}=${cookie.value}`)
+  const pairs = new Map<string, string>()
+
+  for (const cookie of cookies) {
+    if (AUTH_COOKIE_NAMES.has(cookie.name)) continue
+    if (!domainMatches(target.hostname, cookie.domain)) continue
+    if (!cookiePathMatches(target.pathname || "/", cookie.path || "/")) continue
+    if (cookie.expiresDate && Number.isFinite(Date.parse(cookie.expiresDate)) && Date.parse(cookie.expiresDate) <= now) continue
+    pairs.set(cookie.name, cookie.value)
+  }
+
+  // Ehviewer 会把论坛登录得到的核心 Cookie 复制到 E / Ex 域；这里手工构造 Cookie header 实现同样效果。
+  if (target.hostname === "e-hentai.org" || target.hostname === "exhentai.org") {
+    for (const name of AUTH_COOKIE_NAMES) {
+      const cookie = currentAuthCookieByName(cookies, name)
+      if (cookie) pairs.set(name, cookie.value)
+    }
+  }
 
   // Ehviewer 对 E-Hentai 请求固定附加 nw=1，用于跳过内容警告页。
-  if (target.hostname === "e-hentai.org" && !pairs.some(pair => pair.startsWith("nw="))) {
-    pairs.push("nw=1")
+  if (target.hostname === "e-hentai.org" && !pairs.has("nw")) {
+    pairs.set("nw", "1")
   }
-  return pairs.join("; ")
+  return [...pairs.entries()].map(([name, value]) => `${name}=${value}`).join("; ")
 }
 
 export function getAccountStatus(): AccountStatus {
@@ -173,10 +192,13 @@ async function validateSite(site: GallerySite): Promise<boolean> {
       timeout: 20,
     })
     const finalUrl = String(response.url || url)
-    const text = await response.text()
     if (!response.ok) return false
     if (/forums\.e-hentai\.org\/index\.php\?act=Login/i.test(finalUrl)) return false
     if (/act=Login/i.test(finalUrl) && /forums\.e-hentai\.org/i.test(finalUrl)) return false
+
+    const contentType = String(response.headers?.get?.("content-type") || "")
+    if (site === "ex" && /^image\//i.test(contentType)) return false
+    const text = await response.text()
     if (site === "ex" && /sadpanda|kokomade/i.test(text)) return false
     return true
   } catch {
@@ -206,6 +228,7 @@ export async function signInWithWebView(): Promise<AccountStatus> {
   const webView = new Controller({ ephemeral: false })
   let captured: StoredCookie[] = []
   let detected = false
+  let presentationDone = false
 
   try {
     const loaded = await webView.loadURL(LOGIN_URL)
@@ -214,10 +237,10 @@ export async function signInWithWebView(): Promise<AccountStatus> {
     const presentation = webView.present({
       fullscreen: true,
       navigationTitle: "登录 E-Hentai",
-    })
+    }).then(() => { presentationDone = true })
 
-    // 用户在官方网页中输入账号；脚本只轮询 WebKit Cookie，不接触密码字段。
-    for (let i = 0; i < 600; i += 1) {
+    // 用户在官方网页中输入账号；脚本只读取 WebKit Cookie，不接触密码字段。
+    for (let i = 0; i < 600 && !presentationDone; i += 1) {
       await sleep(1000)
       const cookies = sanitizeCookies(await webView.getAllCookies())
       const names = new Set(cookies.map(cookie => cookie.name))
