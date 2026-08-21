@@ -1,0 +1,17 @@
+{
+  "time": "2026-08-21T10:08:54.169Z",
+  "scriptVersion": "0.2.0",
+  "stage": "account-action",
+  "ok": false,
+  "error": {
+    "name": "Error",
+    "message": "没有检测到登录 Cookie。请确认已在官方页面完成登录后再关闭窗口。",
+    "stack": "@\nfulfilled@"
+  },
+  "request": {
+    "url": "",
+    "status": 0,
+    "statusText": ""
+  },
+  "notes": ""
+}
