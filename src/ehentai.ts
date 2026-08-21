@@ -36,7 +36,6 @@ export type ResolvedImagePage = PageExtractData & {
 
 const MAX_PREVIEW_LIST_PAGES = 50
 const IMAGE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
-const PAGE_UA = "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
 
 function scraperError(result: any): string {
   if (result?.error?.message) return String(result.error.message)
@@ -62,30 +61,49 @@ function httpError(message: string, response: any, url: string): Error {
   return error
 }
 
+function stageError(stage: string, error: unknown): Error {
+  const value = error as { name?: unknown; message?: unknown; stack?: unknown }
+  const rawMessage = String(value?.message || error || "未知错误")
+  const wrapped = new Error(`[${stage}] ${rawMessage}`)
+  wrapped.name = String(value?.name || "Error")
+  if (value?.stack) wrapped.stack = `${wrapped.name}: ${wrapped.message}\nCaused by:\n${String(value.stack)}`
+  return wrapped
+}
+
 export async function searchGalleries(keyword: string, directUrl?: string): Promise<SearchPage> {
   const url = directUrl || buildSearchUrl(keyword)
-  const response = await (globalThis as any).fetch(url, {
-    method: "GET",
-    headers: {
-      "User-Agent": PAGE_UA,
-      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-      "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.7",
-      "Cache-Control": "no-cache",
-    },
-    timeout: 25,
-    debugLabel: "E-Hentai Gallery Search",
-  })
+
+  let response: Response
+  try {
+    // 刻意使用 Scripting 官方文档中的最小 fetch 调用，先排除 globalThis、
+    // 自定义 User-Agent/header、timeout/debugLabel 等运行时兼容因素。
+    response = await fetch(url)
+  } catch (error) {
+    throw stageError("fetch", error)
+  }
 
   const finalUrl = String(response?.url || url)
   const status = Number(response?.status || 0)
   const statusText = String(response?.statusText || "")
-  const html = await response.text()
+
+  let html = ""
+  try {
+    html = await response.text()
+  } catch (error) {
+    throw stageError("response.text", error)
+  }
 
   if (!response.ok) {
     throw httpError(`E-Hentai 请求失败：HTTP ${status}${statusText ? ` ${statusText}` : ""}`, response, finalUrl)
   }
 
-  const page = parseSearchHtml(html, finalUrl)
+  let page: SearchExtractData
+  try {
+    page = parseSearchHtml(html, finalUrl)
+  } catch (error) {
+    throw stageError("parseSearchHtml", error)
+  }
+
   if (page.error) {
     const error = httpError(page.error, response, finalUrl)
     ;(error as any).responseLength = html.length
@@ -157,7 +175,7 @@ export async function fetchPageImage(imageUrl: string, referer: string): Promise
     "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
     "Referer": referer,
   }
-  const response = await (globalThis as any).fetch(imageUrl, { headers, timeout: 30, debugLabel: "E-Hentai Image" })
+  const response = await fetch(imageUrl, { headers, timeout: 30, debugLabel: "E-Hentai Image" })
   if (!response.ok) {
     throw new Error(`图片请求失败：HTTP ${response.status}`)
   }
