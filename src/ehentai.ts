@@ -1,8 +1,7 @@
-import { Script, UIImage } from "scripting"
+import { UIImage } from "scripting"
 
 import {
   GallerySummary,
-  PAGE_EXTRACT_SCRIPT,
   PageExtractData,
   SearchExtractData,
 } from "./extractors"
@@ -15,6 +14,7 @@ import {
 } from "./pure"
 import { parseSearchHtml } from "./searchHtml"
 import { parseDetailHtml, parsePreviewPageHtml } from "./detailHtml"
+import { parseImagePageHtml } from "./pageHtml"
 import { reportDiagnostic } from "./githubBridge"
 
 export type { GalleryPageLink, GallerySummary }
@@ -34,19 +34,6 @@ export type ResolvedImagePage = PageExtractData & {
 }
 
 const MAX_PREVIEW_LIST_PAGES = 50
-const IMAGE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
-
-function scraperError(result: any): string {
-  if (result?.error?.message) return String(result.error.message)
-  if (result?.error?.code) return String(result.error.code)
-  return "网页抓取失败"
-}
-
-function requirePro(): void {
-  if (!Script.hasFullAccess()) {
-    throw new Error("图片页当前仍使用 Scripting WebScraper，需要 Scripting PRO。")
-  }
-}
 
 function httpError(message: string, response: any, url: string): Error {
   const error = new Error(message) as Error & {
@@ -193,32 +180,99 @@ export async function loadGalleryDetail(url: string): Promise<GalleryDetail> {
 }
 
 export async function resolveImagePage(pageUrl: string): Promise<ResolvedImagePage> {
-  requirePro()
-  const result = await WebScraper.scrape<PageExtractData>({
-    url: pageUrl,
-    wait: "domComplete",
-    extractScript: PAGE_EXTRACT_SCRIPT,
-  })
-  if (!result.ok || !result.data) throw new Error(scraperError(result))
-  if (result.data.error) throw new Error(result.data.error)
-  return {
-    ...result.data,
-    pageUrl: result.url || pageUrl,
+  try {
+    const { html, finalUrl, response } = await fetchHtml(pageUrl, "image-page")
+    let parsed: PageExtractData
+    try {
+      parsed = parseImagePageHtml(html, finalUrl)
+    } catch (error) {
+      throw stageError("image-page.parse", error)
+    }
+
+    if (parsed.error) {
+      const error = httpError(parsed.error, response, finalUrl)
+      ;(error as any).responseLength = html.length
+      throw error
+    }
+
+    const resolved: ResolvedImagePage = {
+      ...parsed,
+      pageUrl: finalUrl,
+    }
+
+    await reportSafely({
+      stage: "gallery-image-page",
+      ok: true,
+      request: { url: finalUrl, status: Number(response?.status || 0), statusText: String(response?.statusText || "") },
+      notes: `imageUrl=${resolved.imageUrl ? "yes" : "no"}; originalUrl=${resolved.originalUrl ? "yes" : "no"}`,
+    })
+    return resolved
+  } catch (error) {
+    const value = error as { status?: number; statusText?: string; url?: string }
+    await reportSafely({
+      stage: "gallery-image-page",
+      ok: false,
+      error,
+      request: {
+        url: String(value?.url || pageUrl),
+        status: Number(value?.status || 0),
+        statusText: String(value?.statusText || ""),
+      },
+    })
+    throw error
   }
 }
 
 export async function fetchPageImage(imageUrl: string, referer: string): Promise<UIImage> {
-  const headers: Record<string, string> = {
-    "User-Agent": IMAGE_UA,
-    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-    "Referer": referer,
+  try {
+    let response: Response
+    try {
+      response = await fetch(imageUrl, {
+        headers: {
+          Accept: "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+          Referer: referer,
+        },
+      })
+    } catch (error) {
+      throw stageError("image.fetch", error)
+    }
+
+    const finalUrl = String(response?.url || imageUrl)
+    const status = Number(response?.status || 0)
+    const statusText = String(response?.statusText || "")
+    if (!response.ok) {
+      throw httpError(`图片请求失败：HTTP ${status}${statusText ? ` ${statusText}` : ""}`, response, finalUrl)
+    }
+
+    let data: any
+    try {
+      data = await response.data()
+    } catch (error) {
+      throw stageError("image.response.data", error)
+    }
+
+    const image = UIImage.fromData(data)
+    if (!image) throw new Error("图片数据已下载，但无法解码。")
+
+    await reportSafely({
+      stage: "gallery-image-binary",
+      ok: true,
+      request: { url: finalUrl, status, statusText },
+      notes: "decoded=yes",
+    })
+    return image
+  } catch (error) {
+    const value = error as { status?: number; statusText?: string; url?: string }
+    await reportSafely({
+      stage: "gallery-image-binary",
+      ok: false,
+      error,
+      request: {
+        url: String(value?.url || imageUrl),
+        status: Number(value?.status || 0),
+        statusText: String(value?.statusText || ""),
+      },
+    })
+    throw error
   }
-  const response = await fetch(imageUrl, { headers, timeout: 30, debugLabel: "E-Hentai Image" })
-  if (!response.ok) {
-    throw new Error(`图片请求失败：HTTP ${response.status}`)
-  }
-  const data = await response.data()
-  const image = UIImage.fromData(data)
-  if (!image) throw new Error("图片数据已下载，但无法解码。")
-  return image
 }
