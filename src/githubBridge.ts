@@ -7,7 +7,7 @@ const REPO = { owner: "tudoutematou", repo: "scripting-ehentai", branch: "main" 
 const SOURCE_ROOT = "src"
 const DIAGNOSTIC_PATH = "runtime/latest.json"
 const DIAGNOSTIC_EVENTS_ROOT = "runtime/events"
-const SCRIPT_VERSION = "0.1.4"
+const SCRIPT_VERSION = "0.1.5"
 const SOURCE_EXTENSIONS = [".ts", ".tsx", ".json"]
 const EXCLUDED_SEGMENTS = new Set([".git", "node_modules", "tests", "runtime", "bridge"])
 
@@ -109,7 +109,6 @@ function diagnosticEventPath(stage: string) {
 }
 
 async function putDiagnosticEvent(path: string, message: string, content: string) {
-  // 事件文件路径唯一，不需要 SHA，因此不会与另一条诊断发生乐观锁冲突。
   return GitHub.putContent({
     owner: REPO.owner,
     repo: REPO.repo,
@@ -174,15 +173,11 @@ export async function reportDiagnostic(input: DiagnosticInput) {
   const content = JSON.stringify(payload, null, 2)
   const task = diagnosticQueue.then(async () => {
     const message = `runtime: ${payload.stage} ${payload.ok ? "ok" : "failed"}`
-
-    // 先写唯一事件文件。这是联调的权威记录，不会出现 latest.json 的 SHA 冲突。
     await putDiagnosticEvent(diagnosticEventPath(payload.stage), message, content)
-
-    // latest.json 仅作为便捷镜像。即使并发更新冲突，也绝不能影响业务功能。
     try {
       await putTextContent(DIAGNOSTIC_PATH, message, content)
     } catch {
-      // 忽略 latest 镜像失败；ChatGPT 会从 runtime/events/ 读取最新事件。
+      // latest 镜像失败不影响业务。
     }
   })
   diagnosticQueue = task.then(() => undefined, () => undefined)
