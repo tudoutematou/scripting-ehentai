@@ -9,6 +9,10 @@ export type RawPageLink = {
   index?: number
   pageUrl?: string
   thumb?: string
+  thumbX?: number
+  thumbY?: number
+  thumbWidth?: number
+  thumbHeight?: number
 }
 
 export type GalleryPageLink = {
@@ -16,6 +20,10 @@ export type GalleryPageLink = {
   index: number
   pageUrl: string
   thumb: string
+  thumbX: number
+  thumbY: number
+  thumbWidth: number
+  thumbHeight: number
 }
 
 export function buildSearchUrl(keyword: string): string {
@@ -62,6 +70,10 @@ export function normalizePageLinks(
         index,
         pageUrl,
         thumb: String(raw.thumb || "").trim(),
+        thumbX: Math.max(0, Number(raw.thumbX || 0)),
+        thumbY: Math.max(0, Number(raw.thumbY || 0)),
+        thumbWidth: Math.max(0, Number(raw.thumbWidth || 0)),
+        thumbHeight: Math.max(0, Number(raw.thumbHeight || 0)),
       }
     })
     .filter((item): item is GalleryPageLink => item != null)

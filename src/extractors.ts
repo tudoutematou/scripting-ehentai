@@ -24,6 +24,16 @@ export type TagGroup = {
   tags: string[]
 }
 
+export type PreviewPageLink = {
+  index: number
+  pageUrl: string
+  thumb: string
+  thumbX?: number
+  thumbY?: number
+  thumbWidth?: number
+  thumbHeight?: number
+}
+
 export type DetailExtractData = {
   title: string
   titleJpn: string
@@ -35,7 +45,7 @@ export type DetailExtractData = {
   metadata: Record<string, string>
   tags: TagGroup[]
   previewPages: number
-  pageLinks: Array<{ index: number; pageUrl: string; thumb: string }>
+  pageLinks: PreviewPageLink[]
   error: string
 }
 
@@ -133,11 +143,19 @@ for (let i = 0; i < anchors.length; i++) {
   const alt = (img && img.getAttribute("alt")) || ""
   const m = (title + " " + alt).match(/(?:Page\s+)?(\d+)/i)
   const styleNode = a.querySelector('[style*="url("]')
-  const thumb = abs(img && (img.getAttribute("data-src") || img.getAttribute("src"))) || cssUrl(styleNode && styleNode.getAttribute("style"))
+  const style = (styleNode && styleNode.getAttribute("style")) || ""
+  const thumb = abs(img && (img.getAttribute("data-src") || img.getAttribute("src"))) || cssUrl(style)
+  const widthMatch = style.match(/(?:^|;)\s*width\s*:\s*(\d+)px/i)
+  const heightMatch = style.match(/(?:^|;)\s*height\s*:\s*(\d+)px/i)
+  const posMatch = style.match(/background(?:-position)?\s*:[^;]*?(-?\d+)px\s+(-?\d+)px/i) || style.match(/\)\s*(-?\d+)px\s+(-?\d+)px/i)
   pageLinks.push({
     index: m ? Number(m[1].replace(/,/g, "")) : 0,
     pageUrl,
     thumb,
+    thumbX: posMatch ? Math.abs(Number(posMatch[1])) : 0,
+    thumbY: posMatch ? Math.abs(Number(posMatch[2])) : 0,
+    thumbWidth: widthMatch ? Number(widthMatch[1]) : 0,
+    thumbHeight: heightMatch ? Number(heightMatch[1]) : 0,
   })
 }
 `

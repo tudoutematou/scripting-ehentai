@@ -1,4 +1,4 @@
-import type { DetailExtractData } from "./extractors"
+import type { DetailExtractData, PreviewPageLink } from "./extractors"
 
 function decodeHtml(value: string): string {
   const named: Record<string, string> = {
@@ -100,8 +100,6 @@ function parseMetadata(html: string): Record<string, string> {
 }
 
 function parseTags(html: string): Array<{ namespace: string; tags: string[] }> {
-  // taglist 内部本身包含大量嵌套 div，不能用“首个 </div>”式正则截取。
-  // 直接按相邻固定 id 切片，兼容 Ehviewer 测试样本中的 E/Ex 页面结构。
   const block = sliceSection(html, "taglist", ["tagmenu_act", "tagmenu_new", "gwrd", "gd5"])
   const result: Array<{ namespace: string; tags: string[] }> = []
   const rows = block.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) || []
@@ -130,8 +128,25 @@ function parsePreviewPages(html: string): number {
   return max
 }
 
-export function parsePreviewPageHtml(html: string, baseUrl: string): Array<{ index: number; pageUrl: string; thumb: string }> {
-  const links: Array<{ index: number; pageUrl: string; thumb: string }> = []
+function parsePreviewStyle(style: string, baseUrl: string) {
+  const text = decodeHtml(String(style || ""))
+  const widthMatch = text.match(/(?:^|;)\s*width\s*:\s*(\d+)px/i)
+  const heightMatch = text.match(/(?:^|;)\s*height\s*:\s*(\d+)px/i)
+  const positionMatch = text.match(/background-position\s*:\s*(-?\d+)px\s+(-?\d+)px/i)
+    || text.match(/url\([^)]*\)\s*(-?\d+)px\s+(-?\d+)px/i)
+    || text.match(/url\([^)]*\)[^;]*?(-?\d+)px(?:\s+(-?\d+)px)?/i)
+
+  return {
+    thumb: cssUrl(text, baseUrl),
+    thumbX: positionMatch ? Math.abs(Number(positionMatch[1] || 0)) : 0,
+    thumbY: positionMatch ? Math.abs(Number(positionMatch[2] || 0)) : 0,
+    thumbWidth: widthMatch ? Number(widthMatch[1]) : 0,
+    thumbHeight: heightMatch ? Number(heightMatch[1]) : 0,
+  }
+}
+
+export function parsePreviewPageHtml(html: string, baseUrl: string): PreviewPageLink[] {
+  const links: PreviewPageLink[] = []
   const seen = new Set<string>()
   const pattern = /<a\b[^>]*href\s*=\s*(["'])([^"']*\/s\/[^"']+)\1[^>]*>([\s\S]*?)<\/a>/gi
 
@@ -142,19 +157,42 @@ export function parsePreviewPageHtml(html: string, baseUrl: string): Array<{ ind
     const titleMatch = inner.match(/\btitle\s*=\s*(["'])(.*?)\1/i)
     const imgMatch = inner.match(/<img\b[^>]*>/i)
     const alt = imgMatch ? getAttribute(imgMatch[0], "alt") : ""
-    const indexMatch = `${titleMatch?.[2] || ""} ${alt}`.match(/(?:Page\s+)?(\d+)/i)
+    const indexMatch = `${titleMatch?.[2] || ""} ${alt}`.match(/(?:Page\s+)?([\d,]+)/i)
 
     let thumb = ""
-    if (imgMatch) thumb = absoluteUrl(getAttribute(imgMatch[0], "data-src") || getAttribute(imgMatch[0], "src"), baseUrl)
-    if (!thumb) {
-      const styled = inner.match(/<[^>]+\bstyle\s*=\s*(["'])(.*?)\1[^>]*>/i)
-      if (styled) thumb = cssUrl(styled[2], baseUrl)
+    let thumbX = 0
+    let thumbY = 0
+    let thumbWidth = 0
+    let thumbHeight = 0
+
+    if (imgMatch) {
+      thumb = absoluteUrl(getAttribute(imgMatch[0], "data-src") || getAttribute(imgMatch[0], "src"), baseUrl)
+      const imgStyle = getAttribute(imgMatch[0], "style")
+      const parsed = parsePreviewStyle(imgStyle, baseUrl)
+      thumbX = parsed.thumbX
+      thumbY = parsed.thumbY
+      thumbWidth = parsed.thumbWidth
+      thumbHeight = parsed.thumbHeight
+    }
+
+    const styled = inner.match(/<[^>]+\bstyle\s*=\s*(["'])(.*?)\1[^>]*>/i)
+    if (styled) {
+      const parsed = parsePreviewStyle(styled[2], baseUrl)
+      if (parsed.thumb) thumb = parsed.thumb
+      if (parsed.thumbWidth > 0) thumbWidth = parsed.thumbWidth
+      if (parsed.thumbHeight > 0) thumbHeight = parsed.thumbHeight
+      thumbX = parsed.thumbX
+      thumbY = parsed.thumbY
     }
 
     links.push({
-      index: indexMatch ? Number(indexMatch[1]) : 0,
+      index: indexMatch ? Number(indexMatch[1].replace(/,/g, "")) : 0,
       pageUrl,
       thumb,
+      thumbX,
+      thumbY,
+      thumbWidth,
+      thumbHeight,
     })
     seen.add(pageUrl)
   }

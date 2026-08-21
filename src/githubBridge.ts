@@ -7,7 +7,7 @@ const REPO = { owner: "tudoutematou", repo: "scripting-ehentai", branch: "main" 
 const SOURCE_ROOT = "src"
 const DIAGNOSTIC_PATH = "runtime/latest.json"
 const DIAGNOSTIC_EVENTS_ROOT = "runtime/events"
-const SCRIPT_VERSION = "0.1.7"
+const SCRIPT_VERSION = "0.1.8"
 const SOURCE_EXTENSIONS = [".ts", ".tsx", ".json"]
 const EXCLUDED_SEGMENTS = new Set([".git", "node_modules", "tests", "runtime", "bridge"])
 
@@ -222,7 +222,6 @@ export async function reportDiagnostic(input: DiagnosticInput) {
 export async function pushSourceToGitHub() {
   await ensureGitHubPermissions()
 
-  // 防止旧本地副本把 ChatGPT 刚提交到 main 的新版本重新覆盖掉。
   const [localVersion, remoteVersion] = await Promise.all([
     localScriptVersion(),
     remoteScriptVersion(),

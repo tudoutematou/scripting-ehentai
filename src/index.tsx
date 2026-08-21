@@ -1,5 +1,6 @@
 import {
   Button,
+  Canvas,
   HStack,
   Image,
   List,
@@ -33,9 +34,121 @@ import {
   reportDiagnostic,
 } from "./githubBridge"
 
+const fileManager: any = (globalThis as any).FileManager
+const spritePathCache = new Map<string, Promise<string>>()
+
 function ErrorText({ message }: { message: string }) {
   if (!message) return null
   return <Text foregroundStyle="systemRed" font="caption">{message}</Text>
+}
+
+function hashText(value: string): string {
+  let hash = 2166136261
+  for (let i = 0; i < value.length; i += 1) {
+    hash ^= value.charCodeAt(i)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(16)
+}
+
+async function cachedSpritePath(url: string): Promise<string> {
+  const existing = spritePathCache.get(url)
+  if (existing) return existing
+
+  const task = (async () => {
+    const directory = `${Script.directory}/.preview-cache`
+    await fileManager.createDirectory(directory, true)
+    const extensionMatch = new URL(url).pathname.match(/\.(jpg|jpeg|png|webp)$/i)
+    const extension = extensionMatch ? extensionMatch[1].toLowerCase() : "jpg"
+    const path = `${directory}/${hashText(url)}.${extension}`
+
+    try {
+      if (await fileManager.isFile(path)) return path
+    } catch {
+      // 不影响首次下载。
+    }
+
+    const response = await fetch(url)
+    if (!response.ok) throw new Error(`预览雪碧图请求失败：HTTP ${response.status}`)
+    const data = await response.data()
+    await fileManager.writeAsData(path, data)
+    return path
+  })()
+
+  spritePathCache.set(url, task)
+  return task
+}
+
+function PreviewThumbnail({ page }: { page: GalleryPageLink }) {
+  const [filePath, setFilePath] = useState("")
+  const [error, setError] = useState("")
+  const isSprite = Boolean(page.thumb && page.thumbWidth > 0 && page.thumbHeight > 0)
+
+  useEffect(() => {
+    if (!isSprite) return
+    let cancelled = false
+    ;(async () => {
+      try {
+        const path = await cachedSpritePath(page.thumb)
+        if (!cancelled) setFilePath(path)
+      } catch (e) {
+        if (!cancelled) setError(e instanceof Error ? e.message : String(e))
+      }
+    })()
+    return () => { cancelled = true }
+  }, [page.thumb, page.thumbX, page.thumbY, page.thumbWidth, page.thumbHeight])
+
+  if (!page.thumb) {
+    return <Image systemName="photo" frame={{ width: 72, height: 96 }} foregroundStyle="secondaryLabel" />
+  }
+
+  // 独立缩略图直接显示；E-Hentai 普通预览则使用雪碧图裁剪。
+  if (!isSprite) {
+    return <Image
+      imageUrl={page.thumb}
+      resizable
+      scaleToFill
+      frame={{ width: 72, height: 96 }}
+      cornerRadius={6}
+      placeholder={<ProgressView progressViewStyle="circular" />}
+    />
+  }
+
+  if (error) {
+    return <Image systemName="exclamationmark.triangle" frame={{ width: 72, height: 96 }} foregroundStyle="systemOrange" />
+  }
+
+  if (!filePath) {
+    return <ProgressView progressViewStyle="circular" frame={{ width: 72, height: 96 }} />
+  }
+
+  return <Canvas
+    frame={{ width: 72, height: 96 }}
+    draw={(ctx, size) => {
+      ctx.fillStyle = "systemGray6"
+      ctx.fillRect(0, 0, size.width, size.height)
+
+      const sourceWidth = Math.max(1, page.thumbWidth)
+      const sourceHeight = Math.max(1, page.thumbHeight)
+      const scale = Math.min(size.width / sourceWidth, size.height / sourceHeight)
+      const drawWidth = sourceWidth * scale
+      const drawHeight = sourceHeight * scale
+      const drawX = (size.width - drawWidth) / 2
+      const drawY = (size.height - drawHeight) / 2
+
+      ctx.drawImage(
+        { filePath },
+        page.thumbX,
+        page.thumbY,
+        sourceWidth,
+        sourceHeight,
+        drawX,
+        drawY,
+        drawWidth,
+        drawHeight,
+      )
+    }}
+  />
 }
 
 function GalleryRow({ item }: { item: GallerySummary }) {
@@ -54,8 +167,8 @@ function GalleryRow({ item }: { item: GallerySummary }) {
           frame={{ width: 76, height: 106 }}
           foregroundStyle="secondaryLabel"
         />
-    <VStack alignment="leading" spacing={5}>
-      <Text font="headline" lineLimit={3}>{item.title || "未命名画廊"}</Text>
+    <VStack alignment="leading" spacing={5} frame={{ maxWidth: "infinity" }}>
+      <Text font="headline" foregroundStyle="label" lineLimit={3}>{item.title || "未命名画廊"}</Text>
       <Text font="caption" foregroundStyle="secondaryLabel">
         {[item.category, item.uploader].filter(Boolean).join(" · ")}
       </Text>
@@ -100,12 +213,12 @@ function HomeView() {
       setPrevHref(page.prevHref)
       setNextHref(page.nextHref)
 
-      // 诊断是旁路能力，绝不能因为 GitHub 写入失败把已经成功加载的画廊清空。
+      const first = page.items[0]
       await reportWithoutBreakingUI({
         stage,
         ok: true,
         request: { url: page.url || requestUrl },
-        notes: `items=${page.items.length}`,
+        notes: `items=${page.items.length}; firstTitleLen=${first?.title?.length || 0}; firstCategoryLen=${first?.category?.length || 0}; firstUploaderLen=${first?.uploader?.length || 0}`,
       })
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
@@ -169,9 +282,7 @@ function HomeView() {
     navigationTitle="E-Hentai 浏览器"
     navigationBarTitleDisplayMode="inline"
     refreshable={async () => { await runSearch() }}
-    toolbar={{
-      cancellationAction: <Button title="关闭" action={dismiss} />,
-    }}
+    toolbar={{ cancellationAction: <Button title="关闭" action={dismiss} /> }}
     overlay={loading && items.length === 0
       ? <ProgressView title="正在加载…" progressViewStyle="circular" />
       : undefined}
@@ -210,10 +321,7 @@ function HomeView() {
 
     <Section header={<Text textCase={null}>画廊</Text>}>
       {items.map(item =>
-        <NavigationLink
-          key={item.id}
-          destination={<GalleryDetailView summary={item} />}
-        >
+        <NavigationLink key={item.id} destination={<GalleryDetailView summary={item} />}>
           <GalleryRow item={item} />
         </NavigationLink>
       )}
@@ -316,22 +424,15 @@ function GalleryDetailView({ summary }: { summary: GallerySummary }) {
         ? <Text foregroundStyle="systemOrange" font="caption">画廊预览分页过多，第一版最多读取前 50 个预览分页。</Text>
         : null}
       {detail.pageLinks.map((page, index) =>
-        <NavigationLink
-          key={page.id}
-          destination={<ReaderView pages={detail.pageLinks} startIndex={index} />}
-        >
-          <HStack spacing={10}>
-            {page.thumb
-              ? <Image
-                  imageUrl={page.thumb}
-                  resizable
-                  scaleToFill
-                  frame={{ width: 58, height: 78 }}
-                  cornerRadius={6}
-                  placeholder={<ProgressView progressViewStyle="circular" />}
-                />
-              : <Image systemName="photo" frame={{ width: 58, height: 78 }} />}
-            <Text>第 {page.index} 页</Text>
+        <NavigationLink key={page.id} destination={<ReaderView pages={detail.pageLinks} startIndex={index} />}>
+          <HStack spacing={12}>
+            <PreviewThumbnail page={page} />
+            <VStack alignment="leading" spacing={4}>
+              <Text font="body">第 {page.index} 页</Text>
+              {page.thumbWidth > 0 && page.thumbHeight > 0
+                ? <Text font="caption2" foregroundStyle="secondaryLabel">逐页裁剪预览</Text>
+                : null}
+            </VStack>
           </HStack>
         </NavigationLink>
       )}
@@ -412,9 +513,7 @@ function ReaderView({ pages, startIndex }: { pages: GalleryPageLink[]; startInde
 }
 
 async function run() {
-  await Navigation.present({
-    element: <NavigationStack><HomeView /></NavigationStack>,
-  })
+  await Navigation.present({ element: <NavigationStack><HomeView /></NavigationStack> })
   Script.exit()
 }
 
