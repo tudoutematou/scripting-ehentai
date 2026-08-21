@@ -137,7 +137,7 @@ function normalizeDomain(value: string): string {
 
 function isEhDomain(domain: string): boolean {
   const value = normalizeDomain(domain)
-  return value === "e-hentai.org" || value.endsWith(".e-hentai.org") || value === "exhentai.org" || value.endsWith(".exhentai.org")
+  return value === "e-hentai.org" || value.endsWith(".e-hentai.org") || value === "exhentai.org" || value.endsWith(".exhentai.org") || value === "forums.e-hentai.org" || value.endsWith(".forums.e-hentai.org")
 }
 
 function domainMatches(host: string, domain: string): boolean {
@@ -204,6 +204,97 @@ function saveCookies(cookies: StoredCookie[]): void {
     synchronizable: false,
   })
   if (!ok) throw new Error("登录 Cookie 写入 Keychain 失败。")
+}
+
+export type CookieLoginInput = {
+  memberId: string
+  passHash: string
+  igneous: string
+}
+
+export type CookieLoginPreview = {
+  memberIdPresent: boolean
+  passHashPresent: boolean
+  igneousPresent: boolean
+  warnings: string[]
+}
+
+export type MaskedCookie = { name: "ipb_member_id" | "ipb_pass_hash" | "igneous"; value: string; present: boolean }
+
+function cleanCookieValue(value: unknown): string {
+  return String(value || "").trim().replace(/^['"]|['"]$/g, "")
+}
+
+function cookieValueByName(cookies: StoredCookie[], name: string): string {
+  return currentAuthCookieByName(cookies, name)?.value || ""
+}
+
+function maskCookie(value: string, visibleTail = 4): string {
+  if (!value) return "未提供"
+  if (visibleTail <= 0) return "*".repeat(Math.max(6, value.length))
+  if (value.length <= visibleTail) return "*".repeat(value.length)
+  return `${"*".repeat(Math.max(4, value.length - visibleTail))}${value.slice(-visibleTail)}`
+}
+
+export function parseCookieLogin(text: string): CookieLoginInput {
+  const result: CookieLoginInput = { memberId: "", passHash: "", igneous: "" }
+  // 兼容每行 name:value、Cookie Header 的 name=value; 以及 URL 编码形式；只识别白名单字段。
+  const source = String(text || "").replace(/\r/g, "\n")
+  for (const name of ["ipb_member_id", "ipb_pass_hash", "igneous"]) {
+    const match = source.match(new RegExp(`(?:^|[;\\n\\s])${name}\\s*[:=]\\s*([^;\\n\\s]+)`, "i"))
+    const value = cleanCookieValue(match?.[1])
+    if (name === "ipb_member_id") result.memberId = value
+    else if (name === "ipb_pass_hash") result.passHash = value
+    else result.igneous = value
+  }
+  return result
+}
+
+export function inspectCookieLogin(input: CookieLoginInput): CookieLoginPreview {
+  const memberId = cleanCookieValue(input.memberId)
+  const passHash = cleanCookieValue(input.passHash)
+  const warnings: string[] = []
+  if (!memberId) warnings.push("缺少 ipb_member_id")
+  else if (!/^\d+$/.test(memberId)) warnings.push("ipb_member_id 通常为数字")
+  if (!passHash) warnings.push("缺少 ipb_pass_hash")
+  else if (!/^[a-z0-9]{32}$/i.test(passHash)) warnings.push("ipb_pass_hash 通常为 32 位字母数字")
+  return { memberIdPresent: Boolean(memberId), passHashPresent: Boolean(passHash), igneousPresent: Boolean(cleanCookieValue(input.igneous)), warnings }
+}
+
+export function saveManualCookieLogin(input: CookieLoginInput): AccountStatus {
+  const memberId = cleanCookieValue(input.memberId)
+  const passHash = cleanCookieValue(input.passHash)
+  const igneous = cleanCookieValue(input.igneous)
+  if (!memberId || !passHash) throw new Error("请填写 ipb_member_id 和 ipb_pass_hash。")
+  const values = [{ name: "ipb_member_id", value: memberId }, { name: "ipb_pass_hash", value: passHash }, ...(igneous ? [{ name: "igneous", value: igneous }] : [])]
+  const cookies: StoredCookie[] = []
+  for (const domain of ["e-hentai.org", "exhentai.org", "forums.e-hentai.org"]) {
+    for (const item of values) cookies.push({ ...item, domain, path: "/", isSecure: true, isHTTPOnly: true, isSessionOnly: false, expiresDate: null })
+  }
+  saveCookies(cookies)
+  if (!keychainRoundTrip()) throw new Error("Keychain 写入后校验失败。")
+  setActiveSite("e")
+  const status = getAccountStatus()
+  updateDiagnostic({ stage: "manual-cookie-login", hasMemberId: true, hasPassHash: true, keychainSet: true, keychainRoundTrip: true, loggedIn: status.loggedIn, notes: `manualCookieLogin=true; igneousPresent=${Boolean(igneous)}` })
+  return status
+}
+
+export function getMaskedCookies(reveal = false): MaskedCookie[] {
+  const cookies = loadCookies()
+  return (["ipb_member_id", "ipb_pass_hash", "igneous"] as const).map(name => {
+    const raw = cookieValueByName(cookies, name)
+    return { name, value: raw ? (reveal ? raw : maskCookie(raw, name === "ipb_member_id" ? 4 : 0)) : "未提供", present: Boolean(raw) }
+  })
+}
+
+export function getCookieCopyText(): string {
+  const cookies = loadCookies()
+  const lines = (["ipb_member_id", "ipb_pass_hash", "igneous"] as const)
+    .map(name => ({ name, value: cookieValueByName(cookies, name) }))
+    .filter(item => item.value)
+    .map(item => `${item.name}:${item.value}`)
+  if (!lines.some(line => line.startsWith("ipb_member_id:")) || !lines.some(line => line.startsWith("ipb_pass_hash:"))) throw new Error("本机没有完整的登录 Cookie。")
+  return lines.join("\n")
 }
 
 function stableHash(value: string): string {
