@@ -1,0 +1,12 @@
+{
+  "time": "2026-08-21T14:21:43.131Z",
+  "scriptVersion": "0.3.0",
+  "stage": "account-status",
+  "ok": true,
+  "request": {
+    "url": "",
+    "status": 0,
+    "statusText": ""
+  },
+  "notes": "loggedIn=true; eHentaiReachable=true; exAvailable=false; site=e"
+}
