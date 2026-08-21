@@ -13,6 +13,7 @@ import {
   Spacer,
   Text,
   TextField,
+  UIImage,
   VStack,
   useEffect,
   useState,
@@ -22,6 +23,7 @@ import {
   GalleryDetail,
   GalleryPageLink,
   GallerySummary,
+  fetchPageImage,
   loadGalleryDetail,
   resolveImagePage,
   searchGalleries,
@@ -53,7 +55,7 @@ function GalleryRow({ item }: { item: GallerySummary }) {
           systemName="photo"
           frame={{ width: 76, height: 106 }}
           foregroundStyle="secondaryLabel"
-        />
+        />}
     <VStack alignment="leading" spacing={5}>
       <Text font="headline" lineLimit={3}>{item.title || "未命名画廊"}</Text>
       <Text font="caption" foregroundStyle="secondaryLabel">
@@ -78,15 +80,6 @@ function HomeView() {
   const [syncing, setSyncing] = useState(false)
   const [bridgeStatus, setBridgeStatus] = useState("")
 
-  const reportWithoutBreakingUI = async (input: Parameters<typeof reportDiagnostic>[0]) => {
-    try {
-      await reportDiagnostic(input)
-    } catch (diagnosticError) {
-      const value = diagnosticError as { message?: unknown }
-      setBridgeStatus(`诊断上传失败（不影响浏览）：${String(value?.message || diagnosticError)}`)
-    }
-  }
-
   const runSearch = async (directUrl?: string) => {
     if (loading) return
     const stage = directUrl ? "gallery-page" : (keyword.trim() ? "gallery-search" : "gallery-home")
@@ -99,28 +92,17 @@ function HomeView() {
       setResultCount(page.resultCount)
       setPrevHref(page.prevHref)
       setNextHref(page.nextHref)
-
-      // 诊断是旁路能力，绝不能因为 GitHub 写入失败把已经成功加载的画廊清空。
-      await reportWithoutBreakingUI({
-        stage,
-        ok: true,
-        request: { url: page.url || requestUrl },
-        notes: `items=${page.items.length}`,
-      })
+      await reportDiagnostic({ stage, ok: true, request: { url: page.url || requestUrl }, notes: `items=${page.items.length}` })
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
       setError(message)
       setItems([])
-      setResultCount("")
-      setPrevHref("")
-      setNextHref("")
-
-      await reportWithoutBreakingUI({
-        stage,
-        ok: false,
-        error: e,
-        request: { url: requestUrl },
-      })
+      try {
+        await reportDiagnostic({ stage, ok: false, error: e, request: { url: requestUrl } })
+      } catch (diagnosticError) {
+        const value = diagnosticError as { message?: unknown; stack?: unknown }
+        setError(`${message}\n诊断上传失败：${String(value?.message || diagnosticError)}\n${String(value?.stack || "")}`)
+      }
     } finally {
       setLoading(false)
     }
@@ -139,7 +121,7 @@ function HomeView() {
         setError(`已拉取 ${files.length} 个业务源码文件。请重新运行脚本以加载变更。`)
       } else {
         await reportDiagnostic({ stage: "manual-diagnostic", ok: true, notes: "用户手动上传诊断" })
-        setError("诊断已上传。")
+        setError("诊断已上传到 runtime/latest.json。")
       }
     } catch (e) {
       const value = e as { message?: unknown; stack?: unknown }
@@ -200,11 +182,7 @@ function HomeView() {
         {syncing ? <ProgressView title="正在同步 GitHub…" progressViewStyle="circular" /> : null}
         {bridgeStatus ? <Text font="caption" foregroundStyle="secondaryLabel">{bridgeStatus}</Text> : null}
         <ErrorText message={error} />
-        {resultCount || items.length
-          ? <Text font="caption" foregroundStyle="secondaryLabel">
-              {[resultCount ? `结果：${resultCount}` : "", `本页已解析：${items.length} 条`].filter(Boolean).join(" · ")}
-            </Text>
-          : null}
+        {resultCount ? <Text font="caption" foregroundStyle="secondaryLabel">结果：{resultCount}</Text> : null}
       </VStack>
     </Section>
 
@@ -341,6 +319,7 @@ function GalleryDetailView({ summary }: { summary: GallerySummary }) {
 
 function ReaderView({ pages, startIndex }: { pages: GalleryPageLink[]; startIndex: number }) {
   const [index, setIndex] = useState(startIndex)
+  const [image, setImage] = useState<UIImage | null>(null)
   const [imageUrl, setImageUrl] = useState("")
   const [originalUrl, setOriginalUrl] = useState("")
   const [loading, setLoading] = useState(true)
@@ -353,6 +332,7 @@ function ReaderView({ pages, startIndex }: { pages: GalleryPageLink[]; startInde
     ;(async () => {
       if (!current) return
       setLoading(true)
+      setImage(null)
       setImageUrl("")
       setOriginalUrl("")
       setError("")
@@ -361,6 +341,8 @@ function ReaderView({ pages, startIndex }: { pages: GalleryPageLink[]; startInde
         if (cancelled) return
         setImageUrl(resolved.imageUrl)
         setOriginalUrl(resolved.originalUrl)
+        const uiImage = await fetchPageImage(resolved.imageUrl, resolved.pageUrl)
+        if (!cancelled) setImage(uiImage)
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e))
       } finally {
@@ -375,14 +357,13 @@ function ReaderView({ pages, startIndex }: { pages: GalleryPageLink[]; startInde
     navigationBarTitleDisplayMode="inline"
   >
     <VStack alignment="center" spacing={14} padding>
-      {loading ? <ProgressView title="解析图片地址…" progressViewStyle="circular" /> : null}
-      {imageUrl
+      {loading ? <ProgressView title="读取图片…" progressViewStyle="circular" /> : null}
+      {image
         ? <Image
-            imageUrl={imageUrl}
+            image={image}
             resizable
             scaleToFit
             frame={{ maxWidth: "infinity" }}
-            placeholder={<ProgressView title="加载图片…" progressViewStyle="circular" />}
           />
         : null}
       <ErrorText message={error} />
@@ -390,7 +371,7 @@ function ReaderView({ pages, startIndex }: { pages: GalleryPageLink[]; startInde
         ? <Text font="caption2" foregroundStyle="secondaryLabel" lineLimit={2}>{imageUrl}</Text>
         : null}
       {originalUrl
-        ? <Text font="caption2" foregroundStyle="secondaryLabel">检测到原图链接（后续加入原图切换/下载）</Text>
+        ? <Text font="caption2" foregroundStyle="secondaryLabel">检测到原图链接（第二阶段再加入原图切换/下载）</Text>
         : null}
       <HStack spacing={18}>
         <Button
