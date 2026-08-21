@@ -22,13 +22,7 @@ function cleanText(value: string): string {
       .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
       .replace(/<br\s*\/?>/gi, " ")
       .replace(/<[^>]+>/g, " "),
-  )
-    // E-Hentai titles occasionally contain zero-width/bidi formatting characters.
-    // They are invisible but truthy, which previously prevented the UI fallback text.
-    .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/g, "")
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
+  ).replace(/\s+/g, " ").trim()
 }
 
 function absoluteUrl(value: string, baseUrl: string): string {
@@ -90,24 +84,12 @@ function findClassText(block: string, className: string): string {
   return match ? cleanText(match[3]) : ""
 }
 
-function findGalleryTitle(block: string, anchorInner: string): string {
-  // Current E-Hentai table/extended layouts expose the visible title in .glink.
-  // Prefer that over the first /g/ anchor because the first anchor can be a thumb link.
-  const glink = findClassText(block, "glink")
-  if (glink) return glink
-
-  const glname = findClassText(block, "glname")
-  if (glname) return glname
-
-  return cleanText(anchorInner)
-}
-
 function findUploader(block: string): string {
   const anchors = block.match(/<a\b[^>]*>[\s\S]*?<\/a>/gi) || []
   for (const anchor of anchors) {
     const open = anchor.match(/^<a\b[^>]*>/i)?.[0] || ""
     const href = getAttribute(open, "href")
-    if (/\/uploader\//i.test(href) || /[?&]f_uploader=/i.test(href)) return cleanText(anchor)
+    if (/\/uploader\//i.test(href)) return cleanText(anchor)
   }
   return ""
 }
@@ -130,7 +112,8 @@ export function parseSearchHtml(html: string, baseUrl: string): SearchExtractDat
 
     const anchorIndex = match.index || 0
     const block = findBlock(html, anchorIndex)
-    const title = findGalleryTitle(block, match[5])
+    let title = cleanText(match[5])
+    if (!title) title = findClassText(block, "glname") || findClassText(block, "glink")
     if (!title) continue
 
     const rowText = cleanText(block)
