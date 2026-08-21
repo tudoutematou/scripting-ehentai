@@ -33,25 +33,12 @@ import {
   reportDiagnostic,
 } from "./githubBridge"
 
-function displayText(value: unknown): string {
-  return String(value || "")
-    .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/g, "")
-    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
-    .replace(/\s+/g, " ")
-    .trim()
-}
-
 function ErrorText({ message }: { message: string }) {
   if (!message) return null
   return <Text foregroundStyle="systemRed" font="caption">{message}</Text>
 }
 
 function GalleryRow({ item }: { item: GallerySummary }) {
-  const title = displayText(item.title) || "未命名画廊"
-  const category = displayText(item.category)
-  const uploader = displayText(item.uploader)
-  const posted = displayText(item.posted)
-
   return <HStack spacing={12}>
     {item.thumb
       ? <Image
@@ -67,21 +54,15 @@ function GalleryRow({ item }: { item: GallerySummary }) {
           frame={{ width: 76, height: 106 }}
           foregroundStyle="secondaryLabel"
         />
-    }
     <VStack alignment="leading" spacing={5}>
-      <Text font="headline" foregroundStyle="label" lineLimit={3}>{title}</Text>
-      {(category || uploader)
-        ? <Text font="caption" foregroundStyle="secondaryLabel">
-            {[category, uploader].filter(Boolean).join(" · ")}
-          </Text>
-        : null}
-      {(item.pages || posted)
-        ? <Text font="caption2" foregroundStyle="secondaryLabel">
-            {[item.pages ? `${item.pages} 页` : "", posted].filter(Boolean).join(" · ")}
-          </Text>
-        : null}
+      <Text font="headline" lineLimit={3}>{item.title || "未命名画廊"}</Text>
+      <Text font="caption" foregroundStyle="secondaryLabel">
+        {[item.category, item.uploader].filter(Boolean).join(" · ")}
+      </Text>
+      <Text font="caption2" foregroundStyle="secondaryLabel">
+        {[item.pages ? `${item.pages} 页` : "", item.posted].filter(Boolean).join(" · ")}
+      </Text>
     </VStack>
-    <Spacer />
   </HStack>
 }
 
@@ -119,19 +100,12 @@ function HomeView() {
       setPrevHref(page.prevHref)
       setNextHref(page.nextHref)
 
-      const first = page.items[0]
+      // 诊断是旁路能力，绝不能因为 GitHub 写入失败把已经成功加载的画廊清空。
       await reportWithoutBreakingUI({
         stage,
         ok: true,
         request: { url: page.url || requestUrl },
-        notes: [
-          `items=${page.items.length}`,
-          `firstTitleRawLen=${String(first?.title || "").length}`,
-          `firstTitleVisibleLen=${displayText(first?.title).length}`,
-          `firstCategoryLen=${displayText(first?.category).length}`,
-          `firstUploaderLen=${displayText(first?.uploader).length}`,
-          `firstPages=${Number(first?.pages || 0)}`,
-        ].join("; "),
+        notes: `items=${page.items.length}`,
       })
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
@@ -306,12 +280,10 @@ function GalleryDetailView({ summary }: { summary: GallerySummary }) {
               placeholder={<ProgressView progressViewStyle="circular" />}
             />
           : null}
-        <Text font="title3" foregroundStyle="label">{displayText(detail?.title || summary.title) || "未命名画廊"}</Text>
-        {displayText(detail?.titleJpn)
-          ? <Text font="subheadline" foregroundStyle="secondaryLabel">{displayText(detail?.titleJpn)}</Text>
-          : null}
+        <Text font="title3">{detail?.title || summary.title}</Text>
+        {detail?.titleJpn ? <Text font="subheadline" foregroundStyle="secondaryLabel">{detail.titleJpn}</Text> : null}
         <Text font="caption" foregroundStyle="secondaryLabel">
-          {[displayText(detail?.category || summary.category), displayText(detail?.uploader || summary.uploader)].filter(Boolean).join(" · ")}
+          {[detail?.category || summary.category, detail?.uploader || summary.uploader].filter(Boolean).join(" · ")}
         </Text>
         {detail?.rating != null
           ? <Text font="caption">评分 {detail.rating.toFixed(2)} · {detail.ratingCount} 次</Text>
@@ -359,7 +331,7 @@ function GalleryDetailView({ summary }: { summary: GallerySummary }) {
                   placeholder={<ProgressView progressViewStyle="circular" />}
                 />
               : <Image systemName="photo" frame={{ width: 58, height: 78 }} />}
-            <Text foregroundStyle="label">第 {page.index} 页</Text>
+            <Text>第 {page.index} 页</Text>
           </HStack>
         </NavigationLink>
       )}
@@ -427,7 +399,7 @@ function ReaderView({ pages, startIndex }: { pages: GalleryPageLink[]; startInde
           disabled={index <= 0 || loading}
           action={() => setIndex(value => Math.max(0, value - 1))}
         />
-        <Text foregroundStyle="label">{current ? `第 ${current.index} 页` : ""}</Text>
+        <Text>{current ? `第 ${current.index} 页` : ""}</Text>
         <Button
           title="下一页"
           systemImage="chevron.right"
