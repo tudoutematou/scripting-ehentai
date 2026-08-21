@@ -1,12 +1,12 @@
 {
-  "time": "2026-08-21T08:10:09.171Z",
-  "scriptVersion": "0.1.4",
-  "stage": "manual-diagnostic",
+  "time": "2026-08-21T08:11:09.297Z",
+  "scriptVersion": "0.1.5",
+  "stage": "gallery-detail",
   "ok": true,
   "request": {
-    "url": "",
-    "status": 0,
-    "statusText": ""
+    "url": "https://e-hentai.org/g/4135312/7855244f9a/",
+    "status": 200,
+    "statusText": "no error"
   },
-  "notes": "用户手动上传诊断"
+  "notes": "title=yes; tags=1; images=200; previewPages=10"
 }
