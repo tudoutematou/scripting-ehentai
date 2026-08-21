@@ -3,8 +3,9 @@ const E_BASE = "https://e-hentai.org/"
 const EX_BASE = "https://exhentai.org/"
 const COOKIE_KEY = "ehentai.account.cookies.v1"
 const SITE_KEY = "ehentai.account.site.v1"
-const SAFARI_BRIDGE_DIRECTORY = "ehentai-browser"
-const SAFARI_BRIDGE_FILE = "safari-login.json"
+const SAFARI_BRIDGE_DIRECTORY = "ehentai-login-bridge"
+const SAFARI_LOGIN_FILE = "login.json"
+const SAFARI_STATUS_FILE = "status.json"
 const AUTH_COOKIE_NAMES = new Set(["ipb_member_id", "ipb_pass_hash", "igneous"])
 const fileManager: any = (globalThis as any).FileManager
 
@@ -34,6 +35,19 @@ type SafariLoginPayload = {
   time?: string
   source?: string
   cookies?: Array<Record<string, unknown>>
+}
+
+type SafariBridgeStatus = {
+  time?: string
+  host?: string
+  phase?: string
+  version?: string
+  cookieNames?: string[]
+  hasMemberId?: boolean
+  hasPassHash?: boolean
+  hasIgneous?: boolean
+  errorCode?: string
+  errorMessage?: string
 }
 
 function keychain(): any {
@@ -117,35 +131,68 @@ function saveCookies(cookies: StoredCookie[]): void {
   if (!ok) throw new Error("登录 Cookie 写入 Keychain 失败。")
 }
 
-function safariBridgePath(): string {
-  const root = String(fileManager?.appGroupDocumentsDirectory || "")
-  if (!root) throw new Error("当前 Scripting 运行时未提供 App Group 共享目录，无法接收 Safari 登录状态。")
-  return `${root}/${SAFARI_BRIDGE_DIRECTORY}/${SAFARI_BRIDGE_FILE}`
+function safariBridgeRoot(): string {
+  const root = String(fileManager?.safariBrowserDirectory || fileManager?.appGroupDocumentsDirectory || "")
+  if (!root) throw new Error("当前 Scripting 运行时未提供 Safari Browser 共享目录。")
+  return root
 }
 
-async function safariBridgeExists(): Promise<boolean> {
+function safariBridgePath(file: string): string {
+  return `${safariBridgeRoot()}/${SAFARI_BRIDGE_DIRECTORY}/${file}`
+}
+
+async function fileExists(path: string): Promise<boolean> {
   try {
-    return Boolean(await fileManager.exists(safariBridgePath()))
+    return Boolean(await fileManager.exists(path))
   } catch {
     return false
   }
 }
 
+async function readSafariBridgeStatus(): Promise<SafariBridgeStatus | null> {
+  const path = safariBridgePath(SAFARI_STATUS_FILE)
+  if (!await fileExists(path)) return null
+  try {
+    return JSON.parse(String(await fileManager.readAsString(path) || "{}")) as SafariBridgeStatus
+  } catch {
+    return null
+  }
+}
+
+async function safariBridgeExists(): Promise<boolean> {
+  return fileExists(safariBridgePath(SAFARI_LOGIN_FILE))
+}
+
+function bridgeMissingMessage(status: SafariBridgeStatus | null): string {
+  if (!status) {
+    return "Safari 登录桥没有运行。请在 Safari 地址栏点扩展按钮（拼图图标），确认 Scripting 已启用并允许访问 forums.e-hentai.org / e-hentai.org，然后刷新已登录页面。刷新后页面右下角应出现“Scripting 登录桥已运行”。"
+  }
+  if (status.phase === "error") {
+    return `Safari 登录桥已运行但报错：${status.errorCode ? `${status.errorCode}: ` : ""}${status.errorMessage || "未知错误"}`
+  }
+  if (status.phase === "waiting-cookie") {
+    return `Safari 登录桥已运行，但尚未读到完整登录 Cookie（member_id=${Boolean(status.hasMemberId)}, pass_hash=${Boolean(status.hasPassHash)}）。请保持 Safari 已登录，刷新 forums.e-hentai.org 或打开 e-hentai.org 后再返回重试。`
+  }
+  if (status.phase === "captured") {
+    return "Safari 登录桥显示已捕获 Cookie，但主脚本没有找到登录文件。请再刷新一次 Safari 页面后重试；如果仍出现此提示，说明 Safari 与主 App 的共享目录需要继续校准。"
+  }
+  return `Safari 登录桥状态：${status.phase || "unknown"}。请刷新 Safari 已登录页面后再返回重试。`
+}
+
 export async function openSafariLogin(): Promise<void> {
-  // Scripting 官方示例中 Safari 是全局命名空间，不能从 "scripting" 模块导入。
   const opened = await Safari.openURL(LOGIN_URL)
   if (!opened) throw new Error("无法打开系统浏览器。请手动用 Safari 打开 E-Hentai 登录页。")
 }
 
 export async function importSafariLogin(): Promise<AccountStatus> {
-  const path = safariBridgePath()
+  const loginPath = safariBridgePath(SAFARI_LOGIN_FILE)
   if (!await safariBridgeExists()) {
-    throw new Error("尚未收到 Safari 登录状态。请确认 Safari 中已启用 Scripting 扩展并允许 E-Hentai 站点访问；完成登录后刷新一次页面。")
+    throw new Error(bridgeMissingMessage(await readSafariBridgeStatus()))
   }
 
   let payload: SafariLoginPayload
   try {
-    const raw = await fileManager.readAsString(path)
+    const raw = await fileManager.readAsString(loginPath)
     payload = JSON.parse(String(raw || "{}"))
   } catch (error) {
     throw new Error(`Safari 登录桥数据读取失败：${String((error as Error)?.message || error)}`)
@@ -153,7 +200,7 @@ export async function importSafariLogin(): Promise<AccountStatus> {
 
   const cookies = sanitizeCookies(payload.cookies || []).filter(cookie => AUTH_COOKIE_NAMES.has(cookie.name))
   if (!hasAuthCookies(cookies)) {
-    throw new Error("Safari 已回传数据，但没有检测到完整 E-Hentai 登录 Cookie。请在 Safari 确认账号已登录，并刷新一次 e-hentai.org 后重试。")
+    throw new Error("Safari 已回传数据，但没有检测到完整 E-Hentai 登录 Cookie。请在 Safari 保持登录状态并刷新页面后重试。")
   }
 
   if (payload.time) {
@@ -167,20 +214,26 @@ export async function importSafariLogin(): Promise<AccountStatus> {
   setActiveSite("e")
 
   try {
-    await fileManager.remove(path)
+    await fileManager.remove(loginPath)
   } catch {
-    // 登录 Cookie 已进入 Keychain，临时文件清理失败不影响会话。
+    // 登录 Cookie 已进入 Keychain，临时明文文件清理失败不影响会话。
   }
 
   return await refreshAccountStatus()
 }
 
-// 兼容现有首页的“网页登录”按钮：
-// 第一次点击打开真正 Safari；完成登录回到 Scripting 后，第二次点击导入桥接数据。
+// 兼容现有首页“网页登录”按钮：第一次打开真实 Safari；
+// 登录完成后第二次点击会尝试从 Safari Browser 共享目录导入。
 export async function signInWithWebView(): Promise<AccountStatus> {
   if (await safariBridgeExists()) return importSafariLogin()
+
+  const status = await readSafariBridgeStatus()
+  if (status && status.phase !== "running") {
+    throw new Error(bridgeMissingMessage(status))
+  }
+
   await openSafariLogin()
-  throw new Error("已打开 Safari。请完成 Cloudflare 验证和 E-Hentai 登录；看到“✓ Scripting 已捕获登录状态”后返回本脚本，再点一次“网页登录”完成导入。")
+  throw new Error("已打开 Safari。完成登录后请刷新一次已登录页面：如果页面右下角出现“✓ Scripting 已捕获登录状态”，返回本脚本再点一次“网页登录”。如果连“Scripting 登录桥已运行”都看不到，请检查 Safari 的 Scripting 扩展与网站访问权限。")
 }
 
 export function getActiveSite(): GallerySite {
