@@ -2,13 +2,13 @@
   "name": "ehentai-browser",
   "icon": "books.vertical.fill",
   "color": "#8B5CF6",
-  "version": "0.1.3",
+  "version": "0.1.5",
   "description": "Guest-mode E-Hentai gallery browser for Scripting.",
   "localizedNames": {
     "zh-Hans": "E-Hentai 浏览器"
   },
   "localizedDescriptions": {
-    "zh-Hans": "第一阶段：游客模式搜索、画廊详情、图片列表与阅读。"
+    "zh-Hans": "游客模式：搜索、画廊详情、图片列表与阅读。"
   },
   "runInApp": true
 }
