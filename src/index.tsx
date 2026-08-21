@@ -36,6 +36,10 @@ import {
 } from "./githubBridge"
 import {
   AccountStatus,
+  getAccountDiagnostic,
+  hasSafariLoginCapture,
+  importSafariLogin,
+  openSafariLogin,
   getAccountStatus,
   getBaseUrl,
   refreshAccountStatus,
@@ -275,19 +279,18 @@ function HomeView() {
     await runSearch()
   }
 
-  const runAccountAction = async (action: "login" | "refresh" | "logout" | "site-e" | "site-ex") => {
+  const runAccountAction = async (action: "open-login" | "import-login" | "refresh" | "logout" | "site-e" | "site-ex") => {
     if (accountBusy) return
     setAccountBusy(true)
     setError("")
     try {
-      if (action === "login") {
-        const status = await signInWithWebView()
+      if (action === "open-login") {
+        await openSafariLogin()
+        setError("已打开 Safari 登录页。请在 Safari 刷新已登录的 E-Hentai 页面，看到绿色捕获提示后返回并点“导入 Safari 登录”。")
+      } else if (action === "import-login") {
+        const status = await importSafariLogin()
         setAccount(status)
-        await reportWithoutBreakingUI({
-          stage: "account-login",
-          ok: status.loggedIn,
-          notes: `loggedIn=${status.loggedIn}; exAvailable=${String(status.exAvailable)}; igneous=${status.igneousPresent}`,
-        })
+        await reportWithoutBreakingUI({ stage: "account-safari-import", ok: status.loggedIn, notes: JSON.stringify(getAccountDiagnostic()) })
         await resetListAndSearch()
       } else if (action === "refresh") {
         const status = await refreshAccountStatus()
@@ -295,7 +298,7 @@ function HomeView() {
         await reportWithoutBreakingUI({
           stage: "account-status",
           ok: true,
-          notes: `loggedIn=${status.loggedIn}; exAvailable=${String(status.exAvailable)}; site=${status.site}`,
+          notes: `loggedIn=${status.loggedIn}; eHentaiReachable=${String(status.eHentaiReachable)}; exAvailable=${String(status.exAvailable)}; site=${status.site}`,
         })
       } else if (action === "logout") {
         signOut()
@@ -352,10 +355,17 @@ function HomeView() {
   useEffect(() => {
     void (async () => {
       try {
-        const status = await refreshAccountStatus()
+        let status = getAccountStatus()
+        if (!status.loggedIn && await hasSafariLoginCapture()) {
+          status = await importSafariLogin()
+          await reportWithoutBreakingUI({ stage: "account-auto-import", ok: status.loggedIn, notes: JSON.stringify(getAccountDiagnostic()) })
+        }
+        if (status.loggedIn) status = await refreshAccountStatus()
         setAccount(status)
-      } catch {
-        // 登录状态检测失败不影响游客浏览。
+      } catch (e) {
+        const value = e as { message?: unknown; stack?: unknown }
+        setBridgeStatus(`账号初始化/自动导入失败：${String(value?.message || e)}\n${String(value?.stack || "")}`)
+        await reportWithoutBreakingUI({ stage: "account-auto-import", ok: false, error: e, notes: JSON.stringify(getAccountDiagnostic()) })
       }
     })()
   }, [])
@@ -392,18 +402,26 @@ function HomeView() {
         </HStack>
         <Text font="caption" foregroundStyle="secondaryLabel">
           {account.loggedIn
-            ? `登录 Cookie 仅保存在本机 Keychain · ExHentai：${account.exAvailable === true ? "可用" : account.exAvailable === false ? "不可用" : "待检测"}`
-            : "网页登录只在 E-Hentai 官方页面输入账号，脚本不读取密码。"}
+            ? `登录 Cookie 仅保存在本机 Keychain · E-Hentai：${account.eHentaiReachable === true ? "可访问" : account.eHentaiReachable === false ? "不可访问" : "待检测"} · ExHentai：${account.exAvailable === true ? "可用" : account.exAvailable === false ? "不可用" : "待检测"}`
+            : "Safari 登录桥只导入已捕获的 Cookie，脚本不读取密码。"}
         </Text>
         <HStack spacing={8}>
           {!account.loggedIn
-            ? <Button
-                title={accountBusy ? "等待登录…" : "网页登录"}
-                systemImage="person.crop.circle.badge.plus"
-                buttonStyle="borderedProminent"
-                disabled={accountBusy}
-                action={() => { void runAccountAction("login") }}
-              />
+            ? <>
+                <Button
+                  title={accountBusy ? "正在打开…" : "用 Safari 登录"}
+                  systemImage="safari"
+                  buttonStyle="borderedProminent"
+                  disabled={accountBusy}
+                  action={() => { void runAccountAction("open-login") }}
+                />
+                <Button
+                  title="导入 Safari 登录"
+                  systemImage="square.and.arrow.down"
+                  disabled={accountBusy}
+                  action={() => { void runAccountAction("import-login") }}
+                />
+              </>
             : <>
                 <Button
                   title="刷新状态"
