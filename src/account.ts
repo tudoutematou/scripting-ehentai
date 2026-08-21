@@ -32,9 +32,22 @@ export type AccountStatus = {
   exAvailable: boolean | null
 }
 
+export type SafariBridgeRootProbe = {
+  root: "safariBrowserDirectory" | "appGroupDocumentsDirectory" | "documentsDirectory"
+  available: boolean
+  statusExists: boolean
+  loginExists: boolean
+}
+
+export type SafariBridgeProbe = {
+  roots: SafariBridgeRootProbe[]
+  loginCaptured: boolean
+}
+
 export type AccountDiagnostic = {
   stage: string
   searchedPaths: string[]
+  bridgeProbe: SafariBridgeProbe
   loginPath: string
   loginExists: boolean
   jsonParsed: boolean
@@ -51,6 +64,7 @@ export type AccountDiagnostic = {
 let latestDiagnostic: AccountDiagnostic = {
   stage: "startup",
   searchedPaths: [],
+  bridgeProbe: { roots: [], loginCaptured: false },
   loginPath: "",
   loginExists: false,
   jsonParsed: false,
@@ -65,7 +79,11 @@ let latestDiagnostic: AccountDiagnostic = {
 }
 
 export function getAccountDiagnostic(): AccountDiagnostic {
-  return { ...latestDiagnostic, searchedPaths: [...latestDiagnostic.searchedPaths] }
+  return {
+    ...latestDiagnostic,
+    searchedPaths: [...latestDiagnostic.searchedPaths],
+    bridgeProbe: { ...latestDiagnostic.bridgeProbe, roots: latestDiagnostic.bridgeProbe.roots.map(root => ({ ...root })) },
+  }
 }
 
 function updateDiagnostic(update: Partial<AccountDiagnostic>) {
@@ -183,15 +201,16 @@ function saveCookies(cookies: StoredCookie[]): void {
   if (!ok) throw new Error("登录 Cookie 写入 Keychain 失败。")
 }
 
-function safariBridgeRoots(): string[] {
-  const values = [
-    fileManager?.safariBrowserDirectory,
-    fileManager?.appGroupDocumentsDirectory,
-    fileManager?.documentsDirectory,
+function safariBridgeRootEntries() {
+  return [
+    { root: "safariBrowserDirectory" as const, path: String(fileManager?.safariBrowserDirectory || "").trim() },
+    { root: "appGroupDocumentsDirectory" as const, path: String(fileManager?.appGroupDocumentsDirectory || "").trim() },
+    { root: "documentsDirectory" as const, path: String(fileManager?.documentsDirectory || "").trim() },
   ]
-    .map((value: unknown) => String(value || "").trim())
-    .filter(Boolean)
-  const roots = [...new Set(values)]
+}
+
+function safariBridgeRoots(): string[] {
+  const roots = [...new Set(safariBridgeRootEntries().map(entry => entry.path).filter(Boolean))]
   if (!roots.length) throw new Error("当前 Scripting 运行时未提供 Safari Browser 共享目录。")
   return roots
 }
@@ -233,8 +252,25 @@ async function safariBridgeExists(): Promise<boolean> {
   return Boolean(await findSafariBridgeFile(SAFARI_LOGIN_FILE))
 }
 
+export async function probeSafariBridge(): Promise<SafariBridgeProbe> {
+  const roots: SafariBridgeRootProbe[] = []
+  for (const entry of safariBridgeRootEntries()) {
+    const available = Boolean(entry.path)
+    const directory = available ? `${entry.path}/${SAFARI_BRIDGE_DIRECTORY}` : ""
+    roots.push({
+      root: entry.root,
+      available,
+      statusExists: available && await fileExists(`${directory}/${SAFARI_STATUS_FILE}`),
+      loginExists: available && await fileExists(`${directory}/${SAFARI_LOGIN_FILE}`),
+    })
+  }
+  const probe = { roots, loginCaptured: roots.some(root => root.loginExists) }
+  updateDiagnostic({ stage: "safari-bridge-probe", bridgeProbe: probe, searchedPaths: roots.map(root => `${root.root}/login.json`), loginExists: probe.loginCaptured, notes: "Safari Bridge Probe complete; paths are root labels only." })
+  return probe
+}
+
 export async function hasSafariLoginCapture(): Promise<boolean> {
-  return safariBridgeExists()
+  return (await probeSafariBridge()).loginCaptured
 }
 
 function bridgeMissingMessage(status: SafariBridgeStatus | null): string {
@@ -264,7 +300,7 @@ export async function openSafariLogin(): Promise<void> {
 }
 
 export async function importSafariLogin(): Promise<AccountStatus> {
-  const searchedPaths = safariBridgePaths(SAFARI_LOGIN_FILE)
+  const searchedPaths = safariBridgeRootEntries().filter(entry => entry.path).map(entry => `${entry.root}/login.json`)
   updateDiagnostic({
     stage: "safari-import", searchedPaths, loginPath: "", loginExists: false,
     jsonParsed: false, hasMemberId: false, hasPassHash: false,
@@ -275,7 +311,7 @@ export async function importSafariLogin(): Promise<AccountStatus> {
     updateDiagnostic({ notes: "未在候选共享目录中找到 login.json" })
     throw new Error(bridgeMissingMessage(await readSafariBridgeStatus()))
   }
-  updateDiagnostic({ loginPath, loginExists: true })
+  updateDiagnostic({ loginPath: safariBridgeRootEntries().find(entry => loginPath.startsWith(entry.path))?.root || "unknown-root", loginExists: true })
 
   let payload: SafariLoginPayload
   try {
