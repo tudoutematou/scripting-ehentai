@@ -7,7 +7,7 @@ const REPO = { owner: "tudoutematou", repo: "scripting-ehentai", branch: "main" 
 const SOURCE_ROOT = "src"
 const DIAGNOSTIC_PATH = "runtime/latest.json"
 const DIAGNOSTIC_EVENTS_ROOT = "runtime/events"
-const SCRIPT_VERSION = "0.2.0"
+const SCRIPT_VERSION = "0.2.1"
 const SOURCE_EXTENSIONS = [".ts", ".tsx", ".json"]
 const EXCLUDED_SEGMENTS = new Set([".git", "node_modules", "tests", "runtime", "bridge"])
 
