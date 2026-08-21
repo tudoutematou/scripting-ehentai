@@ -1,12 +1,12 @@
 {
-  "time": "2026-08-21T10:34:15.945Z",
+  "time": "2026-08-21T11:11:59.487Z",
   "scriptVersion": "0.2.2",
-  "stage": "gallery-detail",
+  "stage": "gallery-home",
   "ok": true,
   "request": {
-    "url": "https://e-hentai.org/g/4135538/e4ab7f95ff/",
-    "status": 200,
-    "statusText": "no error"
+    "url": "https://e-hentai.org/",
+    "status": 0,
+    "statusText": ""
   },
-  "notes": "title=yes; tags=1; images=46; previewPages=3"
+  "notes": "items=25; firstTitleLen=134; firstCategoryLen=4; firstUploaderLen=8"
 }
