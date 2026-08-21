@@ -80,6 +80,15 @@ function HomeView() {
   const [syncing, setSyncing] = useState(false)
   const [bridgeStatus, setBridgeStatus] = useState("")
 
+  const reportWithoutBreakingUI = async (input: Parameters<typeof reportDiagnostic>[0]) => {
+    try {
+      await reportDiagnostic(input)
+    } catch (diagnosticError) {
+      const value = diagnosticError as { message?: unknown }
+      setBridgeStatus(`诊断上传失败（不影响浏览）：${String(value?.message || diagnosticError)}`)
+    }
+  }
+
   const runSearch = async (directUrl?: string) => {
     if (loading) return
     const stage = directUrl ? "gallery-page" : (keyword.trim() ? "gallery-search" : "gallery-home")
@@ -92,17 +101,28 @@ function HomeView() {
       setResultCount(page.resultCount)
       setPrevHref(page.prevHref)
       setNextHref(page.nextHref)
-      await reportDiagnostic({ stage, ok: true, request: { url: page.url || requestUrl }, notes: `items=${page.items.length}` })
+
+      // 诊断是旁路能力，绝不能因为 GitHub 写入失败把已经成功加载的画廊清空。
+      await reportWithoutBreakingUI({
+        stage,
+        ok: true,
+        request: { url: page.url || requestUrl },
+        notes: `items=${page.items.length}`,
+      })
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
       setError(message)
       setItems([])
-      try {
-        await reportDiagnostic({ stage, ok: false, error: e, request: { url: requestUrl } })
-      } catch (diagnosticError) {
-        const value = diagnosticError as { message?: unknown; stack?: unknown }
-        setError(`${message}\n诊断上传失败：${String(value?.message || diagnosticError)}\n${String(value?.stack || "")}`)
-      }
+      setResultCount("")
+      setPrevHref("")
+      setNextHref("")
+
+      await reportWithoutBreakingUI({
+        stage,
+        ok: false,
+        error: e,
+        request: { url: requestUrl },
+      })
     } finally {
       setLoading(false)
     }
@@ -121,7 +141,7 @@ function HomeView() {
         setError(`已拉取 ${files.length} 个业务源码文件。请重新运行脚本以加载变更。`)
       } else {
         await reportDiagnostic({ stage: "manual-diagnostic", ok: true, notes: "用户手动上传诊断" })
-        setError("诊断已上传到 runtime/latest.json。")
+        setError("诊断已上传。")
       }
     } catch (e) {
       const value = e as { message?: unknown; stack?: unknown }
@@ -182,7 +202,11 @@ function HomeView() {
         {syncing ? <ProgressView title="正在同步 GitHub…" progressViewStyle="circular" /> : null}
         {bridgeStatus ? <Text font="caption" foregroundStyle="secondaryLabel">{bridgeStatus}</Text> : null}
         <ErrorText message={error} />
-        {resultCount ? <Text font="caption" foregroundStyle="secondaryLabel">结果：{resultCount}</Text> : null}
+        {resultCount || items.length
+          ? <Text font="caption" foregroundStyle="secondaryLabel">
+              {[resultCount ? `结果：${resultCount}` : "", `本页已解析：${items.length} 条`].filter(Boolean).join(" · ")}
+            </Text>
+          : null}
       </VStack>
     </Section>
 

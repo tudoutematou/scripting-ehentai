@@ -6,7 +6,8 @@ const scriptDirectory: string = (Script as any).directory
 const REPO = { owner: "tudoutematou", repo: "scripting-ehentai", branch: "main" }
 const SOURCE_ROOT = "src"
 const DIAGNOSTIC_PATH = "runtime/latest.json"
-const SCRIPT_VERSION = "0.1.3"
+const DIAGNOSTIC_EVENTS_ROOT = "runtime/events"
+const SCRIPT_VERSION = "0.1.4"
 const SOURCE_EXTENSIONS = [".ts", ".tsx", ".json"]
 const EXCLUDED_SEGMENTS = new Set([".git", "node_modules", "tests", "runtime", "bridge"])
 
@@ -100,6 +101,24 @@ async function putTextContent(path: string, message: string, content: string) {
   }
 }
 
+function diagnosticEventPath(stage: string) {
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
+  const safeStage = String(stage || "unknown").replace(/[^a-z0-9_-]+/gi, "-")
+  const random = Math.random().toString(36).slice(2, 8)
+  return `${DIAGNOSTIC_EVENTS_ROOT}/${timestamp}-${safeStage}-${random}.json`
+}
+
+async function putDiagnosticEvent(path: string, message: string, content: string) {
+  // 事件文件路径唯一，不需要 SHA，因此不会与另一条诊断发生乐观锁冲突。
+  return GitHub.putContent({
+    owner: REPO.owner,
+    repo: REPO.repo,
+    path,
+    message,
+    content,
+  })
+}
+
 async function listRemoteSource(relativeDirectory = ""): Promise<string[]> {
   const path = joinPath(SOURCE_ROOT, relativeDirectory)
   let entries: Record<string, any> | Record<string, any>[]
@@ -154,11 +173,17 @@ export async function reportDiagnostic(input: DiagnosticInput) {
   }
   const content = JSON.stringify(payload, null, 2)
   const task = diagnosticQueue.then(async () => {
-    await putTextContent(
-      DIAGNOSTIC_PATH,
-      `runtime: ${payload.stage} ${payload.ok ? "ok" : "failed"}`,
-      content,
-    )
+    const message = `runtime: ${payload.stage} ${payload.ok ? "ok" : "failed"}`
+
+    // 先写唯一事件文件。这是联调的权威记录，不会出现 latest.json 的 SHA 冲突。
+    await putDiagnosticEvent(diagnosticEventPath(payload.stage), message, content)
+
+    // latest.json 仅作为便捷镜像。即使并发更新冲突，也绝不能影响业务功能。
+    try {
+      await putTextContent(DIAGNOSTIC_PATH, message, content)
+    } catch {
+      // 忽略 latest 镜像失败；ChatGPT 会从 runtime/events/ 读取最新事件。
+    }
   })
   diagnosticQueue = task.then(() => undefined, () => undefined)
   await task
