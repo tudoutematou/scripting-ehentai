@@ -1,0 +1,12 @@
+{
+  "time": "2026-08-21T08:39:32.780Z",
+  "scriptVersion": "0.1.8",
+  "stage": "gallery-search",
+  "ok": true,
+  "request": {
+    "url": "https://e-hentai.org/?f_search=%5Bredacted%5D",
+    "status": 0,
+    "statusText": ""
+  },
+  "notes": "items=0; firstTitleLen=0; firstCategoryLen=0; firstUploaderLen=0"
+}
