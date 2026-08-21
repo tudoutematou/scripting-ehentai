@@ -1,0 +1,12 @@
+{
+  "time": "2026-08-21T14:21:34.035Z",
+  "scriptVersion": "0.3.0",
+  "stage": "account-manual-cookie-login",
+  "ok": true,
+  "request": {
+    "url": "",
+    "status": 0,
+    "statusText": ""
+  },
+  "notes": "loggedIn=true; memberIdPresent=true; passHashPresent=true; igneousPresent=true"
+}
