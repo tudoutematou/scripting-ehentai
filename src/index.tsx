@@ -37,6 +37,7 @@ import {
 import {
   AccountStatus,
   getAccountDiagnostic,
+  probeSafariBridge,
   hasSafariLoginCapture,
   importSafariLogin,
   openSafariLogin,
@@ -319,7 +320,8 @@ function HomeView() {
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
       setError(message)
-      await reportWithoutBreakingUI({ stage: "account-action", ok: false, error: e })
+      const stage = action === "import-login" ? "account-safari-import" : "account-action"
+      await reportWithoutBreakingUI({ stage, ok: false, error: e, notes: action === "import-login" ? JSON.stringify(getAccountDiagnostic()) : undefined })
     } finally {
       setAccountBusy(false)
     }
@@ -356,7 +358,9 @@ function HomeView() {
     void (async () => {
       try {
         let status = getAccountStatus()
-        if (!status.loggedIn && await hasSafariLoginCapture()) {
+        const probe = await probeSafariBridge()
+        await reportWithoutBreakingUI({ stage: "account-safari-bridge-probe", ok: true, notes: JSON.stringify(getAccountDiagnostic()) })
+        if (!status.loggedIn && probe.loginCaptured) {
           status = await importSafariLogin()
           await reportWithoutBreakingUI({ stage: "account-auto-import", ok: status.loggedIn, notes: JSON.stringify(getAccountDiagnostic()) })
         }
