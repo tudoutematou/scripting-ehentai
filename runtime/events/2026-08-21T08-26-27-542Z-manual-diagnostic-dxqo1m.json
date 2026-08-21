@@ -1,0 +1,12 @@
+{
+  "time": "2026-08-21T08:26:27.541Z",
+  "scriptVersion": "0.1.6",
+  "stage": "manual-diagnostic",
+  "ok": true,
+  "request": {
+    "url": "",
+    "status": 0,
+    "statusText": ""
+  },
+  "notes": "用户手动上传诊断"
+}
