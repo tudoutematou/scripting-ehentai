@@ -1,0 +1,12 @@
+{
+  "time": "2026-08-21T11:39:33.575Z",
+  "scriptVersion": "0.2.2",
+  "stage": "gallery-home",
+  "ok": true,
+  "request": {
+    "url": "https://e-hentai.org/",
+    "status": 0,
+    "statusText": ""
+  },
+  "notes": "items=25; firstTitleLen=95; firstCategoryLen=4; firstUploaderLen=8"
+}
