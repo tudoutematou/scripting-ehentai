@@ -8,7 +8,6 @@ import {
   PREVIEW_EXTRACT_SCRIPT,
   PageExtractData,
   SearchExtractData,
-  SEARCH_EXTRACT_SCRIPT,
 } from "./extractors"
 import {
   GalleryPageLink,
@@ -17,6 +16,7 @@ import {
   normalizePageLinks,
   withPreviewPage,
 } from "./pure"
+import { parseSearchHtml } from "./searchHtml"
 
 export type { GalleryPageLink, GallerySummary }
 
@@ -36,6 +36,7 @@ export type ResolvedImagePage = PageExtractData & {
 
 const MAX_PREVIEW_LIST_PAGES = 50
 const IMAGE_UA = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
+const PAGE_UA = "Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1"
 
 function scraperError(result: any): string {
   if (result?.error?.message) return String(result.error.message)
@@ -45,23 +46,55 @@ function scraperError(result: any): string {
 
 function requirePro(): void {
   if (!Script.hasFullAccess()) {
-    throw new Error("第一阶段使用 Scripting 官方 WebScraper，需要 Scripting PRO。")
+    throw new Error("详情与图片页当前仍使用 Scripting WebScraper，需要 Scripting PRO。")
   }
 }
 
+function httpError(message: string, response: any, url: string): Error {
+  const error = new Error(message) as Error & {
+    status?: number
+    statusText?: string
+    url?: string
+  }
+  error.status = Number(response?.status || 0)
+  error.statusText = String(response?.statusText || "")
+  error.url = String(response?.url || url)
+  return error
+}
+
 export async function searchGalleries(keyword: string, directUrl?: string): Promise<SearchPage> {
-  requirePro()
   const url = directUrl || buildSearchUrl(keyword)
-  const result = await WebScraper.scrape<SearchExtractData>({
-    url,
-    wait: "domComplete",
-    extractScript: SEARCH_EXTRACT_SCRIPT,
+  const response = await (globalThis as any).fetch(url, {
+    method: "GET",
+    headers: {
+      "User-Agent": PAGE_UA,
+      "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+      "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.7",
+      "Cache-Control": "no-cache",
+    },
+    timeout: 25,
+    debugLabel: "E-Hentai Gallery Search",
   })
-  if (!result.ok || !result.data) throw new Error(scraperError(result))
-  if (result.data.error) throw new Error(result.data.error)
+
+  const finalUrl = String(response?.url || url)
+  const status = Number(response?.status || 0)
+  const statusText = String(response?.statusText || "")
+  const html = await response.text()
+
+  if (!response.ok) {
+    throw httpError(`E-Hentai 请求失败：HTTP ${status}${statusText ? ` ${statusText}` : ""}`, response, finalUrl)
+  }
+
+  const page = parseSearchHtml(html, finalUrl)
+  if (page.error) {
+    const error = httpError(page.error, response, finalUrl)
+    ;(error as any).responseLength = html.length
+    throw error
+  }
+
   return {
-    ...result.data,
-    url: result.url || url,
+    ...page,
+    url: finalUrl,
   }
 }
 
@@ -124,7 +157,7 @@ export async function fetchPageImage(imageUrl: string, referer: string): Promise
     "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
     "Referer": referer,
   }
-  const response = await (globalThis as any).fetch(imageUrl, { headers })
+  const response = await (globalThis as any).fetch(imageUrl, { headers, timeout: 30, debugLabel: "E-Hentai Image" })
   if (!response.ok) {
     throw new Error(`图片请求失败：HTTP ${response.status}`)
   }
