@@ -28,7 +28,56 @@ export type AccountStatus = {
   passHashPresent: boolean
   igneousPresent: boolean
   site: GallerySite
+  eHentaiReachable: boolean | null
   exAvailable: boolean | null
+}
+
+export type AccountDiagnostic = {
+  stage: string
+  searchedPaths: string[]
+  loginPath: string
+  loginExists: boolean
+  jsonParsed: boolean
+  hasMemberId: boolean
+  hasPassHash: boolean
+  keychainSet: boolean
+  keychainRoundTrip: boolean
+  loggedIn: boolean
+  eHentaiReachable: boolean | null
+  exAvailable: boolean | null
+  notes: string
+}
+
+let latestDiagnostic: AccountDiagnostic = {
+  stage: "startup",
+  searchedPaths: [],
+  loginPath: "",
+  loginExists: false,
+  jsonParsed: false,
+  hasMemberId: false,
+  hasPassHash: false,
+  keychainSet: false,
+  keychainRoundTrip: false,
+  loggedIn: false,
+  eHentaiReachable: null,
+  exAvailable: null,
+  notes: "",
+}
+
+export function getAccountDiagnostic(): AccountDiagnostic {
+  return { ...latestDiagnostic, searchedPaths: [...latestDiagnostic.searchedPaths] }
+}
+
+function updateDiagnostic(update: Partial<AccountDiagnostic>) {
+  latestDiagnostic = { ...latestDiagnostic, ...update }
+}
+
+function keychainRoundTrip(): boolean {
+  return hasAuthCookies(loadCookies())
+}
+
+function diagnosticNotes(status: AccountStatus) {
+  return `stage=${latestDiagnostic.stage}; searched=${latestDiagnostic.searchedPaths.join(" | ")}; loginPath=${latestDiagnostic.loginPath || "none"}; loginExists=${latestDiagnostic.loginExists}; jsonParsed=${latestDiagnostic.jsonParsed}; hasMemberId=${latestDiagnostic.hasMemberId}; hasPassHash=${latestDiagnostic.hasPassHash}; keychainSet=${latestDiagnostic.keychainSet}; keychainRoundTrip=${latestDiagnostic.keychainRoundTrip}; loggedIn=${status.loggedIn}; eHentaiReachable=${String(status.eHentaiReachable)}; exAvailable=${String(status.exAvailable)}; ${latestDiagnostic.notes}`
 }
 
 type SafariLoginPayload = {
@@ -184,6 +233,10 @@ async function safariBridgeExists(): Promise<boolean> {
   return Boolean(await findSafariBridgeFile(SAFARI_LOGIN_FILE))
 }
 
+export async function hasSafariLoginCapture(): Promise<boolean> {
+  return safariBridgeExists()
+}
+
 function bridgeMissingMessage(status: SafariBridgeStatus | null): string {
   if (!status) {
     return "Safari 登录桥没有运行。请在 Safari 地址栏点扩展按钮，确认 Scripting 已启用并允许访问 forums.e-hentai.org / e-hentai.org，然后刷新已登录页面。"
@@ -211,44 +264,64 @@ export async function openSafariLogin(): Promise<void> {
 }
 
 export async function importSafariLogin(): Promise<AccountStatus> {
+  const searchedPaths = safariBridgePaths(SAFARI_LOGIN_FILE)
+  updateDiagnostic({
+    stage: "safari-import", searchedPaths, loginPath: "", loginExists: false,
+    jsonParsed: false, hasMemberId: false, hasPassHash: false,
+    keychainSet: false, keychainRoundTrip: false, notes: "开始导入 Safari 登录桥数据（不记录 Cookie 值）",
+  })
   const loginPath = await findSafariBridgeFile(SAFARI_LOGIN_FILE)
   if (!loginPath) {
+    updateDiagnostic({ notes: "未在候选共享目录中找到 login.json" })
     throw new Error(bridgeMissingMessage(await readSafariBridgeStatus()))
   }
+  updateDiagnostic({ loginPath, loginExists: true })
 
   let payload: SafariLoginPayload
   try {
     const raw = await fileManager.readAsString(loginPath)
     payload = JSON.parse(String(raw || "{}"))
+    updateDiagnostic({ jsonParsed: true })
   } catch (error) {
+    updateDiagnostic({ notes: `login.json 读取或解析失败：${String((error as Error)?.message || error)}` })
     throw new Error(`Safari 登录桥数据读取失败：${String((error as Error)?.message || error)}`)
   }
 
   const cookies = sanitizeCookies(payload.cookies || []).filter(cookie => AUTH_COOKIE_NAMES.has(cookie.name))
+  const names = new Set(cookies.map(cookie => cookie.name))
+  updateDiagnostic({ hasMemberId: names.has("ipb_member_id"), hasPassHash: names.has("ipb_pass_hash") })
   if (!hasAuthCookies(cookies)) {
+    updateDiagnostic({ notes: `JSON 已解析，但核心 Cookie 不完整；names=${[...names].join(",") || "none"}` })
     throw new Error("Safari 已回传数据，但没有检测到完整 E-Hentai 登录 Cookie。请在 Safari 保持登录状态并刷新 e-hentai.org 后重试。")
   }
 
   if (payload.time) {
     const age = Date.now() - Date.parse(payload.time)
-    if (Number.isFinite(age) && age > 2 * 60 * 60 * 1000) {
-      throw new Error("Safari 登录桥数据已超过 2 小时，请重新在 Safari 打开 E-Hentai 页面后再导入。")
-    }
+    if (Number.isFinite(age) && age > 2 * 60 * 60 * 1000) throw new Error("Safari 登录桥数据已超过 2 小时，请重新在 Safari 打开 E-Hentai 页面后再导入。")
   }
 
-  saveCookies(cookies)
+  try {
+    saveCookies(cookies)
+    updateDiagnostic({ keychainSet: true })
+  } catch (error) {
+    updateDiagnostic({ notes: `Keychain.set 失败：${String((error as Error)?.message || error)}` })
+    throw error
+  }
+  const roundTrip = keychainRoundTrip()
+  updateDiagnostic({ keychainRoundTrip: roundTrip })
+  if (!roundTrip) {
+    updateDiagnostic({ notes: "Keychain.set 返回成功，但立即重新读取未发现完整核心 Cookie；保留 login.json 供重试。" })
+    throw new Error("Keychain 写入后校验失败；已保留 Safari login.json，请重试。")
+  }
   setActiveSite("e")
 
-  // Cookie 已进入 Keychain，清理 Safari 侧所有可能位置的临时明文登录文件。
+  // 仅在 Keychain 写入并立即回读确认成功后删除临时明文文件。
   for (const path of safariBridgePaths(SAFARI_LOGIN_FILE)) {
-    try {
-      if (await fileExists(path)) await fileManager.remove(path)
-    } catch {
-      // 清理失败不影响已经保存到 Keychain 的登录状态。
-    }
+    try { if (await fileExists(path)) await fileManager.remove(path) } catch { /* 已持久化，不影响登录 */ }
   }
-
-  return await refreshAccountStatus()
+  const status = getAccountStatus()
+  updateDiagnostic({ stage: "safari-import-complete", loggedIn: status.loggedIn, eHentaiReachable: status.eHentaiReachable, exAvailable: status.exAvailable, notes: `导入成功；Cookie names=${[...names].join(",")}` })
+  return status
 }
 
 // 兼容现有首页“网页登录”按钮：第一次打开真实 Safari；
@@ -334,6 +407,7 @@ export function getAccountStatus(): AccountStatus {
     passHashPresent,
     igneousPresent: names.has("igneous"),
     site: getActiveSite(),
+    eHentaiReachable: null,
     exAvailable: null,
   }
 }
@@ -365,17 +439,19 @@ async function validateSite(site: GallerySite): Promise<boolean> {
 export async function refreshAccountStatus(): Promise<AccountStatus> {
   const base = getAccountStatus()
   if (!base.loggedIn) return base
-  const eValid = await validateSite("e")
-  if (!eValid) return { ...base, loggedIn: false, exAvailable: false }
-
+  const eHentaiReachable = await validateSite("e")
   const exAvailable = await validateSite("ex")
   if (!exAvailable && base.site === "ex") setActiveSite("e")
-  return {
+  const status = {
     ...base,
+    // 本地 Keychain 中的两个核心 Cookie 是唯一的登录判据；网络探测绝不覆盖它。
     loggedIn: true,
     site: exAvailable ? getActiveSite() : "e",
+    eHentaiReachable,
     exAvailable,
   }
+  updateDiagnostic({ stage: "network-validation", loggedIn: true, eHentaiReachable, exAvailable, notes: diagnosticNotes(status) })
+  return status
 }
 
 export function signOut(): void {
