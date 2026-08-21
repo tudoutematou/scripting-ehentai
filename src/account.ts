@@ -38,6 +38,10 @@ type SafariLoginPayload = {
   cookies?: Array<Record<string, unknown>>
 }
 
+function sleep(ms: number) {
+  return new Promise<void>(resolve => setTimeout(resolve, ms))
+}
+
 function keychain(): any {
   const api = (globalThis as any).Keychain
   if (!api) throw new Error("当前 Scripting 运行时未提供 Keychain API。")
@@ -125,6 +129,14 @@ function safariBridgePath(): string {
   return `${root}/${SAFARI_BRIDGE_DIRECTORY}/${SAFARI_BRIDGE_FILE}`
 }
 
+async function safariBridgeExists(): Promise<boolean> {
+  try {
+    return Boolean(await fileManager.exists(safariBridgePath()))
+  } catch {
+    return false
+  }
+}
+
 export async function openSafariLogin(): Promise<void> {
   const opened = await Safari.openURL(LOGIN_URL)
   if (!opened) throw new Error("无法打开系统 Safari 登录页面。")
@@ -132,14 +144,8 @@ export async function openSafariLogin(): Promise<void> {
 
 export async function importSafariLogin(): Promise<AccountStatus> {
   const path = safariBridgePath()
-  let exists = false
-  try {
-    exists = Boolean(await fileManager.exists(path))
-  } catch {
-    exists = false
-  }
-  if (!exists) {
-    throw new Error("尚未收到 Safari 登录状态。请确认 Safari 中已启用 Scripting 扩展并允许 E-Hentai 站点访问，然后在 Safari 打开 E-Hentai 登录页；登录成功后返回这里再次点击“导入 Safari 登录”。")
+  if (!await safariBridgeExists()) {
+    throw new Error("尚未收到 Safari 登录状态。请确认 Safari 中已启用 Scripting 扩展并允许 E-Hentai 站点访问，然后在 Safari 完成登录并刷新一次页面。")
   }
 
   let payload: SafariLoginPayload
@@ -165,14 +171,26 @@ export async function importSafariLogin(): Promise<AccountStatus> {
   saveCookies(cookies)
   setActiveSite("e")
 
-  // 登录 Cookie 进入 Keychain 后立刻删除临时桥接文件，避免长期明文留存。
   try {
     await fileManager.remove(path)
   } catch {
-    // 清理失败不影响已经保存到 Keychain 的登录状态。
+    // 登录 Cookie 已进入 Keychain，临时文件清理失败不影响会话。
   }
 
   return await refreshAccountStatus()
+}
+
+// 兼容现有首页调用名称：0.2.1 起不再使用内嵌 WebView，改为真正的系统 Safari。
+// 首次点击打开 Safari；用户完成 CF/登录并返回 Scripting 后，本 Promise 会检测桥接文件并自动导入。
+export async function signInWithWebView(): Promise<AccountStatus> {
+  if (await safariBridgeExists()) return importSafariLogin()
+
+  await openSafariLogin()
+  for (let i = 0; i < 600; i += 1) {
+    await sleep(1000)
+    if (await safariBridgeExists()) return importSafariLogin()
+  }
+  throw new Error("等待 Safari 登录状态超时。请回到 Safari 确认已登录并允许 Scripting 扩展访问 E-Hentai 页面，然后再次点击网页登录。")
 }
 
 export function getActiveSite(): GallerySite {
@@ -222,7 +240,6 @@ export function getCookieHeader(url: string): string {
     pairs.set(cookie.name, cookie.value)
   }
 
-  // Ehviewer 会把论坛登录得到的核心 Cookie 复制到 E / Ex 域；这里构造等效 Cookie Header。
   if (target.hostname === "e-hentai.org" || target.hostname === "exhentai.org") {
     for (const name of AUTH_COOKIE_NAMES) {
       const cookie = currentAuthCookieByName(cookies, name)
