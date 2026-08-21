@@ -15,6 +15,7 @@ import {
 } from "./pure"
 import { parseSearchHtml } from "./searchHtml"
 import { parseDetailHtml, parsePreviewPageHtml } from "./detailHtml"
+import { reportDiagnostic } from "./githubBridge"
 
 export type { GalleryPageLink, GallerySummary }
 
@@ -66,6 +67,14 @@ function stageError(stage: string, error: unknown): Error {
   wrapped.name = String(value?.name || "Error")
   if (value?.stack) wrapped.stack = `${wrapped.name}: ${wrapped.message}\nCaused by:\n${String(value.stack)}`
   return wrapped
+}
+
+async function reportSafely(input: Parameters<typeof reportDiagnostic>[0]) {
+  try {
+    await reportDiagnostic(input)
+  } catch {
+    // 诊断通道失败不能覆盖真实业务错误。
+  }
 }
 
 async function fetchHtml(url: string, stagePrefix: string): Promise<{ html: string; finalUrl: string; response: Response }> {
@@ -127,36 +136,59 @@ async function fetchPreviewPage(url: string, previewPageIndex: number): Promise<
 }
 
 export async function loadGalleryDetail(url: string): Promise<GalleryDetail> {
-  const { html, finalUrl, response } = await fetchHtml(url, "detail")
-
-  let parsed: ReturnType<typeof parseDetailHtml>
   try {
-    parsed = parseDetailHtml(html, finalUrl)
+    const { html, finalUrl, response } = await fetchHtml(url, "detail")
+
+    let parsed: ReturnType<typeof parseDetailHtml>
+    try {
+      parsed = parseDetailHtml(html, finalUrl)
+    } catch (error) {
+      throw stageError("detail.parseDetailHtml", error)
+    }
+
+    if (parsed.error) {
+      const error = httpError(parsed.error, response, finalUrl)
+      ;(error as any).responseLength = html.length
+      throw error
+    }
+
+    const firstLinks = normalizePageLinks(parsed.pageLinks || [], 0)
+    const allLinks: GalleryPageLink[] = [...firstLinks]
+    const previewPages = Math.max(1, Number(parsed.previewPages || 1))
+    const pagesToLoad = Math.min(previewPages, MAX_PREVIEW_LIST_PAGES)
+
+    for (let p = 1; p < pagesToLoad; p += 1) {
+      const links = await fetchPreviewPage(withPreviewPage(finalUrl, p), p)
+      allLinks.push(...links)
+    }
+
+    const detail: GalleryDetail = {
+      ...parsed,
+      pageLinks: dedupeAndSortPageLinks(allLinks),
+      sourceUrl: finalUrl,
+      truncatedPreviewPages: previewPages > MAX_PREVIEW_LIST_PAGES,
+    }
+
+    await reportSafely({
+      stage: "gallery-detail",
+      ok: true,
+      request: { url: finalUrl, status: Number(response?.status || 0), statusText: String(response?.statusText || "") },
+      notes: `title=${detail.title ? "yes" : "no"}; tags=${detail.tags.length}; images=${detail.pageLinks.length}; previewPages=${previewPages}`,
+    })
+    return detail
   } catch (error) {
-    throw stageError("detail.parseDetailHtml", error)
-  }
-
-  if (parsed.error) {
-    const error = httpError(parsed.error, response, finalUrl)
-    ;(error as any).responseLength = html.length
+    const value = error as { status?: number; statusText?: string; url?: string }
+    await reportSafely({
+      stage: "gallery-detail",
+      ok: false,
+      error,
+      request: {
+        url: String(value?.url || url),
+        status: Number(value?.status || 0),
+        statusText: String(value?.statusText || ""),
+      },
+    })
     throw error
-  }
-
-  const firstLinks = normalizePageLinks(parsed.pageLinks || [], 0)
-  const allLinks: GalleryPageLink[] = [...firstLinks]
-  const previewPages = Math.max(1, Number(parsed.previewPages || 1))
-  const pagesToLoad = Math.min(previewPages, MAX_PREVIEW_LIST_PAGES)
-
-  for (let p = 1; p < pagesToLoad; p += 1) {
-    const links = await fetchPreviewPage(withPreviewPage(finalUrl, p), p)
-    allLinks.push(...links)
-  }
-
-  return {
-    ...parsed,
-    pageLinks: dedupeAndSortPageLinks(allLinks),
-    sourceUrl: finalUrl,
-    truncatedPreviewPages: previewPages > MAX_PREVIEW_LIST_PAGES,
   }
 }
 
