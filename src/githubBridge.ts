@@ -7,7 +7,7 @@ const REPO = { owner: "tudoutematou", repo: "scripting-ehentai", branch: "main" 
 const SOURCE_ROOT = "src"
 const DIAGNOSTIC_PATH = "runtime/latest.json"
 const DIAGNOSTIC_EVENTS_ROOT = "runtime/events"
-const SCRIPT_VERSION = "0.1.6"
+const SCRIPT_VERSION = "0.1.7"
 const SOURCE_EXTENSIONS = [".ts", ".tsx", ".json"]
 const EXCLUDED_SEGMENTS = new Set([".git", "node_modules", "tests", "runtime", "bridge"])
 
@@ -140,6 +140,38 @@ async function listRemoteSource(relativeDirectory = ""): Promise<string[]> {
   return files
 }
 
+function compareVersion(a: string, b: string): number {
+  const pa = String(a || "0").split(".").map(value => Number(value.replace(/\D.*$/, "")) || 0)
+  const pb = String(b || "0").split(".").map(value => Number(value.replace(/\D.*$/, "")) || 0)
+  const length = Math.max(pa.length, pb.length)
+  for (let i = 0; i < length; i += 1) {
+    const av = pa[i] || 0
+    const bv = pb[i] || 0
+    if (av > bv) return 1
+    if (av < bv) return -1
+  }
+  return 0
+}
+
+async function localScriptVersion(): Promise<string> {
+  try {
+    const raw = await fileManager.readAsString(joinPath(scriptDirectory, "script.json"))
+    return String(JSON.parse(raw)?.version || "0.0.0")
+  } catch {
+    return "0.0.0"
+  }
+}
+
+async function remoteScriptVersion(): Promise<string> {
+  try {
+    const remote = await GitHub.getTextContent({ ...REPO, path: `${SOURCE_ROOT}/script.json`, ref: REPO.branch })
+    return String(JSON.parse(remote.text)?.version || "0.0.0")
+  } catch (error) {
+    if (/404|not found/i.test(String((error as Error)?.message || error))) return "0.0.0"
+    throw error
+  }
+}
+
 export async function ensureGitHubPermissions() {
   if (!GitHub.isAvailable()) {
     throw new Error("GitHub 不可用：请确认 Scripting PRO 已启用且已在设置中配置 GitHub Token。")
@@ -189,6 +221,16 @@ export async function reportDiagnostic(input: DiagnosticInput) {
 
 export async function pushSourceToGitHub() {
   await ensureGitHubPermissions()
+
+  // 防止旧本地副本把 ChatGPT 刚提交到 main 的新版本重新覆盖掉。
+  const [localVersion, remoteVersion] = await Promise.all([
+    localScriptVersion(),
+    remoteScriptVersion(),
+  ])
+  if (compareVersion(localVersion, remoteVersion) < 0) {
+    throw new Error(`拒绝推送：本地版本 ${localVersion} 低于 GitHub ${remoteVersion}。请先“从 GitHub 拉取源码”，重新运行后再推送。`)
+  }
+
   const files = await listLocalSource()
   for (const relativePath of files) {
     const content = await fileManager.readAsString(joinPath(scriptDirectory, relativePath))
