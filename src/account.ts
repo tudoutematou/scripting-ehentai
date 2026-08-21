@@ -1,5 +1,3 @@
-import { Safari } from "scripting"
-
 const LOGIN_URL = "https://forums.e-hentai.org/index.php?act=Login"
 const E_BASE = "https://e-hentai.org/"
 const EX_BASE = "https://exhentai.org/"
@@ -36,10 +34,6 @@ type SafariLoginPayload = {
   time?: string
   source?: string
   cookies?: Array<Record<string, unknown>>
-}
-
-function sleep(ms: number) {
-  return new Promise<void>(resolve => setTimeout(resolve, ms))
 }
 
 function keychain(): any {
@@ -138,14 +132,15 @@ async function safariBridgeExists(): Promise<boolean> {
 }
 
 export async function openSafariLogin(): Promise<void> {
+  // Scripting 官方示例中 Safari 是全局命名空间，不能从 "scripting" 模块导入。
   const opened = await Safari.openURL(LOGIN_URL)
-  if (!opened) throw new Error("无法打开系统 Safari 登录页面。")
+  if (!opened) throw new Error("无法打开系统浏览器。请手动用 Safari 打开 E-Hentai 登录页。")
 }
 
 export async function importSafariLogin(): Promise<AccountStatus> {
   const path = safariBridgePath()
   if (!await safariBridgeExists()) {
-    throw new Error("尚未收到 Safari 登录状态。请确认 Safari 中已启用 Scripting 扩展并允许 E-Hentai 站点访问，然后在 Safari 完成登录并刷新一次页面。")
+    throw new Error("尚未收到 Safari 登录状态。请确认 Safari 中已启用 Scripting 扩展并允许 E-Hentai 站点访问；完成登录后刷新一次页面。")
   }
 
   let payload: SafariLoginPayload
@@ -180,17 +175,12 @@ export async function importSafariLogin(): Promise<AccountStatus> {
   return await refreshAccountStatus()
 }
 
-// 兼容现有首页调用名称：0.2.1 起不再使用内嵌 WebView，改为真正的系统 Safari。
-// 首次点击打开 Safari；用户完成 CF/登录并返回 Scripting 后，本 Promise 会检测桥接文件并自动导入。
+// 兼容现有首页的“网页登录”按钮：
+// 第一次点击打开真正 Safari；完成登录回到 Scripting 后，第二次点击导入桥接数据。
 export async function signInWithWebView(): Promise<AccountStatus> {
   if (await safariBridgeExists()) return importSafariLogin()
-
   await openSafariLogin()
-  for (let i = 0; i < 600; i += 1) {
-    await sleep(1000)
-    if (await safariBridgeExists()) return importSafariLogin()
-  }
-  throw new Error("等待 Safari 登录状态超时。请回到 Safari 确认已登录并允许 Scripting 扩展访问 E-Hentai 页面，然后再次点击网页登录。")
+  throw new Error("已打开 Safari。请完成 Cloudflare 验证和 E-Hentai 登录；看到“✓ Scripting 已捕获登录状态”后返回本脚本，再点一次“网页登录”完成导入。")
 }
 
 export function getActiveSite(): GallerySite {
