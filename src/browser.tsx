@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name E-Hentai Login Bridge
 // @namespace scripting-ehentai
-// @version 0.2.4
+// @version 0.2.5
 // @description Capture E-Hentai login cookies from real Safari for the Scripting app.
 // @match https://forums.e-hentai.org/*
 // @match https://e-hentai.org/*
@@ -9,6 +9,9 @@
 // @grant GM.cookie
 // @grant GM.log
 // @grant Scripting.FileManager
+// @connect forums.e-hentai.org
+// @connect e-hentai.org
+// @connect exhentai.org
 // @connect https://forums.e-hentai.org/*
 // @connect https://e-hentai.org/*
 // @connect https://exhentai.org/*
@@ -17,23 +20,30 @@
 // @noframes
 // ==/UserScript==
 
-const AUTH_COOKIE_NAMES = new Set(["ipb_member_id", "ipb_pass_hash", "igneous"])
+const REQUIRED_COOKIE_NAMES = new Set(["ipb_member_id", "ipb_pass_hash"])
+const CAPTURE_COOKIE_NAMES = new Set([
+  "ipb_member_id",
+  "ipb_pass_hash",
+  "ipb_session_id",
+  "igneous",
+])
 const TARGETS = [
   "https://forums.e-hentai.org/",
   "https://e-hentai.org/",
   "https://exhentai.org/",
 ]
+const E_BASE = "https://e-hentai.org/"
 const BRIDGE_DIRECTORY = "ehentai-login-bridge"
 const LOGIN_FILE = "login.json"
 const STATUS_FILE = "status.json"
 
-function normalizeCookie(raw: any) {
+function normalizeCookie(raw: any, fallbackDomain = location.hostname) {
   return {
     name: String(raw?.name || ""),
     value: String(raw?.value || ""),
-    domain: String(raw?.domain || ""),
+    domain: String(raw?.domain || fallbackDomain || ""),
     path: String(raw?.path || "/"),
-    secure: Boolean(raw?.secure ?? raw?.isSecure),
+    secure: Boolean(raw?.secure ?? raw?.isSecure ?? location.protocol === "https:"),
     httpOnly: Boolean(raw?.httpOnly ?? raw?.isHTTPOnly),
     session: Boolean(raw?.session ?? raw?.isSessionOnly),
     expirationDate: raw?.expirationDate ?? raw?.expiresDate ?? null,
@@ -132,7 +142,7 @@ function setBadge(text: string, background: string) {
       right: "12px",
       bottom: "12px",
       zIndex: "2147483647",
-      maxWidth: "min(560px, calc(100vw - 24px))",
+      maxWidth: "min(620px, calc(100vw - 24px))",
       padding: "8px 12px",
       borderRadius: "10px",
       color: "white",
@@ -150,30 +160,90 @@ function setBadge(text: string, background: string) {
   badge.style.background = background
 }
 
+function targetDomain(url: string): string {
+  try {
+    return new URL(url).hostname
+  } catch {
+    return location.hostname
+  }
+}
+
+function parseDocumentCookies() {
+  return String(document.cookie || "")
+    .split(";")
+    .map(part => part.trim())
+    .filter(Boolean)
+    .map(part => {
+      const index = part.indexOf("=")
+      if (index <= 0) return null
+      return normalizeCookie({
+        name: part.slice(0, index).trim(),
+        value: part.slice(index + 1),
+        domain: location.hostname,
+        path: "/",
+      })
+    })
+    .filter(Boolean) as ReturnType<typeof normalizeCookie>[]
+}
+
 async function collectAuthCookies() {
-  const map = new Map<string, ReturnType<typeof normalizeCookie>>()
-  const urls = [location.href, ...TARGETS]
-  for (const url of urls) {
-    try {
-      const cookies = await GM.cookie.list({ url })
-      for (const raw of cookies || []) {
-        const cookie = normalizeCookie(raw)
-        if (!AUTH_COOKIE_NAMES.has(cookie.name) || !cookie.value) continue
-        map.set(`${cookie.name}|${cookie.domain}|${cookie.path}`, cookie)
-      }
-    } catch (error) {
-      GM.log("cookie read failed", url, error)
+  const captured = new Map<string, ReturnType<typeof normalizeCookie>>()
+  const observedNames = new Set<string>()
+  const readErrors: string[] = []
+
+  const addCookies = (cookies: any[], fallbackDomain = location.hostname) => {
+    for (const raw of cookies || []) {
+      const cookie = normalizeCookie(raw, fallbackDomain)
+      if (!cookie.name) continue
+      observedNames.add(cookie.name)
+      if (!CAPTURE_COOKIE_NAMES.has(cookie.name) || !cookie.value) continue
+      captured.set(`${cookie.name}|${cookie.domain}|${cookie.path}`, cookie)
     }
   }
-  return [...map.values()]
+
+  // 非 HttpOnly Cookie 可以从 document.cookie 直接读取；这也是 Safari 扩展
+  // Cookie API 行为异常时的第一层兜底。
+  addCookies(parseDocumentCookies(), location.hostname)
+
+  const urls = [...new Set([location.href, ...TARGETS])]
+  for (const url of urls) {
+    const domain = targetDomain(url)
+    try {
+      addCookies(await GM.cookie.list({ url }), domain)
+    } catch (error) {
+      readErrors.push(`${domain}:all:${errorSummary(error)}`)
+    }
+
+    // 某些 Cookie API 对“列出全部”与“按名称查询”的结果不完全一致；
+    // 对核心 Cookie 再逐个查询一次。
+    for (const name of CAPTURE_COOKIE_NAMES) {
+      try {
+        addCookies(await GM.cookie.list({ url, name }), domain)
+      } catch (error) {
+        readErrors.push(`${domain}:${name}:${errorSummary(error)}`)
+      }
+    }
+  }
+
+  return {
+    cookies: [...captured.values()],
+    observedNames: [...observedNames].sort(),
+    readErrors,
+  }
 }
 
 function loginState(cookies: Array<{ name: string }>) {
   const names = new Set(cookies.map(cookie => cookie.name))
   return {
     names,
-    complete: names.has("ipb_member_id") && names.has("ipb_pass_hash"),
+    complete: [...REQUIRED_COOKIE_NAMES].every(name => names.has(name)),
   }
+}
+
+function forumPageShowsLoggedIn(): boolean {
+  if (location.hostname !== "forums.e-hentai.org") return false
+  const text = String(document.body?.innerText || document.body?.textContent || "")
+  return /Logged\s+in\s+as\s*:/i.test(text) || /\bLog\s*Out\b/i.test(text)
 }
 
 async function writeLogin(cookies: any[]) {
@@ -185,53 +255,81 @@ async function writeLogin(cookies: any[]) {
 }
 
 async function runBridge() {
-  setBadge("Scripting 登录桥已运行 · 0.2.4", "rgba(35, 105, 210, 0.92)")
+  setBadge("Scripting 登录桥已运行 · 0.2.5", "rgba(35, 105, 210, 0.92)")
   try {
     const roots = await writableBridgeRoots()
-    await writeStatus({ phase: "running", version: "0.2.4", writableRootCount: roots.length })
+    await writeStatus({ phase: "running", version: "0.2.5", writableRootCount: roots.length })
 
-    const cookies = await collectAuthCookies()
-    const state = loginState(cookies)
+    const captured = await collectAuthCookies()
+    const state = loginState(captured.cookies)
     const cookieNames = [...state.names]
 
-    if (!state.complete) {
+    if (!state.complete && forumPageShowsLoggedIn()) {
       await writeStatus({
-        phase: "waiting-cookie",
-        version: "0.2.4",
+        phase: "propagating-to-gallery",
+        version: "0.2.5",
         cookieNames,
+        observedCookieNames: captured.observedNames,
+        cookieReadErrorCount: captured.readErrors.length,
         hasMemberId: state.names.has("ipb_member_id"),
         hasPassHash: state.names.has("ipb_pass_hash"),
         hasIgneous: state.names.has("igneous"),
         writableRootCount: roots.length,
       })
-      setBadge("Scripting 登录桥已运行 · 等待登录 Cookie", "rgba(210, 130, 20, 0.94)")
+      setBadge("论坛已登录 · 正在跳转 E-Hentai 主站同步 Cookie…", "rgba(210, 130, 20, 0.94)")
+      setTimeout(() => location.assign(E_BASE), 900)
       return
     }
 
-    await writeLogin(cookies)
+    if (!state.complete) {
+      await writeStatus({
+        phase: "waiting-cookie",
+        version: "0.2.5",
+        cookieNames,
+        observedCookieNames: captured.observedNames,
+        cookieReadErrorCount: captured.readErrors.length,
+        cookieReadErrors: captured.readErrors.slice(0, 8),
+        hasMemberId: state.names.has("ipb_member_id"),
+        hasPassHash: state.names.has("ipb_pass_hash"),
+        hasIgneous: state.names.has("igneous"),
+        writableRootCount: roots.length,
+      })
+      const seen = captured.observedNames.length ? captured.observedNames.slice(0, 8).join(", ") : "无"
+      setBadge(`等待登录 Cookie · 当前可见 Cookie：${seen}`, "rgba(210, 130, 20, 0.94)")
+      return
+    }
+
+    await writeLogin(captured.cookies)
     await writeStatus({
       phase: "captured",
-      version: "0.2.4",
+      version: "0.2.5",
       cookieNames,
+      observedCookieNames: captured.observedNames,
+      cookieReadErrorCount: captured.readErrors.length,
       hasMemberId: true,
       hasPassHash: true,
       hasIgneous: state.names.has("igneous"),
       writableRootCount: roots.length,
     })
-    setBadge("✓ Scripting 已捕获登录状态", "rgba(20, 130, 70, 0.94)")
+    setBadge(
+      state.names.has("igneous")
+        ? "✓ Scripting 已捕获 E-Hentai + ExHentai 登录状态"
+        : "✓ Scripting 已捕获 E-Hentai 登录状态",
+      "rgba(20, 130, 70, 0.94)",
+    )
     GM.log("E-Hentai login captured", cookieNames)
   } catch (error) {
     const summary = errorSummary(error)
     try {
       await writeStatus({
         phase: "error",
-        version: "0.2.4",
+        version: "0.2.5",
         errorMessage: summary,
       })
     } catch {
       // 如果共享目录本身不可写，页面上的错误详情就是最终诊断渠道。
     }
-    setBadge(`Scripting 登录桥失败 · ${summary}`.slice(0, 420), "rgba(190, 45, 45, 0.96)")
+    setBadge(`Scripting 登录桥失败 · ${summary}`.slice(0, 520), "rgba(190, 45, 45, 0.96)")
     GM.log("E-Hentai login bridge failed", error)
   }
 }
