@@ -1,4 +1,9 @@
 import {
+  FavoriteCategory,
+  loadFavorites,
+  updateFavorite,
+} from "./favorites"
+import {
   Button,
   Canvas,
   HStack,
@@ -47,6 +52,12 @@ import {
   setActiveSite,
   signInWithWebView,
   signOut,
+  CookieLoginInput,
+  getCookieCopyText,
+  getMaskedCookies,
+  inspectCookieLogin,
+  parseCookieLogin,
+  saveManualCookieLogin,
 } from "./account"
 
 const fileManager: any = (globalThis as any).FileManager
@@ -151,7 +162,7 @@ function PreviewThumbnail({ page }: { page: GalleryPageLink }) {
 
   return <Canvas
     frame={{ width: PREVIEW_WIDTH, height: PREVIEW_HEIGHT }}
-    draw={(ctx, size) => {
+    draw={(ctx: any, size: any) => {
       ctx.fillStyle = "systemGray6"
       ctx.fillRect(0, 0, size.width, size.height)
 
@@ -224,6 +235,9 @@ function HomeView() {
   const [syncing, setSyncing] = useState(false)
   const [bridgeStatus, setBridgeStatus] = useState("")
   const [accountBusy, setAccountBusy] = useState(false)
+  const [accountMode, setAccountMode] = useState<"normal" | "form" | "clipboard" | "cookies">("normal")
+  const [cookieLogin, setCookieLogin] = useState<CookieLoginInput>({ memberId: "", passHash: "", igneous: "" })
+  const [cookieReveal, setCookieReveal] = useState(false)
   const [account, setAccount] = useState<AccountStatus>(getAccountStatus())
 
   const reportWithoutBreakingUI = async (input: Parameters<typeof reportDiagnostic>[0]) => {
@@ -278,6 +292,47 @@ function HomeView() {
     setPrevHref("")
     setNextHref("")
     await runSearch()
+  }
+
+  const importClipboardCookies = async () => {
+    const pasteboard: any = (globalThis as any).Pasteboard
+    if (!pasteboard?.getString) throw new Error("当前 Scripting 运行时未提供 Pasteboard API。")
+    const text = await pasteboard.getString()
+    const parsed = parseCookieLogin(String(text || ""))
+    const preview = inspectCookieLogin(parsed)
+    if (!preview.memberIdPresent || !preview.passHashPresent) throw new Error("剪贴板中没有识别到完整的 ipb_member_id 与 ipb_pass_hash。")
+    setCookieLogin(parsed)
+    setAccountMode("clipboard")
+  }
+
+  const saveCookieLogin = async (clearClipboard: boolean) => {
+    const preview = inspectCookieLogin(cookieLogin)
+    if (!preview.memberIdPresent || !preview.passHashPresent) throw new Error("请填写 ipb_member_id 和 ipb_pass_hash。")
+    if (preview.warnings.length) {
+      const confirmed = await (globalThis as any).confirm({ title: "Cookie 格式异常", message: `${preview.warnings.join("；")}。仍要保存吗？`, cancelLabel: "取消", confirmLabel: "仍然保存" })
+      if (!confirmed) return
+    }
+    const status = saveManualCookieLogin(cookieLogin)
+    setAccount(status)
+    setAccountMode("normal")
+    setCookieLogin({ memberId: "", passHash: "", igneous: "" })
+    if (clearClipboard) await (globalThis as any).Pasteboard?.setString?.(null)
+    await reportWithoutBreakingUI({ stage: "account-manual-cookie-login", ok: true, notes: `loggedIn=${status.loggedIn}; memberIdPresent=${status.memberIdPresent}; passHashPresent=${status.passHashPresent}; igneousPresent=${status.igneousPresent}` })
+    await resetListAndSearch()
+  }
+
+  const copyMaskedCookies = async () => {
+    const pasteboard: any = (globalThis as any).Pasteboard
+    if (!pasteboard?.setString) throw new Error("当前 Scripting 运行时未提供 Pasteboard API。")
+    await pasteboard.setString(getCookieCopyText())
+    setError("Cookie 已复制到剪贴板；请在使用后尽快清除。")
+  }
+
+  const clearClipboard = async () => {
+    const pasteboard: any = (globalThis as any).Pasteboard
+    if (!pasteboard?.setString) throw new Error("当前 Scripting 运行时未提供 Pasteboard API。")
+    await pasteboard.setString(null)
+    setError("已清除剪贴板敏感信息。")
   }
 
   const runAccountAction = async (action: "open-login" | "import-login" | "refresh" | "logout" | "site-e" | "site-ex") => {
@@ -407,54 +462,55 @@ function HomeView() {
         <Text font="caption" foregroundStyle="secondaryLabel">
           {account.loggedIn
             ? `登录 Cookie 仅保存在本机 Keychain · E-Hentai：${account.eHentaiReachable === true ? "可访问" : account.eHentaiReachable === false ? "不可访问" : "待检测"} · ExHentai：${account.exAvailable === true ? "可用" : account.exAvailable === false ? "不可用" : "待检测"}`
-            : "Safari 登录桥只导入已捕获的 Cookie，脚本不读取密码。"}
+            : "可手动输入或从剪贴板导入 Cookie；Safari 登录桥保留为实验功能。"}
         </Text>
-        <HStack spacing={8}>
-          {!account.loggedIn
-            ? <>
-                <Button
-                  title={accountBusy ? "正在打开…" : "用 Safari 登录"}
-                  systemImage="safari"
-                  buttonStyle="borderedProminent"
-                  disabled={accountBusy}
-                  action={() => { void runAccountAction("open-login") }}
-                />
-                <Button
-                  title="导入 Safari 登录"
-                  systemImage="square.and.arrow.down"
-                  disabled={accountBusy}
-                  action={() => { void runAccountAction("import-login") }}
-                />
-              </>
-            : <>
-                <Button
-                  title="刷新状态"
-                  systemImage="arrow.clockwise"
-                  disabled={accountBusy}
-                  action={() => { void runAccountAction("refresh") }}
-                />
-                <Button
-                  title="退出脚本账号"
-                  systemImage="rectangle.portrait.and.arrow.right"
-                  disabled={accountBusy}
-                  action={() => { void runAccountAction("logout") }}
-                />
-              </>}
-        </HStack>
-        {account.loggedIn
+        {accountMode === "form" || accountMode === "clipboard"
+          ? <VStack alignment="leading" spacing={8} frame={{ maxWidth: "infinity" }}>
+              <Text font="headline">{accountMode === "clipboard" ? "确认剪贴板 Cookie" : "Cookie 登录"}</Text>
+              <TextField title="ipb_member_id" value={cookieLogin.memberId} onChanged={(value: string) => setCookieLogin({ ...cookieLogin, memberId: value })} prompt="必填，通常为数字" />
+              <TextField title="ipb_pass_hash" value={cookieLogin.passHash} onChanged={(value: string) => setCookieLogin({ ...cookieLogin, passHash: value })} prompt="必填，通常为 32 位" />
+              <TextField title="igneous（可选）" value={cookieLogin.igneous} onChanged={(value: string) => setCookieLogin({ ...cookieLogin, igneous: value })} prompt="ExHentai 常需要" />
+              <Text font="caption" foregroundStyle="secondaryLabel">
+                {(() => { const p = inspectCookieLogin(cookieLogin); return `检测到：member_id ${p.memberIdPresent ? "✅" : "❌"} · pass_hash ${p.passHashPresent ? "✅" : "❌"} · igneous ${p.igneousPresent ? "✅" : "未提供"}${p.warnings.length ? ` · 提示：${p.warnings.join("；")}` : ""}` })()}
+              </Text>
+              <HStack spacing={8}>
+                <Button title="保存到 Keychain" buttonStyle="borderedProminent" disabled={accountBusy} action={() => { void (async () => { setAccountBusy(true); try { await saveCookieLogin(accountMode === "clipboard") } catch (e) { setError(e instanceof Error ? e.message : String(e)) } finally { setAccountBusy(false) } })() }} />
+                <Button title="取消" disabled={accountBusy} action={() => { setAccountMode("normal"); setCookieLogin({ memberId: "", passHash: "", igneous: "" }) }} />
+                {accountMode === "clipboard" ? <Button title="保留剪贴板" disabled={accountBusy} action={() => { void (async () => { setAccountBusy(true); try { await saveCookieLogin(false) } catch (e) { setError(e instanceof Error ? e.message : String(e)) } finally { setAccountBusy(false) } })() }} /> : null}
+              </HStack>
+            </VStack>
+          : accountMode === "cookies"
+            ? <VStack alignment="leading" spacing={7} frame={{ maxWidth: "infinity" }}>
+                <Text font="headline">Cookie（{cookieReveal ? "已显示" : "已遮罩"}）</Text>
+                {getMaskedCookies(cookieReveal).map(cookie => <Text key={cookie.name} font="caption">{cookie.name}: {cookie.value}</Text>)}
+                <HStack spacing={8}>
+                  <Button title={cookieReveal ? "隐藏" : "显示"} action={() => setCookieReveal(value => !value)} />
+                  <Button title="复制" action={() => { void copyMaskedCookies().catch(e => setError(e instanceof Error ? e.message : String(e))) }} />
+                  <Button title="清除剪贴板" action={() => { void clearClipboard().catch(e => setError(e instanceof Error ? e.message : String(e))) }} />
+                  <Button title="完成" action={() => { setCookieReveal(false); setAccountMode("normal") }} />
+                </HStack>
+              </VStack>
+            : <HStack spacing={8}>
+                {!account.loggedIn
+                  ? <>
+                      <Button title={accountBusy ? "正在打开…" : "用 Safari 登录（实验）"} systemImage="safari" buttonStyle="bordered" disabled={accountBusy} action={() => { void runAccountAction("open-login") }} />
+                      <Button title="Cookie 登录" systemImage="key" buttonStyle="borderedProminent" disabled={accountBusy} action={() => setAccountMode("form")} />
+                      <Button title="从剪贴板导入" systemImage="doc.on.clipboard" disabled={accountBusy} action={() => { void (async () => { setAccountBusy(true); try { await importClipboardCookies() } catch (e) { setError(e instanceof Error ? e.message : String(e)) } finally { setAccountBusy(false) } })() }} />
+                      <Button title="导入 Safari 登录" systemImage="square.and.arrow.down" disabled={accountBusy} action={() => { void runAccountAction("import-login") }} />
+                    </>
+                  : <>
+                      <NavigationLink destination={<FavoritesView />}>
+                        <Button title="我的收藏" systemImage="heart" disabled={accountBusy} />
+                      </NavigationLink>
+                      <Button title="查看 Cookie" systemImage="key" disabled={accountBusy} action={() => setAccountMode("cookies")} />
+                      <Button title="刷新状态" systemImage="arrow.clockwise" disabled={accountBusy} action={() => { void runAccountAction("refresh") }} />
+                      <Button title="退出脚本账号" systemImage="rectangle.portrait.and.arrow.right" disabled={accountBusy} action={() => { void runAccountAction("logout") }} />
+                    </>}
+              </HStack>}
+        {account.loggedIn && accountMode === "normal"
           ? <HStack spacing={8}>
-              <Button
-                title="E-Hentai"
-                buttonStyle={account.site === "e" ? "borderedProminent" : "bordered"}
-                disabled={accountBusy || account.site === "e"}
-                action={() => { void runAccountAction("site-e") }}
-              />
-              <Button
-                title="ExHentai"
-                buttonStyle={account.site === "ex" ? "borderedProminent" : "bordered"}
-                disabled={accountBusy || account.site === "ex" || account.exAvailable !== true}
-                action={() => { void runAccountAction("site-ex") }}
-              />
+              <Button title="E-Hentai" buttonStyle={account.site === "e" ? "borderedProminent" : "bordered"} disabled={accountBusy || account.site === "e"} action={() => { void runAccountAction("site-e") }} />
+              <Button title="ExHentai" buttonStyle={account.site === "ex" ? "borderedProminent" : "bordered"} disabled={accountBusy || account.site === "ex" || account.exAvailable !== true} action={() => { void runAccountAction("site-ex") }} />
             </HStack>
           : null}
         {accountBusy ? <ProgressView title="正在处理账号状态…" progressViewStyle="circular" /> : null}
@@ -524,10 +580,48 @@ function HomeView() {
   </List>
 }
 
+function FavoritesView() {
+  const [categories, setCategories] = useState<FavoriteCategory[]>([])
+  const [items, setItems] = useState<GallerySummary[]>([])
+  const [selected, setSelected] = useState("all")
+  const [prevHref, setPrevHref] = useState("")
+  const [nextHref, setNextHref] = useState("")
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState("")
+  const reload = async (category = selected, directUrl?: string) => {
+    setLoading(true); setError("")
+    try { const page = await loadFavorites(category, 0, directUrl); setCategories(page.categories); setItems(page.items); setPrevHref(page.prevHref); setNextHref(page.nextHref) }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)); setItems([]) }
+    finally { setLoading(false) }
+  }
+  useEffect(() => { void reload("all") }, [])
+  return <List navigationTitle="我的收藏" navigationBarTitleDisplayMode="inline" refreshable={async () => { await reload() }} overlay={loading ? <ProgressView title="正在加载收藏…" progressViewStyle="circular" /> : undefined}>
+    <Section header={<Text textCase={null}>收藏夹</Text>}>
+      <HStack spacing={7}><Button title="全部" buttonStyle={selected === "all" ? "borderedProminent" : "bordered"} disabled={loading || selected === "all"} action={() => { setSelected("all"); void reload("all") }} />{categories.slice(0, 5).map(category => <Button key={category.slot} title={`${category.name} (${category.count})`} buttonStyle={selected === String(category.slot) ? "borderedProminent" : "bordered"} disabled={loading || selected === String(category.slot)} action={() => { setSelected(String(category.slot)); void reload(String(category.slot)) }} />)}</HStack>
+      {categories.slice(5).map(category => <Button key={category.slot} title={`${category.name} · ${category.count}`} disabled={loading || selected === String(category.slot)} action={() => { setSelected(String(category.slot)); void reload(String(category.slot)) }} />)}
+      <ErrorText message={error} />
+    </Section>
+    <Section header={<Text textCase={null}>画廊 · {items.length}</Text>}>
+      {items.map(item => <NavigationLink key={item.id} destination={<GalleryDetailView summary={item} />}><GalleryRow item={item} /></NavigationLink>)}
+      {!loading && !error && !items.length ? <Text foregroundStyle="secondaryLabel">此收藏夹没有画廊</Text> : null}
+    </Section>
+    {(prevHref || nextHref) ? <Section><HStack><Button title="上一页" disabled={!prevHref || loading} action={() => { if (prevHref) void reload(selected, prevHref) }} /><Spacer /><Button title="下一页" disabled={!nextHref || loading} action={() => { if (nextHref) void reload(selected, nextHref) }} /></HStack></Section> : null}
+  </List>
+}
+
 function GalleryDetailView({ summary }: { summary: GallerySummary }) {
   const [detail, setDetail] = useState<GalleryDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
+  const [favoriteBusy, setFavoriteBusy] = useState(false)
+  const [favoriteNote, setFavoriteNote] = useState("")
+  const [favoriteStatus, setFavoriteStatus] = useState("")
+  const changeFavorite = async (category: number | -1) => {
+    setFavoriteBusy(true); setFavoriteStatus("")
+    try { await updateFavorite(summary.gid, summary.token, category, favoriteNote); setFavoriteStatus(category === -1 ? "已取消收藏" : `已保存到收藏夹 ${category}`) }
+    catch (e) { setFavoriteStatus(e instanceof Error ? e.message : String(e)) }
+    finally { setFavoriteBusy(false) }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -568,6 +662,13 @@ function GalleryDetailView({ summary }: { summary: GallerySummary }) {
         <Text font="caption" foregroundStyle="secondaryLabel">
           {[detail?.category || summary.category, detail?.uploader || summary.uploader].filter(Boolean).join(" · ")}
         </Text>
+        {getAccountStatus().loggedIn ? <VStack alignment="leading" spacing={6} frame={{ maxWidth: "infinity" }}>
+          <TextField title="收藏备注（可选）" value={favoriteNote} onChanged={(value: string) => setFavoriteNote(value)} prompt="最多 250 字" />
+          <HStack spacing={6}>{[0, 1, 2, 3, 4].map(slot => <Button key={slot} title={`收藏夹 ${slot}`} disabled={favoriteBusy} action={() => { void changeFavorite(slot) }} />)}</HStack>
+          <HStack spacing={6}>{[5, 6, 7, 8, 9].map(slot => <Button key={slot} title={`${slot}`} disabled={favoriteBusy} action={() => { void changeFavorite(slot) }} />)}<Button title="取消收藏" systemImage="heart.slash" disabled={favoriteBusy} action={() => { void changeFavorite(-1) }} /></HStack>
+          {favoriteBusy ? <ProgressView title="正在更新收藏…" progressViewStyle="circular" /> : null}
+          {favoriteStatus ? <Text font="caption" foregroundStyle={favoriteStatus.startsWith("已") ? "systemGreen" : "systemRed"}>{favoriteStatus}</Text> : null}
+        </VStack> : null}
         {detail?.rating != null
           ? <Text font="caption">评分 {detail.rating.toFixed(2)} · {detail.ratingCount} 次</Text>
           : null}
