@@ -1,12 +1,12 @@
 {
-  "time": "2026-08-22T08:40:01.498Z",
+  "time": "2026-08-22T09:46:19.009Z",
   "scriptVersion": "0.2.8",
-  "stage": "gallery-search",
+  "stage": "gallery-home",
   "ok": true,
   "request": {
-    "url": "https://e-hentai.org/?f_cats=895&f_search=%5Bredacted%5D",
+    "url": "https://e-hentai.org/",
     "status": 0,
     "statusText": ""
   },
-  "notes": "items=0; category=asianporn; quick=chinese; keywordPresent=false"
+  "notes": "items=25; category=all; quick=none; keywordPresent=false"
 }
