@@ -31,23 +31,26 @@ import {
 import {
   pullSourceFromGitHub,
   pushSourceToGitHub,
-  readSetupRules,
   reportDiagnostic,
 } from "./githubBridge"
 import {
-  AccountStatus,
-  getAccountDiagnostic,
-  probeSafariBridge,
-  hasSafariLoginCapture,
-  importSafariLogin,
-  openSafariLogin,
   getAccountStatus,
   getBaseUrl,
-  refreshAccountStatus,
-  setActiveSite,
-  signInWithWebView,
-  signOut,
 } from "./account"
+import {
+  GalleryCategoryKey,
+  QuickFilterKey,
+  GALLERY_CATEGORIES,
+  QUICK_FILTERS,
+  browseSummary,
+  buildTouristBrowseUrl,
+  getCategoryOption,
+  getQuickFilter,
+  localizeCategory,
+  localizeCommonTag,
+  localizeMetadataKey,
+  localizeTagNamespace,
+} from "./tourist"
 
 const fileManager: any = (globalThis as any).FileManager
 const spritePathCache = new Map<string, Promise<string>>()
@@ -151,7 +154,7 @@ function PreviewThumbnail({ page }: { page: GalleryPageLink }) {
 
   return <Canvas
     frame={{ width: PREVIEW_WIDTH, height: PREVIEW_HEIGHT }}
-    draw={(ctx, size) => {
+    draw={(ctx: any, size: any) => {
       ctx.fillStyle = "systemGray6"
       ctx.fillRect(0, 0, size.width, size.height)
 
@@ -179,42 +182,44 @@ function PreviewThumbnail({ page }: { page: GalleryPageLink }) {
 }
 
 function GalleryRow({ item }: { item: GallerySummary }) {
+  const category = localizeCategory(item.category)
   return <HStack spacing={12}>
     {item.thumb
       ? <Image
           imageUrl={item.thumb}
           resizable
           scaleToFill
-          frame={{ width: 76, height: 106 }}
-          cornerRadius={8}
+          frame={{ width: 82, height: 112 }}
+          cornerRadius={9}
           placeholder={<ProgressView progressViewStyle="circular" />}
         />
       : <Image
           systemName="photo"
-          frame={{ width: 76, height: 106 }}
+          frame={{ width: 82, height: 112 }}
           foregroundStyle="secondaryLabel"
         />}
-    <VStack alignment="leading" spacing={6}>
+    <VStack alignment="leading" spacing={7} frame={{ maxWidth: "infinity" }}>
       <Text font="headline" lineLimit={3}>{item.title || "未命名画廊"}</Text>
-      {item.category
+      {category
         ? <Text
             font="caption"
-            padding={{ horizontal: 7, vertical: 3 }}
+            padding={{ horizontal: 8, vertical: 3 }}
             background="secondarySystemBackground"
-            cornerRadius={6}
-          >{item.category}</Text>
+            cornerRadius={7}
+          >{category}</Text>
         : null}
-      <Text font="caption" foregroundStyle="secondaryLabel">
+      <Text font="caption" foregroundStyle="secondaryLabel" lineLimit={2}>
         {[item.uploader, item.pages ? `${item.pages} 页` : "", item.posted].filter(Boolean).join(" · ")}
       </Text>
     </VStack>
-    <Spacer />
   </HStack>
 }
 
 function HomeView() {
   const dismiss = Navigation.useDismiss()
   const [keyword, setKeyword] = useState("")
+  const [category, setCategory] = useState<GalleryCategoryKey>("all")
+  const [quickFilter, setQuickFilter] = useState<QuickFilterKey>("none")
   const [items, setItems] = useState<GallerySummary[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
@@ -222,38 +227,37 @@ function HomeView() {
   const [prevHref, setPrevHref] = useState("")
   const [nextHref, setNextHref] = useState("")
   const [syncing, setSyncing] = useState(false)
-  const [bridgeStatus, setBridgeStatus] = useState("")
-  const [accountBusy, setAccountBusy] = useState(false)
-  const [account, setAccount] = useState<AccountStatus>(getAccountStatus())
+  const [syncMessage, setSyncMessage] = useState("")
+
+  const account = getAccountStatus()
+  const siteLabel = account.site === "ex" ? "ExHentai" : "E-Hentai"
 
   const reportWithoutBreakingUI = async (input: Parameters<typeof reportDiagnostic>[0]) => {
-    try {
-      await reportDiagnostic(input)
-    } catch (diagnosticError) {
-      const value = diagnosticError as { message?: unknown }
-      setBridgeStatus(`诊断上传失败（不影响浏览）：${String(value?.message || diagnosticError)}`)
-    }
+    try { await reportDiagnostic(input) } catch { /* 联调诊断不阻断游客浏览 */ }
   }
 
-  const runSearch = async (directUrl?: string) => {
+  const loadBrowse = async (
+    directUrl?: string,
+    nextCategory: GalleryCategoryKey = category,
+    nextQuickFilter: QuickFilterKey = quickFilter,
+    nextKeyword: string = keyword,
+  ) => {
     if (loading) return
-    const stage = directUrl ? "gallery-page" : (keyword.trim() ? "gallery-search" : "gallery-home")
-    const requestUrl = directUrl || `${getBaseUrl()}?f_search=${encodeURIComponent(keyword)}`
+    const requestUrl = directUrl || buildTouristBrowseUrl(getBaseUrl(), nextKeyword, nextCategory, nextQuickFilter)
+    const stage = directUrl ? "gallery-page" : (nextKeyword.trim() || nextCategory !== "all" || nextQuickFilter !== "none" ? "gallery-search" : "gallery-home")
     setLoading(true)
     setError("")
     try {
-      const page = await searchGalleries(keyword, directUrl)
+      const page = await searchGalleries("", requestUrl)
       setItems(page.items)
       setResultCount(page.resultCount)
       setPrevHref(page.prevHref)
       setNextHref(page.nextHref)
-
-      const first = page.items[0]
       await reportWithoutBreakingUI({
         stage,
         ok: true,
         request: { url: page.url || requestUrl },
-        notes: `items=${page.items.length}; firstTitleLen=${first?.title?.length || 0}; firstCategoryLen=${first?.category?.length || 0}; firstUploaderLen=${first?.uploader?.length || 0}`,
+        notes: `items=${page.items.length}; category=${nextCategory}; quick=${nextQuickFilter}; keywordPresent=${Boolean(nextKeyword.trim())}`,
       })
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
@@ -262,212 +266,89 @@ function HomeView() {
       setResultCount("")
       setPrevHref("")
       setNextHref("")
-
-      await reportWithoutBreakingUI({
-        stage,
-        ok: false,
-        error: e,
-        request: { url: requestUrl },
-      })
+      await reportWithoutBreakingUI({ stage, ok: false, error: e, request: { url: requestUrl } })
     } finally {
       setLoading(false)
     }
   }
 
-  const resetListAndSearch = async () => {
+  const chooseCategory = (value: GalleryCategoryKey) => {
+    setCategory(value)
     setPrevHref("")
     setNextHref("")
-    await runSearch()
+    void loadBrowse(undefined, value, quickFilter, keyword)
   }
 
-  const runAccountAction = async (action: "open-login" | "import-login" | "refresh" | "logout" | "site-e" | "site-ex") => {
-    if (accountBusy) return
-    setAccountBusy(true)
-    setError("")
-    try {
-      if (action === "open-login") {
-        await openSafariLogin()
-        setError("已打开 Safari 登录页。请在 Safari 刷新已登录的 E-Hentai 页面，看到绿色捕获提示后返回并点“导入 Safari 登录”。")
-      } else if (action === "import-login") {
-        const status = await importSafariLogin()
-        setAccount(status)
-        await reportWithoutBreakingUI({ stage: "account-safari-import", ok: status.loggedIn, notes: JSON.stringify(getAccountDiagnostic()) })
-        await resetListAndSearch()
-      } else if (action === "refresh") {
-        const status = await refreshAccountStatus()
-        setAccount(status)
-        await reportWithoutBreakingUI({
-          stage: "account-status",
-          ok: true,
-          notes: `loggedIn=${status.loggedIn}; eHentaiReachable=${String(status.eHentaiReachable)}; exAvailable=${String(status.exAvailable)}; site=${status.site}`,
-        })
-      } else if (action === "logout") {
-        signOut()
-        const status = getAccountStatus()
-        setAccount(status)
-        await reportWithoutBreakingUI({ stage: "account-logout", ok: true, notes: "local session cleared" })
-        await resetListAndSearch()
-      } else {
-        const site = action === "site-ex" ? "ex" : "e"
-        if (site === "ex" && account.exAvailable !== true) {
-          throw new Error("当前账号尚未验证可访问 ExHentai。")
-        }
-        setActiveSite(site)
-        setAccount({ ...account, site })
-        await reportWithoutBreakingUI({ stage: "account-site", ok: true, notes: `site=${site}` })
-        await resetListAndSearch()
-      }
-    } catch (e) {
-      const message = e instanceof Error ? e.message : String(e)
-      setError(message)
-      const stage = action === "import-login" ? "account-safari-import" : "account-action"
-      await reportWithoutBreakingUI({ stage, ok: false, error: e, notes: action === "import-login" ? JSON.stringify(getAccountDiagnostic()) : undefined })
-    } finally {
-      setAccountBusy(false)
-    }
+  const chooseQuickFilter = (value: QuickFilterKey) => {
+    setQuickFilter(value)
+    setPrevHref("")
+    setNextHref("")
+    void loadBrowse(undefined, category, value, keyword)
+  }
+
+  const clearSearch = () => {
+    setKeyword("")
+    setCategory("all")
+    setQuickFilter("none")
+    setPrevHref("")
+    setNextHref("")
+    void loadBrowse(undefined, "all", "none", "")
   }
 
   const runBridgeAction = async (action: "push" | "pull" | "diagnostic") => {
     if (syncing) return
     setSyncing(true)
-    setError("")
+    setSyncMessage("")
     try {
       if (action === "push") {
         const files = await pushSourceToGitHub()
-        setError(`已推送 ${files.length} 个业务源码文件。`)
+        setSyncMessage(`已推送 ${files.length} 个源码文件。`)
       } else if (action === "pull") {
         const files = await pullSourceFromGitHub()
-        setError(`已拉取 ${files.length} 个业务源码文件。请重新运行脚本以加载变更。`)
+        setSyncMessage(`已拉取 ${files.length} 个源码文件，重新运行后生效。`)
       } else {
         await reportDiagnostic({ stage: "manual-diagnostic", ok: true, notes: "用户手动上传诊断" })
-        setError("诊断已上传。")
+        setSyncMessage("诊断已上传。")
       }
     } catch (e) {
-      const value = e as { message?: unknown; stack?: unknown }
-      setError(`${String(value?.message || e)}\n${String(value?.stack || "")}`)
+      setSyncMessage(e instanceof Error ? e.message : String(e))
     } finally {
       setSyncing(false)
     }
   }
 
-  useEffect(() => {
-    void runSearch()
-  }, [])
+  useEffect(() => { void loadBrowse(undefined, "all", "none", "") }, [])
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        let status = getAccountStatus()
-        const probe = await probeSafariBridge()
-        await reportWithoutBreakingUI({ stage: "account-safari-bridge-probe", ok: true, notes: JSON.stringify(getAccountDiagnostic()) })
-        if (!status.loggedIn && probe.loginCaptured) {
-          status = await importSafariLogin()
-          await reportWithoutBreakingUI({ stage: "account-auto-import", ok: status.loggedIn, notes: JSON.stringify(getAccountDiagnostic()) })
-        }
-        if (status.loggedIn) status = await refreshAccountStatus()
-        setAccount(status)
-      } catch (e) {
-        const value = e as { message?: unknown; stack?: unknown }
-        setBridgeStatus(`账号初始化/自动导入失败：${String(value?.message || e)}\n${String(value?.stack || "")}`)
-        await reportWithoutBreakingUI({ stage: "account-auto-import", ok: false, error: e, notes: JSON.stringify(getAccountDiagnostic()) })
-      }
-    })()
-  }, [])
-
-  useEffect(() => {
-    void (async () => {
-      try {
-        const setup = await readSetupRules()
-        setBridgeStatus(`GitHub 已连接；已读取联调规则（${setup.text.length} 字符）。`)
-      } catch (e) {
-        const value = e as { message?: unknown; stack?: unknown }
-        setBridgeStatus(`GitHub 联调初始化失败：${String(value?.message || e)}\n${String(value?.stack || "")}`)
-      }
-    })()
-  }, [])
-
-  const siteLabel = account.site === "ex" ? "exhentai.org" : "e-hentai.org"
+  const browseTitle = browseSummary(keyword, category, quickFilter)
+  const categoryName = getCategoryOption(category).label
+  const filterName = getQuickFilter(quickFilter).label
 
   return <List
-    navigationTitle="E-Hentai 浏览器"
+    navigationTitle="E-Hentai"
     navigationBarTitleDisplayMode="inline"
-    refreshable={async () => { await runSearch() }}
+    refreshable={async () => { await loadBrowse() }}
     toolbar={{ cancellationAction: <Button title="关闭" action={dismiss} /> }}
     overlay={loading && items.length === 0
-      ? <ProgressView title="正在加载…" progressViewStyle="circular" />
+      ? <ProgressView title="正在加载画廊…" progressViewStyle="circular" />
       : undefined}
   >
-    <Section header={<Text textCase={null}>账户</Text>}>
-      <VStack alignment="leading" spacing={8}>
+    <Section>
+      <VStack alignment="leading" spacing={10}>
         <HStack>
-          <Text font="headline">{account.loggedIn ? "已登录" : "游客模式"}</Text>
+          <VStack alignment="leading" spacing={2}>
+            <Text font="title3">发现画廊</Text>
+            <Text font="caption" foregroundStyle="secondaryLabel">
+              {account.loggedIn ? `已登录 · ${siteLabel}` : `游客浏览 · ${siteLabel}`}
+            </Text>
+          </VStack>
           <Spacer />
-          <Text font="caption" foregroundStyle="secondaryLabel">{siteLabel}</Text>
+          <Button title="重置" disabled={loading && !items.length} action={clearSearch} />
         </HStack>
-        <Text font="caption" foregroundStyle="secondaryLabel">
-          {account.loggedIn
-            ? `登录 Cookie 仅保存在本机 Keychain · E-Hentai：${account.eHentaiReachable === true ? "可访问" : account.eHentaiReachable === false ? "不可访问" : "待检测"} · ExHentai：${account.exAvailable === true ? "可用" : account.exAvailable === false ? "不可用" : "待检测"}`
-            : "Safari 登录桥只导入已捕获的 Cookie，脚本不读取密码。"}
-        </Text>
-        <HStack spacing={8}>
-          {!account.loggedIn
-            ? <>
-                <Button
-                  title={accountBusy ? "正在打开…" : "用 Safari 登录"}
-                  systemImage="safari"
-                  buttonStyle="borderedProminent"
-                  disabled={accountBusy}
-                  action={() => { void runAccountAction("open-login") }}
-                />
-                <Button
-                  title="导入 Safari 登录"
-                  systemImage="square.and.arrow.down"
-                  disabled={accountBusy}
-                  action={() => { void runAccountAction("import-login") }}
-                />
-              </>
-            : <>
-                <Button
-                  title="刷新状态"
-                  systemImage="arrow.clockwise"
-                  disabled={accountBusy}
-                  action={() => { void runAccountAction("refresh") }}
-                />
-                <Button
-                  title="退出脚本账号"
-                  systemImage="rectangle.portrait.and.arrow.right"
-                  disabled={accountBusy}
-                  action={() => { void runAccountAction("logout") }}
-                />
-              </>}
-        </HStack>
-        {account.loggedIn
-          ? <HStack spacing={8}>
-              <Button
-                title="E-Hentai"
-                buttonStyle={account.site === "e" ? "borderedProminent" : "bordered"}
-                disabled={accountBusy || account.site === "e"}
-                action={() => { void runAccountAction("site-e") }}
-              />
-              <Button
-                title="ExHentai"
-                buttonStyle={account.site === "ex" ? "borderedProminent" : "bordered"}
-                disabled={accountBusy || account.site === "ex" || account.exAvailable !== true}
-                action={() => { void runAccountAction("site-ex") }}
-              />
-            </HStack>
-          : null}
-        {accountBusy ? <ProgressView title="正在处理账号状态…" progressViewStyle="circular" /> : null}
-      </VStack>
-    </Section>
-
-    <Section header={<Text textCase={null}>{account.loggedIn ? "账号浏览" : "游客模式"} · {siteLabel}</Text>}>
-      <VStack alignment="leading" spacing={8}>
         <TextField
-          title="搜索"
+          title="搜索画廊"
           value={keyword}
           onChanged={setKeyword}
-          prompt="标题、标签、作者…"
+          prompt="标题、作者、标签，例如：artist:xxx"
           submitLabel="search"
         />
         <Button
@@ -475,32 +356,86 @@ function HomeView() {
           systemImage="magnifyingglass"
           buttonStyle="borderedProminent"
           disabled={loading}
-          action={() => { void runSearch() }}
+          action={() => { void loadBrowse() }}
         />
-        <HStack spacing={8}>
-          <Button title="推送源码到 GitHub" disabled={syncing} action={() => { void runBridgeAction("push") }} />
-          <Button title="从 GitHub 拉取源码" disabled={syncing} action={() => { void runBridgeAction("pull") }} />
-          <Button title="上传诊断" disabled={syncing} action={() => { void runBridgeAction("diagnostic") }} />
-        </HStack>
-        {syncing ? <ProgressView title="正在同步 GitHub…" progressViewStyle="circular" /> : null}
-        {bridgeStatus ? <Text font="caption" foregroundStyle="secondaryLabel">{bridgeStatus}</Text> : null}
-        <ErrorText message={error} />
-        {resultCount || items.length
-          ? <Text font="caption" foregroundStyle="secondaryLabel">
-              {[resultCount ? `结果：${resultCount}` : "", `本页已解析：${items.length} 条`].filter(Boolean).join(" · ")}
-            </Text>
-          : null}
+        <Text font="caption" foregroundStyle="secondaryLabel">
+          当前：{categoryName} · {filterName}
+        </Text>
       </VStack>
     </Section>
 
-    <Section header={<Text textCase={null}>画廊</Text>}>
+    <Section header={<Text textCase={null}>分类</Text>}>
+      <VStack alignment="leading" spacing={7}>
+        <HStack spacing={7}>
+          {GALLERY_CATEGORIES.slice(0, 4).map(item => <Button
+            key={item.key}
+            title={item.shortLabel}
+            buttonStyle={category === item.key ? "borderedProminent" : "bordered"}
+            disabled={loading && category === item.key}
+            action={() => chooseCategory(item.key)}
+          />)}
+        </HStack>
+        <HStack spacing={7}>
+          {GALLERY_CATEGORIES.slice(4, 8).map(item => <Button
+            key={item.key}
+            title={item.shortLabel}
+            buttonStyle={category === item.key ? "borderedProminent" : "bordered"}
+            disabled={loading && category === item.key}
+            action={() => chooseCategory(item.key)}
+          />)}
+        </HStack>
+        <HStack spacing={7}>
+          {GALLERY_CATEGORIES.slice(8).map(item => <Button
+            key={item.key}
+            title={item.shortLabel}
+            buttonStyle={category === item.key ? "borderedProminent" : "bordered"}
+            disabled={loading && category === item.key}
+            action={() => chooseCategory(item.key)}
+          />)}
+        </HStack>
+      </VStack>
+    </Section>
+
+    <Section header={<Text textCase={null}>快速筛选</Text>}>
+      <VStack alignment="leading" spacing={7}>
+        <HStack spacing={7}>
+          {QUICK_FILTERS.slice(0, 3).map(item => <Button
+            key={item.key}
+            title={item.label}
+            buttonStyle={quickFilter === item.key ? "borderedProminent" : "bordered"}
+            disabled={loading && quickFilter === item.key}
+            action={() => chooseQuickFilter(item.key)}
+          />)}
+        </HStack>
+        <HStack spacing={7}>
+          {QUICK_FILTERS.slice(3).map(item => <Button
+            key={item.key}
+            title={item.label}
+            buttonStyle={quickFilter === item.key ? "borderedProminent" : "bordered"}
+            disabled={loading && quickFilter === item.key}
+            action={() => chooseQuickFilter(item.key)}
+          />)}
+        </HStack>
+      </VStack>
+    </Section>
+
+    <Section header={<Text textCase={null}>{browseTitle}</Text>}>
+      <VStack alignment="leading" spacing={3}>
+        <Text font="caption" foregroundStyle="secondaryLabel">
+          {[resultCount ? `结果 ${resultCount}` : "", items.length ? `本页 ${items.length} 条` : ""].filter(Boolean).join(" · ") || "最新公开内容"}
+        </Text>
+        <ErrorText message={error} />
+      </VStack>
       {items.map(item =>
         <NavigationLink key={item.id} destination={<GalleryDetailView summary={item} />}>
           <GalleryRow item={item} />
         </NavigationLink>
       )}
       {!loading && !error && items.length === 0
-        ? <Text foregroundStyle="secondaryLabel">没有结果</Text>
+        ? <VStack alignment="center" spacing={6} frame={{ maxWidth: "infinity" }}>
+            <Image systemName="magnifyingglass" foregroundStyle="secondaryLabel" />
+            <Text foregroundStyle="secondaryLabel">没有找到符合条件的画廊</Text>
+          </VStack>
         : null}
     </Section>
 
@@ -510,17 +445,30 @@ function HomeView() {
           title="上一页"
           systemImage="chevron.left"
           disabled={!prevHref || loading}
-          action={() => { if (prevHref) void runSearch(prevHref) }}
+          action={() => { if (prevHref) void loadBrowse(prevHref) }}
         />
         <Spacer />
         <Button
           title="下一页"
           systemImage="chevron.right"
           disabled={!nextHref || loading}
-          action={() => { if (nextHref) void runSearch(nextHref) }}
+          action={() => { if (nextHref) void loadBrowse(nextHref) }}
         />
       </HStack>
     </Section> : null}
+
+    <Section header={<Text textCase={null}>开发工具</Text>}>
+      <VStack alignment="leading" spacing={7}>
+        <Text font="caption" foregroundStyle="secondaryLabel">联调功能已移到页面底部，不干扰日常浏览。</Text>
+        <HStack spacing={8}>
+          <Button title="上传诊断" disabled={syncing} action={() => { void runBridgeAction("diagnostic") }} />
+          <Button title="拉取源码" disabled={syncing} action={() => { void runBridgeAction("pull") }} />
+          <Button title="推送源码" disabled={syncing} action={() => { void runBridgeAction("push") }} />
+        </HStack>
+        {syncing ? <ProgressView title="正在同步…" progressViewStyle="circular" /> : null}
+        {syncMessage ? <Text font="caption" foregroundStyle="secondaryLabel">{syncMessage}</Text> : null}
+      </VStack>
+    </Section>
   </List>
 }
 
@@ -558,15 +506,15 @@ function GalleryDetailView({ summary }: { summary: GallerySummary }) {
               imageUrl={detail?.cover || summary.thumb}
               resizable
               scaleToFit
-              frame={{ maxWidth: "infinity", height: 260 }}
-              cornerRadius={10}
+              frame={{ maxWidth: "infinity", height: 280 }}
+              cornerRadius={12}
               placeholder={<ProgressView progressViewStyle="circular" />}
             />
           : null}
         <Text font="title3">{detail?.title || summary.title}</Text>
         {detail?.titleJpn ? <Text font="subheadline" foregroundStyle="secondaryLabel">{detail.titleJpn}</Text> : null}
         <Text font="caption" foregroundStyle="secondaryLabel">
-          {[detail?.category || summary.category, detail?.uploader || summary.uploader].filter(Boolean).join(" · ")}
+          {[localizeCategory(detail?.category || summary.category), detail?.uploader || summary.uploader].filter(Boolean).join(" · ")}
         </Text>
         {detail?.rating != null
           ? <Text font="caption">评分 {detail.rating.toFixed(2)} · {detail.ratingCount} 次</Text>
@@ -579,7 +527,7 @@ function GalleryDetailView({ summary }: { summary: GallerySummary }) {
             <Text font="headline">信息</Text>
             {Object.entries(detail.metadata).map(([key, value]) =>
               <HStack key={key} frame={{ maxWidth: "infinity" }}>
-                <Text foregroundStyle="secondaryLabel">{key}</Text>
+                <Text foregroundStyle="secondaryLabel">{localizeMetadataKey(key)}</Text>
                 <Spacer />
                 <Text>{value}</Text>
               </HStack>
@@ -588,14 +536,20 @@ function GalleryDetailView({ summary }: { summary: GallerySummary }) {
         : null}
 
       {detail && detail.tags.length
-        ? <VStack alignment="leading" spacing={8} frame={{ maxWidth: "infinity" }}>
+        ? <VStack alignment="leading" spacing={10} frame={{ maxWidth: "infinity" }}>
             <Text font="headline">标签</Text>
             {detail.tags.map(group =>
-              <VStack key={group.namespace} alignment="leading" spacing={3}>
-                <Text font="caption" foregroundStyle="secondaryLabel">{group.namespace}</Text>
-                <Text>{group.tags.join(" · ")}</Text>
+              <VStack key={group.namespace} alignment="leading" spacing={4}>
+                <Text font="caption" foregroundStyle="secondaryLabel">{localizeTagNamespace(group.namespace)}</Text>
+                <Text>
+                  {group.tags.map(tag => {
+                    const translated = localizeCommonTag(group.namespace, tag)
+                    return translated ? `${translated}（${tag}）` : tag
+                  }).join(" · ")}
+                </Text>
               </VStack>
             )}
+            <Text font="caption2" foregroundStyle="secondaryLabel">常见标签已中文化；完整标签库后续接入 EhTagTranslation。</Text>
           </VStack>
         : null}
 
@@ -607,7 +561,7 @@ function GalleryDetailView({ summary }: { summary: GallerySummary }) {
               <Text font="caption" foregroundStyle="secondaryLabel">点击缩略图阅读</Text>
             </HStack>
             {detail.truncatedPreviewPages
-              ? <Text foregroundStyle="systemOrange" font="caption">画廊预览分页过多，第一版最多读取前 50 个预览分页。</Text>
+              ? <Text foregroundStyle="systemOrange" font="caption">预览分页较多，目前最多读取前 50 个预览分页。</Text>
               : null}
             <LazyVGrid
               columns={[{ size: { type: "adaptive", min: 112, max: 150 } }]}
@@ -679,11 +633,8 @@ function ReaderView({ pages, startIndex }: { pages: GalleryPageLink[]; startInde
           />
         : null}
       <ErrorText message={error} />
-      {!loading && !error && imageUrl
-        ? <Text font="caption2" foregroundStyle="secondaryLabel" lineLimit={2}>{imageUrl}</Text>
-        : null}
       {originalUrl
-        ? <Text font="caption2" foregroundStyle="secondaryLabel">检测到原图链接（后续加入原图切换/下载）</Text>
+        ? <Text font="caption2" foregroundStyle="secondaryLabel">检测到原图链接</Text>
         : null}
       <HStack spacing={18}>
         <Button
