@@ -1,0 +1,12 @@
+{
+  "time": "2026-08-22T10:29:57.843Z",
+  "scriptVersion": "0.2.9",
+  "stage": "gallery-search-filter",
+  "ok": true,
+  "request": {
+    "url": "https://e-hentai.org/tag/other:ai+generated",
+    "status": 0,
+    "statusText": ""
+  },
+  "notes": "items=25; category=all; tagPresent=true"
+}
