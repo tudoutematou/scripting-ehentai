@@ -1,12 +1,12 @@
 {
-  "time": "2026-08-22T23:08:17.652Z",
+  "time": "2026-08-22T23:09:49.806Z",
   "scriptVersion": "0.2.9",
-  "stage": "gallery-detail-core",
+  "stage": "app-v2-manual-operation",
   "ok": true,
   "request": {
-    "url": "https://e-hentai.org/g/4139223/67aa720bd3/",
-    "status": 200,
-    "statusText": "no error"
+    "url": "",
+    "status": 0,
+    "statusText": ""
   },
-  "notes": "coreMs=1382; previewPages=1; loadedImages=19"
+  "notes": "用户确认已在真机运行最新同步版本；仅记录操作完成状态，未采集页面内容、搜索关键词或完整 HTML。"
 }
