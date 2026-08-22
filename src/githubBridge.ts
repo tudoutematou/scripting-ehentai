@@ -108,14 +108,7 @@ function diagnosticEventPath(stage: string) {
 }
 
 async function putDiagnosticEvent(path: string, message: string, content: string) {
-  return GitHub.putContent({
-    owner: REPO.owner,
-    repo: REPO.repo,
-    branch: REPO.branch,
-    path,
-    message,
-    content,
-  })
+  return GitHub.putContent({ owner: REPO.owner, repo: REPO.repo, branch: REPO.branch, path, message, content })
 }
 
 async function listRemoteSource(relativeDirectory = ""): Promise<string[]> {
@@ -131,11 +124,8 @@ async function listRemoteSource(relativeDirectory = ""): Promise<string[]> {
   const files: string[] = []
   for (const entry of entries) {
     const relativePath = joinPath(relativeDirectory, String(entry.name || ""))
-    if (entry.type === "dir") {
-      files.push(...await listRemoteSource(relativePath))
-    } else if (entry.type === "file" && isBusinessSource(relativePath)) {
-      files.push(relativePath)
-    }
+    if (entry.type === "dir") files.push(...await listRemoteSource(relativePath))
+    else if (entry.type === "file" && isBusinessSource(relativePath)) files.push(relativePath)
   }
   return files
 }
@@ -157,9 +147,7 @@ async function localScriptVersion(): Promise<string> {
   try {
     const raw = await fileManager.readAsString(joinPath(scriptDirectory, "script.json"))
     return String(JSON.parse(raw)?.version || "0.0.0")
-  } catch {
-    return "0.0.0"
-  }
+  } catch { return "0.0.0" }
 }
 
 async function remoteScriptVersion(): Promise<string> {
@@ -173,9 +161,7 @@ async function remoteScriptVersion(): Promise<string> {
 }
 
 export async function ensureGitHubPermissions() {
-  if (!GitHub.isAvailable()) {
-    throw new Error("GitHub 不可用：请确认 Scripting PRO 已启用且已在设置中配置 GitHub Token。")
-  }
+  if (!GitHub.isAvailable()) throw new Error("GitHub 不可用：请确认 Scripting PRO 已启用且已在设置中配置 GitHub Token。")
   const requested = ["read_contents", "write_contents", "read_issues", "write_issues"] as const
   const allowed = await GitHub.requestPermissions([...requested])
   const missing = requested.filter(permission => !allowed.includes(permission))
@@ -190,27 +176,16 @@ export async function readSetupRules() {
 
 export async function reportDiagnostic(input: DiagnosticInput) {
   const payload = {
-    time: new Date().toISOString(),
-    scriptVersion: await localScriptVersion(),
-    stage: input.stage,
-    ok: input.ok,
+    time: new Date().toISOString(), scriptVersion: await localScriptVersion(), stage: input.stage, ok: input.ok,
     error: errorData(input.error),
-    request: {
-      url: safeRequestUrl(input.request?.url),
-      status: Number(input.request?.status || 0),
-      statusText: String(input.request?.statusText || ""),
-    },
+    request: { url: safeRequestUrl(input.request?.url), status: Number(input.request?.status || 0), statusText: String(input.request?.statusText || "") },
     notes: String(input.notes || ""),
   }
   const content = JSON.stringify(payload, null, 2)
   const task = diagnosticQueue.then(async () => {
     const message = `runtime: ${payload.stage} ${payload.ok ? "ok" : "failed"}`
     await putDiagnosticEvent(diagnosticEventPath(payload.stage), message, content)
-    try {
-      await putTextContent(DIAGNOSTIC_PATH, message, content)
-    } catch {
-      // latest 只是便捷镜像；事件文件才是联调权威记录。
-    }
+    try { await putTextContent(DIAGNOSTIC_PATH, message, content) } catch {}
   })
   diagnosticQueue = task.then(() => undefined, () => undefined)
   await task
@@ -219,19 +194,14 @@ export async function reportDiagnostic(input: DiagnosticInput) {
 
 export async function pushSourceToGitHub() {
   await ensureGitHubPermissions()
-  const [localVersion, remoteVersion] = await Promise.all([
-    localScriptVersion(),
-    remoteScriptVersion(),
-  ])
+  const [localVersion, remoteVersion] = await Promise.all([localScriptVersion(), remoteScriptVersion()])
   if (compareVersion(localVersion, remoteVersion) < 0) {
     throw new Error(`拒绝推送：本地版本 ${localVersion} 低于 GitHub ${remoteVersion}。请先“从 GitHub 拉取源码”，重新运行后再推送。`)
   }
-
   const files = await listLocalSource()
   for (const relativePath of files) {
     const content = await fileManager.readAsString(joinPath(scriptDirectory, relativePath))
-    const path = joinPath(SOURCE_ROOT, relativePath)
-    await putTextContent(path, `sync: ${relativePath}`, content)
+    await putTextContent(joinPath(SOURCE_ROOT, relativePath), `sync: ${relativePath}`, content)
   }
   return files
 }
@@ -239,12 +209,21 @@ export async function pushSourceToGitHub() {
 export async function pullSourceFromGitHub() {
   await ensureGitHubPermissions()
   const files = await listRemoteSource()
+
+  // Phase 1: download every source file before touching local files.
+  // A network/API failure here leaves the current local project completely intact.
+  const snapshots: Array<{ relativePath: string; text: string }> = []
   for (const relativePath of files) {
     const remote = await GitHub.getTextContent({ ...REPO, path: joinPath(SOURCE_ROOT, relativePath), ref: REPO.branch })
-    const localPath = joinPath(scriptDirectory, relativePath)
+    snapshots.push({ relativePath, text: String(remote.text || "") })
+  }
+
+  // Phase 2: only after a complete remote snapshot exists, update local files.
+  for (const snapshot of snapshots) {
+    const localPath = joinPath(scriptDirectory, snapshot.relativePath)
     const parent = localPath.split("/").slice(0, -1).join("/")
     if (parent) await fileManager.createDirectory(parent, true)
-    await fileManager.writeAsString(localPath, remote.text)
+    await fileManager.writeAsString(localPath, snapshot.text)
   }
-  return files
+  return snapshots.map(item => item.relativePath)
 }
