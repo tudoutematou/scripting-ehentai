@@ -148,9 +148,9 @@ async function writeStatus(input: Record<string, unknown>) {
 }
 
 function setBadge(text: string, background: string) {
-  let badge = document.getElementById("scripting-eh-login-bridge") as HTMLDivElement | null
-  if (!badge) {
-    badge = document.createElement("div")
+  const existing = document.getElementById("scripting-eh-login-bridge") as HTMLDivElement | null
+  const badge = existing || document.createElement("div")
+  if (!existing) {
     badge.id = "scripting-eh-login-bridge"
     Object.assign(badge.style, {
       position: "fixed",
