@@ -3,7 +3,7 @@ import { Script } from "scripting"
 const fileManager: any = (globalThis as any).FileManager
 const scriptDirectory: string = (Script as any).directory
 
-const REPO = { owner: "tudoutematou", repo: "scripting-ehentai", branch: "main" }
+const REPO = { owner: "tudoutematou", repo: "scripting-ehentai", branch: "feat/tourist-home-search-ui" }
 const SOURCE_ROOT = "src"
 const DIAGNOSTIC_PATH = "runtime/latest.json"
 const DIAGNOSTIC_EVENTS_ROOT = "runtime/events"
@@ -111,6 +111,7 @@ async function putDiagnosticEvent(path: string, message: string, content: string
   return GitHub.putContent({
     owner: REPO.owner,
     repo: REPO.repo,
+    branch: REPO.branch,
     path,
     message,
     content,
