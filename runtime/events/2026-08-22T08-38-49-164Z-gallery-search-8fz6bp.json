@@ -1,0 +1,12 @@
+{
+  "time": "2026-08-22T08:38:49.144Z",
+  "scriptVersion": "0.2.8",
+  "stage": "gallery-search",
+  "ok": true,
+  "request": {
+    "url": "https://e-hentai.org/?f_cats=991&f_search=%5Bredacted%5D",
+    "status": 0,
+    "statusText": ""
+  },
+  "notes": "items=25; category=imageset; quick=chinese; keywordPresent=false"
+}
