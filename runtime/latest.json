@@ -1,12 +1,17 @@
 {
-  "time": "2026-08-22T09:46:19.009Z",
-  "scriptVersion": "0.2.8",
-  "stage": "gallery-home",
-  "ok": true,
+  "time": "2026-08-22T09:50:42.334Z",
+  "scriptVersion": "0.2.9",
+  "stage": "app-v2-home-build",
+  "ok": false,
+  "error": {
+    "name": "RuntimeImportError",
+    "message": "appV2 HomeView 构建失败：tourist.createHomeSearchState 未导出",
+    "stack": "@\n@\nPromise@[native code]\n@\n@\n@\n@\nglobal code@"
+  },
   "request": {
-    "url": "https://e-hentai.org/",
+    "url": "",
     "status": 0,
     "statusText": ""
   },
-  "notes": "items=25; category=all; quick=none; keywordPresent=false"
+  "notes": "白屏已复现。index.tsx 已切换至 appV2；appV2.tsx 引用了 tourist.ts 未导出的 GallerySearchState、buildGallerySearchUrl、cloneSearchState、createHomeSearchState、createTagSearchState、searchRawQuery、searchTitle。运行时首个阻塞符号：createHomeSearchState is not a function。请求未发出。"
 }
