@@ -24,7 +24,7 @@ export type SearchPage = SearchExtractData & {
   url: string
 }
 
-export type GalleryDetail = ReturnType<typeof parseDetailHtml> & {
+export type GalleryDetail = Omit<ReturnType<typeof parseDetailHtml>, "pageLinks"> & {
   pageLinks: GalleryPageLink[]
   sourceUrl: string
   truncatedPreviewPages: boolean
