@@ -2,13 +2,13 @@
   "name": "ehentai-browser",
   "icon": "books.vertical.fill",
   "color": "#8B5CF6",
-  "version": "0.2.8",
+  "version": "0.2.9",
   "description": "E-Hentai / ExHentai gallery browser for Scripting.",
   "localizedNames": {
     "zh-Hans": "E-Hentai 浏览器"
   },
   "localizedDescriptions": {
-    "zh-Hans": "第二阶段：游客浏览 + Safari 官方登录桥 + 本机 Cookie 会话 + E/Ex 站点切换。"
+    "zh-Hans": "游客模式第二轮：标签搜索、组合筛选、详情首屏加速与中文标签缓存。"
   },
   "runInApp": true
 }
