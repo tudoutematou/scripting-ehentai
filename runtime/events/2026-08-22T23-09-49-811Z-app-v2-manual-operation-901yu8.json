@@ -1,0 +1,12 @@
+{
+  "time": "2026-08-22T23:09:49.806Z",
+  "scriptVersion": "0.2.9",
+  "stage": "app-v2-manual-operation",
+  "ok": true,
+  "request": {
+    "url": "",
+    "status": 0,
+    "statusText": ""
+  },
+  "notes": "用户确认已在真机运行最新同步版本；仅记录操作完成状态，未采集页面内容、搜索关键词或完整 HTML。"
+}
