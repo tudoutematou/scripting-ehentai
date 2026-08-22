@@ -1,0 +1,12 @@
+{
+  "time": "2026-08-22T23:08:51.578Z",
+  "scriptVersion": "0.2.9",
+  "stage": "gallery-search-filter",
+  "ok": true,
+  "request": {
+    "url": "https://e-hentai.org/tag/male:sole+male",
+    "status": 0,
+    "statusText": ""
+  },
+  "notes": "items=25; category=all; tagPresent=true"
+}
