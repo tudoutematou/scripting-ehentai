@@ -58,7 +58,6 @@ const PREVIEW_WIDTH = 96
 const PREVIEW_HEIGHT = 128
 
 function ErrorText({ message }: { message: string }) {
-  if (!message) return null
   return <Text foregroundStyle="systemRed" font="caption">{message}</Text>
 }
 
