@@ -1,148 +1,212 @@
-# CURRENT_TASK — 0.3 UI Foundation + SelfTest + AI Action Boundary
+# CURRENT_TASK — 0.4 Library / Favorites / History
 
-Branch: `feat/0.3-ui-foundation`
-Base: `5265e793f1c89542e9fe6e214833129ae304f411`
+Branch: `feat/0.4-library`
+Base: `ba192e16f04e7f834a2e0a1bdfe54edb5e470600`
 
-Read `AGENTS.md` first. Do not reread the full historical governance docs for this task.
+Read `AGENTS.md` first, then only the relevant `src/` files. Do not reread historical planning unless this task explicitly requires it.
+
+## Accepted baseline
+0.3 is accepted. Preserve these behaviors and regression checks:
+- Home / Search / Filter / Detail Core-first / background previews / Reader / Account;
+- image priority `reader-image > preview-thumbnail > home-thumbnail`;
+- typed `runEhAction()` with opaque short-lived `galleryRef`;
+- approved Scripting `AssistantTool` search path;
+- diagnostics and errors must not expose Cookie, full gallery/page URL, gallery token, search text, or full HTML;
+- current checks: SelfTest 8/8, Action Smoke PASS, AssistantTool Smoke PASS, Network SelfTest 9/9.
+
+Do not change 0.3 architecture simply to make this task look cleaner.
+
+## Reference behavior already confirmed
+Use EhViewer_CN_SXJ as behavior reference, not as code to port mechanically.
+
+Relevant reference files:
+- `ui/scene/gallery/list/FavoritesScene.kt`
+- `client/data/FavListUrlBuilder.java`
+- `client/parser/FavoritesParser.java`
+- `ui/scene/history/HistoryScene.java`
+- `dao/HistoryInfo.java`
+
+Reference findings:
+- cloud Favorites is the E-Hentai/ExHentai `favorites.php` list, with 10 remote favorite categories (0-9), category names/counts, pagination and favorite search;
+- favorite search uses `f_search` plus name/tag/note search flags;
+- Favorites gallery rows ultimately use the normal gallery/detail flow;
+- History is local data and opens the same Gallery Detail flow, not a separate detail implementation;
+- EhViewer history keeps gallery identity plus display metadata and visit time.
+
+Do not combine cloud Favorites and local History into one storage model.
 
 ## Goal
-Turn the current 0.2.9 prototype into a clean, maintainable app shell before adding the next large feature package.
+Deliver one coherent Library package with:
+1. read-only cloud Favorites browsing;
+2. local History;
+3. local Reading Progress / Continue Reading;
+4. a small Library UI entry that reuses existing Gallery Detail and Reader;
+5. read-only typed AI actions for the new data without exposing sensitive gallery identity.
 
-This package has three deliverables:
-1. UI foundation that looks like a coherent iOS/iPadOS app.
-2. A reusable self-test harness so normal regressions are caught by the Scripting Agent without repeatedly asking the user to test.
-3. A typed AI action boundary so future Scripting AI commands and manual UI use the same core functions.
+This is a foundation package. Do not add cloud favorite writes yet.
 
-## Preserve
-Do not regress existing working behavior:
-- Home / search / category / language filters;
-- raw-tag search and translated tags;
-- Detail Core-first rendering and background previews;
-- Reader prev/next and current controlled image loading;
-- manual Cookie login, Keychain, refresh, E/Ex state, logout;
-- image request priority `reader-image > preview-thumbnail > home-thumbnail`;
-- diagnostics privacy.
+## A. Cloud Favorites — read only
+Add a focused Favorites core on top of the existing account/network/parser code.
 
-## A. UI foundation
-Refactor presentation only as much as needed to stop `appV2.tsx` becoming the permanent monolith.
+Requirements:
+- reuse `getBaseUrl()`, `getCookieHeader()` and the existing bounded HTML request path; do not create a second HTTP stack;
+- Favorites root is the active E/Ex site `favorites.php`;
+- support all remote favorites plus category 0-9;
+- parse and expose category names and counts from the favorites page;
+- parse gallery items using the existing gallery-list/search parser where structurally compatible; do not duplicate the normal gallery-list parser;
+- support favorites pagination using returned hrefs;
+- support optional favorite search using the server behavior represented by `FavListUrlBuilder` (`f_search`, name/tag/note flags);
+- detect login-required responses and return a sanitized user-facing error;
+- Favorites UI must open the existing `GalleryDetailView`, not another detail screen.
 
-Create/reuse small presentation files such as:
-- `src/scenes/HomeScene.tsx`
-- `src/scenes/SearchScene.tsx`
-- `src/scenes/GalleryDetailScene.tsx`
-- `src/scenes/ReaderScene.tsx`
-- `src/scenes/AccountScene.tsx`
-- `src/components/GalleryCard.tsx`
-- `src/components/TagChip.tsx`
-- `src/components/StateView.tsx`
-
-Exact filenames may differ if a smaller split is cleaner. Do not rewrite parsers/network/account just to fit the folders.
-
-Visual target:
-- native iOS grouped/list visual language;
-- consistent spacing and typography;
-- gallery rows/cards with thumbnail, title, category and metadata hierarchy;
-- clear Search and Filter entry points;
-- Detail header with cover/title/metadata/tags, then preview section;
-- Reader controls visually separated from content;
-- Account screen uses the same visual system;
-- unified Loading / Empty / Error presentation;
-- iPad should not look broken at wider widths.
-
-Do not chase pixel-perfect styling. Stop when it looks like one coherent app instead of a development demo.
-
-Use only Scripting-supported UI props verified by current typings/runtime. Do not add guessed modifiers.
-
-## B. Self-test harness
-Add a developer-only test entry point, preferably `src/dev/selfTest.ts`.
-
-It should run core checks without simulated UI taps and return a compact structured result:
-
+Suggested public shape; exact names may differ if existing types make a smaller API:
 ```ts
-type SelfTestResult = {
-  name: string
-  ok: boolean
-  durationMs: number
-  detail?: string
+type FavoriteCategory = { index: number; name: string; count: number }
+type FavoritesPage = {
+  categories: FavoriteCategory[]
+  items: GallerySummary[]
+  resultCount: string
+  prevHref: string
+  nextHref: string
 }
 ```
 
-Cover at least:
-- account.local-state;
-- search.url-builder;
-- gallery.list parse/fetch path where safe;
-- category/language state building;
-- tag search state;
-- gallery.detail core parse/fetch path;
-- reader image-page resolve path;
-- diagnostics sanitizer invariants.
+Parser-only logic should live outside the UI and have a fixture test.
 
-Use fixtures for parser-only tests when possible. Network checks must be bounded by timeout and must not log sensitive URLs/query/Cookies/tokens.
+## B. Local History + Reading Progress
+Implement a small local persistence module. First inspect current Scripting typings/docs for the supported persistent file/KV APIs and reuse an existing project mechanism if suitable. Do not add SQLite, ORM, state-management or storage dependencies for this package.
 
-Expose one function such as `runSelfTests()` that the Agent can call after future feature work. A failed test should identify the failing subsystem, not dump sensitive payloads.
+Store enough internal identity to reopen the gallery without depending on an in-memory `galleryRef`. Prefer an internal identity such as `gid + token` parsed from an already validated E/Ex gallery URL rather than persisting arbitrary full URLs.
 
-This harness is evidence, not a substitute for rare human-only visual/gesture acceptance.
+The token may exist only in the local persistence/internal core required to reopen a gallery. It must never appear in:
+- UI text;
+- logs or diagnostics;
+- exceptions returned to the user;
+- `runEhAction()` results;
+- AssistantTool output;
+- committed fixtures.
 
-## C. AI action boundary
-Create a typed action dispatcher, preferably under `src/agent/`.
-
-Minimum initial actions must use existing core functions directly:
-
+History record should contain only the useful minimum, for example:
 ```ts
-type EhAction =
-  | { type: "account.status" }
-  | { type: "search"; query: string; category?: string; language?: string }
-  | { type: "gallery.detail"; url: string }
+type HistoryRecordV1 = {
+  gid: string
+  token: string // internal persistence only
+  title: string
+  titleJpn?: string
+  thumb?: string
+  category?: string
+  uploader?: string
+  pages?: number
+  lastPageIndex?: number
+  viewedAt: number
+  updatedAt: number
+}
 ```
 
-Provide a single entry such as:
+Behavior:
+- dedupe/update by stable gallery identity;
+- successful Gallery Detail visit creates/refreshes History;
+- opening Reader records `lastPageIndex`;
+- changing Reader page updates progress without blocking image navigation;
+- Detail shows a clear `继续阅读` action when saved progress is valid;
+- History is newest-first;
+- allow deleting one history item;
+- allow clearing all history only behind an explicit confirmation UI;
+- storage parse/corruption failure must fail safely and preserve a recoverable path where possible; do not silently overwrite unreadable real data during startup;
+- tests must use an injected/temp store and must never clear or mutate the user's real History.
 
-```ts
-runEhAction(action: EhAction): Promise<EhActionResult>
-```
+Do not implement cross-device sync in 0.4.
+
+## C. Library UI
+Add a small Library entry from Home with two destinations:
+- 收藏 Favorites
+- 历史 History / Continue Reading
+
+Keep new screens out of `GalleryFlow.tsx` as much as practical. Prefer files such as:
+- `src/library.ts` or `src/libraryStore.ts`
+- `src/favorites.ts`
+- `src/favoritesHtml.ts`
+- `src/LibraryScene.tsx`
+
+Exact filenames are not important.
 
 Rules:
-- manual UI and AI actions call the same underlying search/detail/account functions;
-- no simulated taps for operations that have direct functions;
-- return structured typed data, not rendered UI text;
-- sanitize errors;
-- never expose raw Cookie values;
-- design the dispatcher so later actions can add Favorites, History, Downloads, etc. without replacing it.
+- do not move all existing scenes merely for folder aesthetics;
+- extract only the smallest shared presentation piece necessary to avoid duplicating gallery rows;
+- reuse `GalleryDetailView` and `ReaderView`;
+- use existing `StateView` patterns for loading/empty/error/retry;
+- wide/iPad layout must remain usable;
+- no fake local Favorite category presented as if it were an E-Hentai cloud category.
 
-Check current Scripting AI/Agent docs/typings for the supported way to expose/call script capabilities. If a supported tool/command registration mechanism exists, wire the minimum `search` action end-to-end. If no stable registration API exists, keep the typed dispatcher working and document the exact missing platform hook; do not invent an API.
+## D. Typed AI boundary — read only
+Extend `EhAction` without weakening the opaque reference boundary.
 
-## D. Agent-owned verification
-During this package, fix ordinary problems yourself and keep going.
+Minimum useful actions:
+```ts
+| { type: "favorites.list"; category?: number; query?: string }
+| { type: "history.list"; limit?: number }
+```
 
-Before uploading:
-- run Scripting diagnostics;
-- run `runSelfTests()` and retain a compact PASS/FAIL summary;
-- run the app in the real Scripting environment available to you;
-- exercise Home -> Search -> Detail -> Reader and Account at least once;
-- check iPhone-size and iPad/wide layout if the runtime allows it;
-- verify no sensitive diagnostics;
-- fix routine failures yourself, then rerun the affected checks.
+Requirements:
+- results return sanitized display fields plus short-lived `galleryRef` where follow-up detail is needed;
+- no `gid`, token, full URL or local storage path in action results;
+- reuse the same Favorites/History core called by manual UI;
+- clamp unreasonable limits;
+- malformed category/query/limit returns a typed validation failure;
+- keep the existing AssistantTool search registration working;
+- do NOT add cloud favorite write/delete actions or automatic mutations in this package;
+- a second user-facing AssistantTool registration is not required unless current Scripting API makes it trivial and clearly useful. Typed dispatcher support is required.
 
-Do NOT ask the user to retest after every edit.
+## E. Tests and verification
+Extend the existing harness instead of creating competing test systems.
+
+Add coverage for at least:
+- favorites URL/category state builder;
+- favorites HTML fixture: 10 category names/counts + gallery list + pagination;
+- favorites login-required/error sanitization;
+- History create/update/dedupe/sort;
+- Reading Progress update and resume index validation;
+- storage malformed-data behavior using temp/injected storage;
+- `favorites.list` and `history.list` action output contains no URL/token/gid leakage;
+- existing search `galleryRef -> gallery.detail` behavior still works.
+
+Before upload, run and fix until green:
+- existing `src/runSelfTests.ts` plus new tests;
+- `src/runActionSmoke.ts`;
+- `src/runAssistantToolSmoke.ts`;
+- `src/runNetworkSelfTest.ts`;
+- any new focused Favorites/Library smoke test you add;
+- `tsconfig.test.json` must include all new non-runtime entry points.
+
+Runtime exercise at least once:
+1. Home -> Library -> Favorites -> category -> gallery -> Detail;
+2. Home/Search -> Detail -> Reader -> change page -> back -> Continue Reading;
+3. Home -> Library -> History -> reopen gallery;
+4. delete one History item and verify persistence;
+5. do not clear the user's real History as part of automated verification.
+
+If the account is logged out, Favorites network verification may report a clear authenticated-skip/login-required result; it must not fabricate PASS data.
 
 ## Out of scope
-Do not implement in this package:
-- Favorites UI;
-- History / Reading Progress;
+Do not implement in 0.4:
+- add/move/delete cloud favorites;
+- favorite notes editing;
+- local Favorites clone unless it is strictly necessary for the cloud Favorites architecture (normally it is not);
 - Downloads;
-- Comments / Rating;
+- Comments / Rating writes;
 - Watched / My Tags;
 - Torrent / Archive;
+- History sync/export/import;
 - full parser rewrite;
 - new state-management framework;
 - new login architecture;
 - writes to `main`.
 
 ## Completion
-When A+B+C are complete and your own integration checks are satisfactory:
-1. upload logical commits to `feat/0.3-ui-foundation` using Scripting native GitHub API;
-2. create one Draft PR;
-3. report once with completed features, self-test summary, runtime checks, changed files/commit SHA, remaining issues, and at most 2-5 human-only acceptance items;
-4. stop for technical review.
+Work continuously on `feat/0.4-library`: inspect -> implement -> self-test -> runtime check -> fix routine failures -> rerun -> commit logical package.
 
-Do not start the Library package until this task is accepted.
+When complete:
+1. push only logical commits to `feat/0.4-library`;
+2. if PR #22 is still unmerged, create one Draft PR targeting `feat/0.3-ui-foundation`; if #22 has been merged, target the branch that now contains the accepted 0.3 baseline;
+3. report completed features, test/runtime results, changed files, final commit SHA, known issues and at most 2-5 human-only acceptance items;
+4. stop for technical review. Do not begin Downloads or the next feature package.
