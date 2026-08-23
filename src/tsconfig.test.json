@@ -28,6 +28,8 @@
     "runSelfTests.ts",
     "ehAction.ts",
     "runActionSmoke.ts",
-    "runNetworkSelfTest.ts"
+    "runNetworkSelfTest.ts",
+    "runAssistantToolSmoke.ts",
+    "../assistant_tool.tsx"
   ]
 }
