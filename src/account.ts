@@ -185,6 +185,28 @@ function hasAuthCookies(cookies: StoredCookie[]): boolean {
   return names.has("ipb_member_id") && names.has("ipb_pass_hash")
 }
 
+export function importCookiesFromText(value: string): AccountStatus {
+  const text = String(value || "").trim()
+  if (!text) throw new Error("Cookie 内容为空。")
+
+  let cookies: StoredCookie[]
+  try {
+    const parsed = JSON.parse(text)
+    if (!Array.isArray(parsed)) throw new Error("不是数组")
+    cookies = sanitizeCookies(parsed)
+  } catch {
+    const pairs = text.split(/;\s*/).map(part => {
+      const index = part.indexOf("=")
+      return index > 0 ? { name: part.slice(0, index).trim(), value: part.slice(index + 1), domain: "e-hentai.org", path: "/", secure: true } : null
+    }).filter(Boolean)
+    cookies = sanitizeCookies(pairs)
+  }
+
+  saveCookies(cookies)
+  setActiveSite("e")
+  return getAccountStatus()
+}
+
 export function loadCookies(): StoredCookie[] {
   try {
     const raw = keychain().get(COOKIE_KEY)
@@ -518,12 +540,11 @@ export async function refreshAccountStatus(): Promise<AccountStatus> {
   if (!base.loggedIn) return base
   const eHentaiReachable = await validateSite("e")
   const exAvailable = await validateSite("ex")
-  if (!exAvailable && base.site === "ex") setActiveSite("e")
   const status = {
     ...base,
-    // 本地 Keychain 中的两个核心 Cookie 是唯一的登录判据；网络探测绝不覆盖它。
+    // 本地 Keychain 中的两个核心 Cookie 是唯一的登录判据；网络探测既不覆盖它，也不修改用户选择的站点。
     loggedIn: true,
-    site: exAvailable ? getActiveSite() : "e",
+    site: base.site,
     eHentaiReachable,
     exAvailable,
   }
