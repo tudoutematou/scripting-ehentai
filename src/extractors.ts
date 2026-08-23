@@ -19,9 +19,14 @@ export type SearchExtractData = {
   error: string
 }
 
+export type GalleryTag = {
+  name: string
+  searchUrl: string
+}
+
 export type TagGroup = {
   namespace: string
-  tags: string[]
+  tags: GalleryTag[]
 }
 
 export type PreviewPageLink = {
@@ -68,25 +73,19 @@ const parseRef = (href) => {
 const root = document.querySelector(".itg")
 let rows = []
 if (root) {
-  if (root.tagName.toLowerCase() === "table") {
-    rows = Array.from(root.querySelectorAll(":scope > tbody > tr"))
-  } else {
-    rows = Array.from(root.children)
-  }
+  if (root.tagName.toLowerCase() === "table") rows = Array.from(root.querySelectorAll(":scope > tbody > tr"))
+  else rows = Array.from(root.children)
 }
 const items = []
 for (const row of rows) {
   const nameNode = row.querySelector(".glname")
   if (!nameNode) continue
   let anchor = nameNode.querySelector('a[href*="/g/"]')
-  if (!anchor && nameNode.parentElement && nameNode.parentElement.matches('a[href*="/g/"]')) {
-    anchor = nameNode.parentElement
-  }
+  if (!anchor && nameNode.parentElement && nameNode.parentElement.matches('a[href*="/g/"]')) anchor = nameNode.parentElement
   if (!anchor) continue
   const url = abs(anchor.getAttribute("href"))
   const ref = parseRef(url)
   if (!ref) continue
-
   const thumbNode = row.querySelector(".glthumb img, .gl1e img, .gl3t img")
   const thumb = abs(thumbNode && (thumbNode.getAttribute("data-src") || thumbNode.getAttribute("src")))
   const categoryNode = row.querySelector(".cn, .cs")
@@ -94,38 +93,18 @@ for (const row of rows) {
   const rowText = clean(row.textContent)
   const pagesMatch = rowText.match(/(\d[\d,]*)\s+pages?/i)
   const posted = clean((document.getElementById("posted_" + ref.gid) || {}).textContent)
-
   let titleNode = nameNode
   while (titleNode && titleNode.firstElementChild) titleNode = titleNode.firstElementChild
   const title = clean((titleNode && titleNode.textContent) || nameNode.textContent)
-
-  items.push({
-    id: ref.gid + ":" + ref.token,
-    gid: ref.gid,
-    token: ref.token,
-    title,
-    category: clean(categoryNode && categoryNode.textContent),
-    thumb,
-    posted,
-    uploader: clean(uploaderNode && uploaderNode.textContent),
-    pages: pagesMatch ? Number(pagesMatch[1].replace(/,/g, "")) : 0,
-    url,
-  })
+  items.push({ id: ref.gid + ":" + ref.token, gid: ref.gid, token: ref.token, title, category: clean(categoryNode && categoryNode.textContent), thumb, posted, uploader: clean(uploaderNode && uploaderNode.textContent), pages: pagesMatch ? Number(pagesMatch[1].replace(/,/g, "")) : 0, url })
 }
-
 const pagerAnchors = Array.from(document.querySelectorAll(".ptt a"))
 const oldPrev = pagerAnchors.find(a => ["<", "‹", "prev", "previous"].includes(clean(a.textContent).toLowerCase()))
 const oldNext = pagerAnchors.find(a => [">", "›", "next"].includes(clean(a.textContent).toLowerCase()))
 const searchText = clean((document.querySelector(".searchtext") || {}).textContent)
 const resultMatch = searchText.match(/Found\s+(.+?)\s+results/i)
 const bodyText = clean(document.body && document.body.textContent)
-return {
-  items,
-  resultCount: resultMatch ? resultMatch[1] : "",
-  prevHref: abs((document.querySelector("#uprev") || oldPrev || {}).getAttribute && (document.querySelector("#uprev") || oldPrev || {}).getAttribute("href")),
-  nextHref: abs((document.querySelector("#unext") || oldNext || {}).getAttribute && (document.querySelector("#unext") || oldNext || {}).getAttribute("href")),
-  error: /No hits found/i.test(bodyText) ? "" : (items.length === 0 ? "没有解析到画廊列表，页面结构可能已变化。" : ""),
-}
+return { items, resultCount: resultMatch ? resultMatch[1] : "", prevHref: abs((document.querySelector("#uprev") || oldPrev || {}).getAttribute && (document.querySelector("#uprev") || oldPrev || {}).getAttribute("href")), nextHref: abs((document.querySelector("#unext") || oldNext || {}).getAttribute && (document.querySelector("#unext") || oldNext || {}).getAttribute("href")), error: /No hits found/i.test(bodyText) ? "" : (items.length === 0 ? "没有解析到画廊列表，页面结构可能已变化。" : "") }
 `
 
 const PAGE_LINK_EXTRACTOR_BODY = String.raw`
@@ -148,119 +127,55 @@ for (let i = 0; i < anchors.length; i++) {
   const widthMatch = style.match(/(?:^|;)\s*width\s*:\s*(\d+)px/i)
   const heightMatch = style.match(/(?:^|;)\s*height\s*:\s*(\d+)px/i)
   const posMatch = style.match(/background(?:-position)?\s*:[^;]*?(-?\d+)px\s+(-?\d+)px/i) || style.match(/\)\s*(-?\d+)px\s+(-?\d+)px/i)
-  pageLinks.push({
-    index: m ? Number(m[1].replace(/,/g, "")) : 0,
-    pageUrl,
-    thumb,
-    thumbX: posMatch ? Math.abs(Number(posMatch[1])) : 0,
-    thumbY: posMatch ? Math.abs(Number(posMatch[2])) : 0,
-    thumbWidth: widthMatch ? Number(widthMatch[1]) : 0,
-    thumbHeight: heightMatch ? Number(heightMatch[1]) : 0,
-  })
+  pageLinks.push({ index: m ? Number(m[1].replace(/,/g, "")) : 0, pageUrl, thumb, thumbX: posMatch ? Math.abs(Number(posMatch[1])) : 0, thumbY: posMatch ? Math.abs(Number(posMatch[2])) : 0, thumbWidth: widthMatch ? Number(widthMatch[1]) : 0, thumbHeight: heightMatch ? Number(heightMatch[1]) : 0 })
 }
 `
 
 export const DETAIL_EXTRACT_SCRIPT = String.raw`
 const clean = (value) => (value || "").replace(/\s+/g, " ").trim()
-const abs = (value) => {
-  if (!value) return ""
-  try { return new URL(value, location.href).href } catch { return String(value) }
-}
-const cssUrl = (style) => {
-  const m = String(style || "").match(/url\((['"]?)(.*?)\1\)/i)
-  return m ? abs(m[2]) : ""
-}
+const abs = (value) => { if (!value) return ""; try { return new URL(value, location.href).href } catch { return String(value) } }
+const cssUrl = (style) => { const m = String(style || "").match(/url\((['"]?)(.*?)\1\)/i); return m ? abs(m[2]) : "" }
 const bodyText = clean(document.body && document.body.textContent)
 let pageError = ""
 if (/This gallery is unavailable/i.test(bodyText)) pageError = "该画廊不可用。"
 else if (/pining for the fjords/i.test(bodyText)) pageError = "该画廊已被移除。"
 else if (/And if you choose to ignore this warning/i.test(bodyText)) pageError = "该画廊需要先在网页端确认警告。"
-
 const metadata = {}
-for (const tr of Array.from(document.querySelectorAll("#gdd tr"))) {
-  const cells = tr.querySelectorAll("td")
-  if (cells.length < 2) continue
-  const key = clean(cells[0].textContent).replace(/:$/, "")
-  const value = clean(cells[1].textContent)
-  if (key && value) metadata[key] = value
-}
+for (const tr of Array.from(document.querySelectorAll("#gdd tr"))) { const cells = tr.querySelectorAll("td"); if (cells.length < 2) continue; const key = clean(cells[0].textContent).replace(/:$/, ""); const value = clean(cells[1].textContent); if (key && value) metadata[key] = value }
 const tags = []
 for (const tr of Array.from(document.querySelectorAll("#taglist tr"))) {
   const cells = tr.querySelectorAll("td")
   if (cells.length < 2) continue
   const namespace = clean(cells[0].textContent).replace(/:$/, "")
-  const values = Array.from(cells[1].querySelectorAll("a"))
-    .map(a => clean(a.textContent).split("|")[0].trim())
-    .filter(Boolean)
+  const values = Array.from(cells[1].querySelectorAll("a")).map(a => ({ name: clean(a.textContent).split("|")[0].trim(), searchUrl: abs(a.getAttribute("href")) })).filter(tag => tag.name)
   if (namespace && values.length) tags.push({ namespace, tags: values })
 }
 const ratingLabel = clean((document.querySelector("#rating_label") || {}).textContent)
 const ratingMatch = ratingLabel.match(/([0-9]+(?:\.[0-9]+)?)/)
 const ratingCountText = clean((document.querySelector("#rating_count") || {}).textContent).replace(/,/g, "")
-
 const ptt = document.querySelector(".ptt")
 let previewPages = 1
-if (ptt) {
-  const nums = Array.from(ptt.querySelectorAll("td, a"))
-    .map(el => Number(clean(el.textContent).replace(/,/g, "")))
-    .filter(n => Number.isFinite(n) && n > 0)
-  if (nums.length) previewPages = Math.max(...nums)
-}
-
+if (ptt) { const nums = Array.from(ptt.querySelectorAll("td, a")).map(el => Number(clean(el.textContent).replace(/,/g, ""))).filter(n => Number.isFinite(n) && n > 0); if (nums.length) previewPages = Math.max(...nums) }
 ${PAGE_LINK_EXTRACTOR_BODY}
-
 const coverContainer = document.querySelector("#gd1")
 const coverStyleNode = coverContainer && (coverContainer.firstElementChild || coverContainer)
-return {
-  title: clean((document.querySelector("#gn") || {}).textContent),
-  titleJpn: clean((document.querySelector("#gj") || {}).textContent),
-  cover: cssUrl(coverStyleNode && coverStyleNode.getAttribute("style")),
-  category: clean((document.querySelector("#gdc .cn, #gdc .cs") || {}).textContent),
-  uploader: clean((document.querySelector("#gdn") || {}).textContent),
-  rating: ratingMatch ? Number(ratingMatch[1]) : null,
-  ratingCount: Number(ratingCountText) || 0,
-  metadata,
-  tags,
-  previewPages,
-  pageLinks,
-  error: pageError || (!document.querySelector("#gn") ? "没有识别到画廊详情，页面结构可能已变化。" : ""),
-}
+return { title: clean((document.querySelector("#gn") || {}).textContent), titleJpn: clean((document.querySelector("#gj") || {}).textContent), cover: cssUrl(coverStyleNode && coverStyleNode.getAttribute("style")), category: clean((document.querySelector("#gdc .cn, #gdc .cs") || {}).textContent), uploader: clean((document.querySelector("#gdn") || {}).textContent), rating: ratingMatch ? Number(ratingMatch[1]) : null, ratingCount: Number(ratingCountText) || 0, metadata, tags, previewPages, pageLinks, error: pageError || (!document.querySelector("#gn") ? "没有识别到画廊详情，页面结构可能已变化。" : "") }
 `
 
 export const PREVIEW_EXTRACT_SCRIPT = String.raw`
-const abs = (value) => {
-  if (!value) return ""
-  try { return new URL(value, location.href).href } catch { return String(value) }
-}
-const cssUrl = (style) => {
-  const m = String(style || "").match(/url\((['"]?)(.*?)\1\)/i)
-  return m ? abs(m[2]) : ""
-}
+const abs = (value) => { if (!value) return ""; try { return new URL(value, location.href).href } catch { return String(value) } }
+const cssUrl = (style) => { const m = String(style || "").match(/url\((['"]?)(.*?)\1\)/i); return m ? abs(m[2]) : "" }
 ${PAGE_LINK_EXTRACTOR_BODY}
 return { pageLinks }
 `
 
 export const PAGE_EXTRACT_SCRIPT = String.raw`
-const abs = (value) => {
-  if (!value) return ""
-  try { return new URL(value, location.href).href } catch { return String(value) }
-}
+const abs = (value) => { if (!value) return ""; try { return new URL(value, location.href).href } catch { return String(value) } }
 const image = document.querySelector("#img") || document.querySelector('img[src][style]')
 let originalUrl = ""
 const originalAnchor = document.querySelector('a[href*="fullimg"]')
 if (originalAnchor) originalUrl = abs(originalAnchor.getAttribute("href"))
-if (!originalUrl) {
-  const candidates = Array.from(document.querySelectorAll("a[onclick]"))
-  for (const a of candidates) {
-    const onclick = a.getAttribute("onclick") || ""
-    const m = onclick.match(/prompt\([^,]+,\s*['"]([^'"]+)['"]\)/i)
-    if (m) { originalUrl = abs(m[1]); break }
-  }
-}
+if (!originalUrl) { const candidates = Array.from(document.querySelectorAll("a[onclick]")); for (const a of candidates) { const onclick = a.getAttribute("onclick") || ""; const m = onclick.match(/prompt\([^,]+,\s*['"]([^'"]+)['"]\)/i); if (m) { originalUrl = abs(m[1]); break } } }
 const imageUrl = abs(image && image.getAttribute("src"))
-return {
-  imageUrl,
-  originalUrl,
-  error: imageUrl ? "" : "没有解析到图片地址，图片页结构可能已变化。",
-}
+return { imageUrl, originalUrl, error: imageUrl ? "" : "没有解析到图片地址，图片页结构可能已变化。" }
 `
