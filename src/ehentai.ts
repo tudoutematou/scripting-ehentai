@@ -5,16 +5,13 @@ import { parseSearchHtml } from "./searchHtml"
 import { parseDetailHtml, parsePreviewPageHtml } from "./detailHtml"
 import { parseImagePageHtml } from "./pageHtml"
 import { reportDiagnostic } from "./githubBridge"
-import { getAccountStatus, getBaseUrl, getCookieHeader } from "./account"
-import { buildGallerySearchUrl, createHomeSearchState, type GalleryCategoryKey, type QuickFilterKey } from "./tourist"
+import { getBaseUrl, getCookieHeader } from "./account"
 
 export type { GalleryPageLink, GallerySummary }
 export type SearchPage = SearchExtractData & { url: string }
 export type GalleryDetail = Omit<ReturnType<typeof parseDetailHtml>, "pageLinks"> & { pageLinks: GalleryPageLink[]; sourceUrl: string; truncatedPreviewPages: boolean }
 export type PreviewLoadResult = { pageLinks: GalleryPageLink[]; failedPreviewPages: number[]; elapsedMs: number }
 export type ResolvedImagePage = PageExtractData & { pageUrl: string }
-export type EhAction = { type: "account.status" } | { type: "search"; query: string; category?: GalleryCategoryKey; language?: QuickFilterKey } | { type: "gallery.detail"; url: string }
-export type EhActionResult = { ok: true; type: "account.status"; account: ReturnType<typeof getAccountStatus> } | { ok: true; type: "search"; resultCount: string; items: Array<{ title: string; category: string; pages: number; uploader: string }> } | { ok: true; type: "gallery.detail"; detail: { title: string; titleJpn: string; category: string; uploader: string; rating: number | null; ratingCount: number; previewPages: number; pageCount: number; tags: Array<{ namespace: string; names: string[] }> } } | { ok: false; code: "INVALID_ACTION" | "INVALID_URL" | "REQUEST_FAILED"; stage: "validate" | "core"; message: string }
 
 const MAX_PREVIEW_LIST_PAGES = 50
 const detailCoreCache = new Map<string, GalleryDetail>()
@@ -78,18 +75,6 @@ export async function loadGalleryDetail(url: string): Promise<GalleryDetail> { c
 
 export async function resolveImagePage(pageUrl: string): Promise<ResolvedImagePage> {
   try { const { html, finalUrl, response } = await fetchHtml(pageUrl, "image-page"); let parsed: PageExtractData; try { parsed = parseImagePageHtml(html, finalUrl) } catch (error) { throw stageError("image-page.parse", error) }; if (parsed.error) throw httpError(parsed.error, response, finalUrl); const resolved = { ...parsed, pageUrl: finalUrl }; await reportSafely({ stage: "gallery-image-page", ok: true, request: { url: finalUrl, status: Number(response?.status || 0), statusText: String(response?.statusText || "") }, notes: `imageUrl=${resolved.imageUrl ? "yes" : "no"}; originalUrl=${resolved.originalUrl ? "yes" : "no"}` }); return resolved } catch (error) { const value = error as any; await reportSafely({ stage: "gallery-image-page", ok: false, error, request: { url: String(value?.url || pageUrl), status: Number(value?.status || 0), statusText: String(value?.statusText || "") } }); throw error }
-}
-
-function isSafeGalleryUrl(value: string): boolean { try { const url = new URL(value); return url.protocol === "https:" && (url.hostname === "e-hentai.org" || url.hostname === "exhentai.org") && /^\/g\/\d+\/[a-f0-9]+\/?$/i.test(url.pathname) } catch { return false } }
-function actionFailure(code: "INVALID_ACTION" | "INVALID_URL" | "REQUEST_FAILED", stage: "validate" | "core", message: string): EhActionResult { return { ok: false, code, stage, message } }
-/** Typed AI boundary: only calls existing core use-cases and never returns URLs, tokens, images, or cookies. */
-export async function runEhAction(action: EhAction): Promise<EhActionResult> {
-  try {
-    if (action.type === "account.status") return { ok: true, type: action.type, account: getAccountStatus() }
-    if (action.type === "search") { const query = String(action.query || "").trim(); if (!query) return actionFailure("INVALID_ACTION", "validate", "搜索词不能为空。"); const page = await searchGalleries("", buildGallerySearchUrl(getBaseUrl(), createHomeSearchState(query, action.category || "all", action.language || "none"))); return { ok: true, type: action.type, resultCount: page.resultCount, items: page.items.slice(0,20).map(item => ({ title:item.title, category:item.category, pages:item.pages, uploader:item.uploader })) } }
-    if (action.type === "gallery.detail") { if (!isSafeGalleryUrl(action.url)) return actionFailure("INVALID_URL", "validate", "仅允许 E-Hentai 或 ExHentai 的画廊详情地址。"); const detail = await loadGalleryDetailCore(action.url); return { ok:true, type:action.type, detail:{ title:detail.title, titleJpn:detail.titleJpn, category:detail.category, uploader:detail.uploader, rating:detail.rating, ratingCount:detail.ratingCount, previewPages:detail.previewPages, pageCount:detail.pageLinks.length, tags:detail.tags.map(group=>({namespace:group.namespace,names:group.tags.map(tag=>tag.name)})) } } }
-    return actionFailure("INVALID_ACTION", "validate", "不支持的操作。")
-  } catch { return actionFailure("REQUEST_FAILED", "core", "请求未完成，请检查登录状态或网络后重试。") }
 }
 
 export async function fetchPageImage(imageUrl: string, referer: string): Promise<UIImage> {
