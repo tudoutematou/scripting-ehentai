@@ -22,9 +22,11 @@
     "searchHtml.ts",
     "tagTranslation.ts",
     "tourist.ts",
-    "agent/**/*.ts",
-    "dev/**/*.ts",
-    "components/**/*.tsx",
-    "scenes/**/*.tsx"
+    "StateView.tsx",
+    "GalleryFlow.tsx",
+    "selfTest.ts",
+    "runSelfTests.ts",
+    "ehAction.ts",
+    "runActionSmoke.ts"
   ]
 }
