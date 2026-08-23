@@ -26,7 +26,7 @@ async function reportSafely(input: Parameters<typeof reportDiagnostic>[0]) { try
 const HTML_REQUEST_TIMEOUT_MS = 20_000
 
 function requestOptions(url: string): Record<string, any> { const cookie = getCookieHeader(url); return { ...(cookie ? { headers: { Cookie: cookie } } : {}), signal: AbortSignal.timeout(HTML_REQUEST_TIMEOUT_MS) } }
-async function fetchHtml(url: string, stagePrefix: string): Promise<{ html: string; finalUrl: string; response: Response }> {
+export async function fetchHtml(url: string, stagePrefix: string): Promise<{ html: string; finalUrl: string; response: Response }> {
   let response: Response; try { response = await fetch(url, requestOptions(url)) } catch (error) { throw stageError(`${stagePrefix}.fetch`, error) }
   const finalUrl = String(response?.url || url); const status = Number(response?.status || 0); const statusText = String(response?.statusText || "")
   let html = ""; try { html = await response.text() } catch (error) { throw stageError(`${stagePrefix}.response.text`, error) }

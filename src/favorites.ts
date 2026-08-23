@@ -1,76 +1,16 @@
 import { GallerySummary } from "./extractors"
 import { parseSearchHtml } from "./searchHtml"
-import { getBaseUrl, getCookieHeader, getAccountStatus } from "./account"
+import { fetchHtml } from "./ehentai"
+import { getBaseUrl, getAccountStatus } from "./account"
 import { reportDiagnostic } from "./githubBridge"
 
-export type FavoriteCategory = { slot: number; name: string; count: number }
-export type FavoritesPage = {
-  categories: FavoriteCategory[]
-  items: GallerySummary[]
-  prevHref: string
-  nextHref: string
-  url: string
-}
-
-function favoritesUrl(category = "all", page = 0): string {
-  const url = new URL("favorites.php", getBaseUrl())
-  url.searchParams.set("favcat", category)
-  if (page > 0) url.searchParams.set("page", String(page))
-  return url.toString()
-}
-
-function categoriesFromHtml(html: string): FavoriteCategory[] {
-  const result: FavoriteCategory[] = []
-  // 当前 favorites.php 的 .ido 下有 10 个 .fp；仅保留数字计数和可见文字，不上传 HTML。
-  const re = /<[^>]*class\s*=\s*(["'])[^"']*\bfp\b[^"']*\1[^>]*>([\s\S]*?)<\/[^>]+>/gi
-  const clean = (value: string) => value.replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/\s+/g, " ").trim()
-  let match: RegExpExecArray | null
-  while ((match = re.exec(html)) && result.length < 10) {
-    const text = clean(match[2])
-    const count = Number((text.match(/^\s*([\d,]+)/)?.[1] || "0").replace(/,/g, "")) || 0
-    const name = text.replace(/^[\d,]+\s*/, "").trim() || `收藏夹 ${result.length}`
-    result.push({ slot: result.length, name, count })
-  }
-  while (result.length < 10) result.push({ slot: result.length, name: `收藏夹 ${result.length}`, count: 0 })
-  return result
-}
-
-async function report(input: Parameters<typeof reportDiagnostic>[0]) {
-  try { await reportDiagnostic(input) } catch { /* 诊断不可阻断收藏操作 */ }
-}
-
-export async function loadFavorites(category = "all", page = 0, directUrl?: string): Promise<FavoritesPage> {
-  if (!getAccountStatus().loggedIn) throw new Error("请先登录后查看收藏。")
-  const url = directUrl || favoritesUrl(category, page)
-  let response: any
-  try {
-    response = await fetch(url, { headers: { Cookie: getCookieHeader(url) } })
-    const html = await response.text()
-    if (!response.ok) throw new Error(`收藏请求失败：HTTP ${response.status}`)
-    if (/This page requires you to log on\.<\/p>/i.test(html)) throw new Error("收藏页要求登录；请刷新账号状态或重新导入 Cookie。")
-    const parsed = parseSearchHtml(html, String(response.url || url))
-    const data = { categories: categoriesFromHtml(html), items: parsed.items, prevHref: parsed.prevHref, nextHref: parsed.nextHref, url: String(response.url || url) }
-    await report({ stage: "favorites-list", ok: true, request: { url: data.url, status: Number(response.status || 0), statusText: String(response.statusText || "") }, notes: `items=${data.items.length}; categories=${data.categories.length}` })
-    return data
-  } catch (error) {
-    await report({ stage: "favorites-list", ok: false, error, request: { url, status: Number(response?.status || 0), statusText: String(response?.statusText || "") } })
-    throw error
-  }
-}
-
-export async function updateFavorite(gid: string, token: string, category: number | -1, note = ""): Promise<void> {
-  if (!getAccountStatus().loggedIn) throw new Error("请先登录后操作收藏。")
-  if (category < -1 || category > 9) throw new Error("收藏夹必须为 0 到 9。")
-  if (note.length > 250) throw new Error("收藏备注最多 250 个字符。")
-  const url = new URL(`gallerypopups.php?gid=${encodeURIComponent(gid)}&t=${encodeURIComponent(token)}&act=addfav`, getBaseUrl()).toString()
-  const body = `favcat=${encodeURIComponent(category === -1 ? "favdel" : String(category))}&favnote=${encodeURIComponent(note)}&submit=${encodeURIComponent("Apply Changes")}&update=1`
-  let response: any
-  try {
-    response = await fetch(url, { method: "POST", headers: { Cookie: getCookieHeader(url), "Content-Type": "application/x-www-form-urlencoded", Referer: url, Origin: new URL(url).origin }, body })
-    if (!response.ok) throw new Error(`收藏更新失败：HTTP ${response.status}`)
-    await report({ stage: "favorites-update", ok: true, request: { url, status: Number(response.status || 0), statusText: String(response.statusText || "") }, notes: `action=${category === -1 ? "remove" : "set"}; category=${category}; notePresent=${Boolean(note)}` })
-  } catch (error) {
-    await report({ stage: "favorites-update", ok: false, error, request: { url, status: Number(response?.status || 0), statusText: String(response?.statusText || "") }, notes: `category=${category}` })
-    throw error
-  }
-}
+export type FavoriteCategory = { index: number; name: string; count: number }
+export type FavoriteSearch = { query?: string; searchName?: boolean; searchTags?: boolean; searchNote?: boolean }
+export type FavoritesPage = { categories: FavoriteCategory[]; items: GallerySummary[]; resultCount: string; prevHref: string; nextHref: string; url: string }
+const clean = (value: string) => String(value || "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/\s+/g, " ").trim()
+export function buildFavoritesUrl(baseUrl: string, category?: number, search: FavoriteSearch = {}): string { const url = new URL("favorites.php", baseUrl); if (category != null) url.searchParams.set("favcat", String(category)); const query = String(search.query || "").trim(); if (query) { url.searchParams.set("f_search", query); url.searchParams.set("sn", search.searchName === false ? "0" : "1"); if (search.searchTags) url.searchParams.set("st", "1"); if (search.searchNote) url.searchParams.set("sf", "1") } return url.toString() }
+export function parseFavoriteCategories(html: string): FavoriteCategory[] { const found = new Map<number, FavoriteCategory>(); const matches = [...html.matchAll(/<[^>]*\bclass\s*=\s*(["'])[^"']*\bfp\b[^"']*\1[^>]*>/gi)].map(match => ({ match, slot: (match[0].match(/\bfavcat\s*=\s*([0-9])/i) || [])[1] })).filter(item => /^[0-9]$/.test(String(item.slot))); for (let i = 0; i < matches.length; i += 1) { const { match, slot } = matches[i]; const start = (match.index || 0) + match[0].length; const end = i + 1 < matches.length ? (matches[i + 1].match.index || html.length) : html.length; const text = clean(html.slice(start, end)); const count = Number((text.match(/([\d,]+)/)?.[1] || "0").replace(/,/g, "")) || 0; const name = text.replace(/^\s*[\d,]+\s*/, "").trim() || `收藏夹 ${slot}`; found.set(Number(slot), { index: Number(slot), name, count }) } return Array.from({ length: 10 }, (_, index) => found.get(index) || { index, name: `收藏夹 ${index}`, count: 0 }) }
+function validPageUrl(value: string): boolean { try { const url = new URL(value); const base = new URL(getBaseUrl()); return url.origin === base.origin && url.pathname.endsWith("/favorites.php") } catch { return false } }
+export function favoriteLoginError(html: string) { return /requires you to log on|not logged in|please log on/i.test(html) ? "收藏需要登录；请刷新账号状态或重新导入 Cookie。" : "" }
+async function report(input: Parameters<typeof reportDiagnostic>[0]) { try { await reportDiagnostic(input) } catch {} }
+export async function loadFavorites(category?: number, search: FavoriteSearch = {}, directUrl?: string): Promise<FavoritesPage> { if (!getAccountStatus().loggedIn) throw new Error("请先登录后查看收藏。") ; if (category != null && (!Number.isInteger(category) || category < 0 || category > 9)) throw new Error("收藏分类必须为 0 到 9。") ; const url = directUrl && validPageUrl(directUrl) ? directUrl : buildFavoritesUrl(getBaseUrl(), category, search); let response: any; try { const result = await fetchHtml(url, "favorites.list"); response = result.response; const html = result.html; const login = favoriteLoginError(html); if (login) throw new Error(login); const parsed = parseSearchHtml(html, String(response.url || url)); if (parsed.error && !/No hits found/i.test(html)) throw new Error("收藏列表解析失败，请稍后重试。") ; const data = { categories: parseFavoriteCategories(html), items: parsed.items, resultCount: parsed.resultCount, prevHref: parsed.prevHref, nextHref: parsed.nextHref, url: String(response.url || url) }; await report({ stage: "favorites.list", ok: true, request: { url: data.url, status: response.status }, notes: `items=${data.items.length}; categories=${data.categories.length}` }); return data } catch (error) { await report({ stage: "favorites.list", ok: false, error, request: { url, status: Number(response?.status || 0) } }); throw error } }
