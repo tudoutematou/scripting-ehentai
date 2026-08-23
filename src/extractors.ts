@@ -51,6 +51,11 @@ export type DetailExtractData = {
   tags: TagGroup[]
   previewPages: number
   pageLinks: PreviewPageLink[]
+  isFavorited: boolean
+  favoriteName: string
+  comments: Array<{ author: string; posted: string; text: string }>
+  torrentUrl: string
+  archiveUrl: string
   error: string
 }
 

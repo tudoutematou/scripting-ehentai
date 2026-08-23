@@ -34,6 +34,16 @@ export async function fetchHtml(url: string, stagePrefix: string): Promise<{ htm
   return { html, finalUrl, response }
 }
 
+export async function postForm(url: string, fields: Record<string, string>, stagePrefix: string): Promise<{ html: string; finalUrl: string; response: Response }> {
+  const body = new URLSearchParams(fields).toString()
+  let response: Response
+  try { response = await fetch(url, { ...requestOptions(url), method: "POST", headers: { ...(requestOptions(url).headers || {}), "Content-Type": "application/x-www-form-urlencoded", Origin: new URL(url).origin, Referer: url }, body }) } catch (error) { throw stageError(`${stagePrefix}.fetch`, error) }
+  const finalUrl = String(response?.url || url); const status = Number(response?.status || 0); const statusText = String(response?.statusText || "")
+  let html = ""; try { html = await response.text() } catch (error) { throw stageError(`${stagePrefix}.response.text`, error) }
+  if (!response.ok) throw httpError(`E-Hentai 请求失败：HTTP ${status}${statusText ? ` ${statusText}` : ""}`, response, finalUrl)
+  return { html, finalUrl, response }
+}
+
 export async function searchGalleries(keyword: string, directUrl?: string): Promise<SearchPage> {
   const url = directUrl || buildSearchUrl(keyword, getBaseUrl()); const { html, finalUrl, response } = await fetchHtml(url, "search")
   let page: SearchExtractData; try { page = parseSearchHtml(html, finalUrl) } catch (error) { throw stageError("search.parseSearchHtml", error) }

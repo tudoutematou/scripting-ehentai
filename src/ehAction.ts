@@ -1,7 +1,7 @@
 import { loadFavorites } from "./favorites"
 import { historySummary, loadHistory } from "./libraryStore"
 import { getAccountStatus, getBaseUrl } from "./account"
-import { loadGalleryDetailCore, searchGalleries } from "./ehentai"
+import { GallerySummary, loadGalleryDetailCore, searchGalleries } from "./ehentai"
 import { buildGallerySearchUrl, createHomeSearchState, type GalleryCategoryKey, type QuickFilterKey } from "./tourist"
 
 export type EhAction =
@@ -65,6 +65,8 @@ function resolveGalleryRef(galleryRef: unknown): { ok: true; url: string } | EhA
   return { ok: true, url: entry.url }
 }
 
+export function mapGalleryActionItem(item: Pick<GallerySummary, "url" | "title" | "category" | "pages" | "uploader">, createRef: (url: string) => string): GallerySearchItem { return { galleryRef: createRef(item.url), title: item.title, category: item.category, pages: item.pages, uploader: item.uploader } }
+
 /** Typed AI boundary: opaque search references keep gallery URLs and tokens inside this dispatcher. */
 export async function runEhAction(action: EhAction): Promise<EhActionResult> {
   if (!action || typeof action.type !== "string") return failure("INVALID_ACTION", "validate", "不支持的操作。")
@@ -75,11 +77,11 @@ export async function runEhAction(action: EhAction): Promise<EhActionResult> {
       if (!query) return failure("INVALID_ACTION", "validate", "搜索词不能为空。")
       const state = createHomeSearchState(query, action.category || "all", action.language || "none")
       const page = await searchGalleries(query, buildGallerySearchUrl(getBaseUrl(), state))
-      return { ok: true, type: action.type, resultCount: page.resultCount, items: page.items.slice(0, 20).map(item => ({ galleryRef: createGalleryRef(item.url), title: item.title, category: item.category, pages: item.pages, uploader: item.uploader })) }
+      return { ok: true, type: action.type, resultCount: page.resultCount, items: page.items.slice(0, 20).map(item => mapGalleryActionItem(item, createGalleryRef)) }
     }
-    if (action.type === "favorites.list") { const category = action.category; const query = String(action.query || "").trim(); if (category != null && (!Number.isInteger(category) || category < 0 || category > 9)) return failure("INVALID_ACTION", "validate", "收藏分类必须为 0 到 9。") ; if (query.length > 200) return failure("INVALID_ACTION", "validate", "搜索词过长。") ; const page = await loadFavorites(category, { query }); return { ok: true, type: action.type, categories: page.categories.map(x => ({ index: x.index, name: x.name, count: x.count })), resultCount: page.resultCount, items: page.items.slice(0, 20).map(item => ({ galleryRef: createGalleryRef(item.url), title: item.title, category: item.category, pages: item.pages, uploader: item.uploader })) }
+    if (action.type === "favorites.list") { const category = action.category; const query = String(action.query || "").trim(); if (category != null && (!Number.isInteger(category) || category < 0 || category > 9)) return failure("INVALID_ACTION", "validate", "收藏分类必须为 0 到 9。") ; if (query.length > 200) return failure("INVALID_ACTION", "validate", "搜索词过长。") ; const page = await loadFavorites(category, { query }); return { ok: true, type: action.type, categories: page.categories.map(x => ({ index: x.index, name: x.name, count: x.count })), resultCount: page.resultCount, items: page.items.slice(0, 20).map(item => mapGalleryActionItem(item, createGalleryRef)) }
     }
-    if (action.type === "history.list") { const limit = action.limit == null ? 20 : Number(action.limit); if (!Number.isInteger(limit) || limit < 1 || limit > 50) return failure("INVALID_ACTION", "validate", "历史记录数量必须为 1 到 50。") ; return { ok: true, type: action.type, items: (await loadHistory()).slice(0, limit).map(record => { const item = historySummary(record); return { galleryRef: createGalleryRef(item.url), title: item.title, category: item.category, pages: item.pages, uploader: item.uploader } }) }
+    if (action.type === "history.list") { const limit = action.limit == null ? 20 : Number(action.limit); if (!Number.isInteger(limit) || limit < 1 || limit > 50) return failure("INVALID_ACTION", "validate", "历史记录数量必须为 1 到 50。") ; return { ok: true, type: action.type, items: (await loadHistory()).slice(0, limit).map(record => mapGalleryActionItem(historySummary(record), createGalleryRef)) }
     }
     if (action.type === "gallery.detail") {
       const resolved = resolveGalleryRef(action.galleryRef)
