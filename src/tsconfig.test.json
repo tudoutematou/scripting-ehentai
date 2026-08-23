@@ -6,14 +6,21 @@
     "strict": true,
     "jsx": "preserve",
     "skipLibCheck": true,
-    "lib": ["ES2022", "DOM"],
     "noEmit": true
   },
-  "files": [
-    "tests/scripting.d.ts",
-    "pure.ts",
-    "extractors.ts",
+  "include": [
+    "account.ts",
+    "appV2.tsx",
+    "browser.tsx",
+    "detailHtml.ts",
     "ehentai.ts",
-    "index.tsx"
+    "extractors.ts",
+    "githubBridge.ts",
+    "index.tsx",
+    "pageHtml.ts",
+    "pure.ts",
+    "searchHtml.ts",
+    "tagTranslation.ts",
+    "tourist.ts"
   ]
 }
