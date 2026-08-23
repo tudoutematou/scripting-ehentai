@@ -8,19 +8,23 @@ import { ensureTagTranslations, getTagTranslationStatus, translateTag } from "./
 const fileManager:any=(globalThis as any).FileManager
 const imagePathCache=new Map<string,Promise<string>>()
 const PREVIEW_WIDTH=96, PREVIEW_HEIGHT=128, IMAGE_TIMEOUT_MS=15_000, MAX_IMAGE_REQUESTS=3
-const pendingImageTasks:Array<() => void>=[];let activeImageTasks=0
-function enqueueImageTask<T>(work:()=>Promise<T>):Promise<T>{return new Promise((resolve,reject)=>{const start=()=>{activeImageTasks+=1;void work().then(resolve,reject).finally(()=>{activeImageTasks-=1;pendingImageTasks.shift()?.()})};if(activeImageTasks<MAX_IMAGE_REQUESTS)start();else pendingImageTasks.push(start)})}
+type ImageStage="home-thumbnail"|"preview-thumbnail"|"reader-image"
+type PendingImageTask={stage:ImageStage;sequence:number;enqueuedAt:number;start:()=>void}
+const IMAGE_PRIORITY:Record<ImageStage,number>={"home-thumbnail":0,"preview-thumbnail":1,"reader-image":2}
+const pendingImageTasks:PendingImageTask[]=[];let activeImageTasks=0;let imageTaskSequence=0
+function drainImageTasks(){while(activeImageTasks<MAX_IMAGE_REQUESTS&&pendingImageTasks.length){pendingImageTasks.sort((a,b)=>IMAGE_PRIORITY[b.stage]-IMAGE_PRIORITY[a.stage]||a.sequence-b.sequence);pendingImageTasks.shift()?.start()}}
+function enqueueImageTask<T>(stage:ImageStage,work:(queueMs:number)=>Promise<T>):Promise<T>{const enqueuedAt=Date.now();return new Promise((resolve,reject)=>{const start=()=>{activeImageTasks+=1;void work(Date.now()-enqueuedAt).then(resolve,reject).finally(()=>{activeImageTasks-=1;drainImageTasks()})};pendingImageTasks.push({stage,sequence:imageTaskSequence++,enqueuedAt,start});drainImageTasks()})}
 function ErrorText({message}:{message:string}){if(!message)return null;return <Text foregroundStyle="systemRed" font="caption">{message}</Text>}
 function hashText(value:string){let hash=2166136261;for(let i=0;i<value.length;i++){hash^=value.charCodeAt(i);hash=Math.imul(hash,16777619)}return(hash>>>0).toString(16)}
 function imageHost(url:string){try{return new URL(url).host}catch{return "invalid-host"}}
-async function cachedImagePath(url:string,stage:"home-thumbnail"|"preview-thumbnail"|"reader-image",options?:any){
+async function cachedImagePath(url:string,stage:ImageStage,options?:any){
   const existing=imagePathCache.get(url);if(existing)return existing
-  const task=enqueueImageTask(async()=>{const started=Date.now();let response:any
+  const task=enqueueImageTask(stage,async queueMs=>{const started=Date.now();let fetchStarted=0;let response:any
     try{const dir=`${Script.directory}/.image-cache`;await fileManager.createDirectory(dir,true);const ext=new URL(url).pathname.match(/\.(jpg|jpeg|png|webp)$/i)?.[1]?.toLowerCase()||"jpg";const path=`${dir}/${hashText(url)}.${ext}`
-      try{if(await fileManager.isFile(path)){await reportSafe({stage,ok:true,request:{url,status:200,statusText:"cache"},notes:`host=${imageHost(url)}; durationMs=${Date.now()-started}; contentType=cache; settle=cache-hit`});return path}}catch{}
-      response=await fetch(url,{...(options||{}),signal:AbortSignal.timeout(stage==="reader-image"?20_000:IMAGE_TIMEOUT_MS)} as any);const contentType=String(response.headers?.get?.("content-type")||"");if(!response.ok)throw new Error(`HTTP ${response.status}`);const data=await response.data();await fileManager.writeAsData(path,data)
-      await reportSafe({stage,ok:true,request:{url,status:Number(response.status||0),statusText:String(response.statusText||"")},notes:`host=${imageHost(url)}; durationMs=${Date.now()-started}; contentType=${contentType||"unknown"}; settle=written`});return path
-    }catch(error){imagePathCache.delete(url);await reportSafe({stage,ok:false,error,request:{url,status:Number(response?.status||0),statusText:String(response?.statusText||"")},notes:`host=${imageHost(url)}; durationMs=${Date.now()-started}; settle=failed`});throw error}
+      try{if(await fileManager.isFile(path)){await reportSafe({stage,ok:true,request:{url,status:200,statusText:"cache"},notes:`host=${imageHost(url)}; queueMs=${queueMs}; fetchMs=0; totalMs=${queueMs+Date.now()-started}; contentType=cache; settle=cache-hit`});return path}}catch{}
+      fetchStarted=Date.now();response=await fetch(url,{...(options||{}),signal:AbortSignal.timeout(stage==="reader-image"?20_000:IMAGE_TIMEOUT_MS)} as any);const contentType=String(response.headers?.get?.("content-type")||"");if(!response.ok)throw new Error(`HTTP ${response.status}`);const data=await response.data();const fetchMs=Date.now()-fetchStarted;await fileManager.writeAsData(path,data)
+      await reportSafe({stage,ok:true,request:{url,status:Number(response.status||0),statusText:String(response.statusText||"")},notes:`host=${imageHost(url)}; queueMs=${queueMs}; fetchMs=${fetchMs}; totalMs=${queueMs+Date.now()-started}; contentType=${contentType||"unknown"}; settle=written`});return path
+    }catch(error){imagePathCache.delete(url);await reportSafe({stage,ok:false,error,request:{url,status:Number(response?.status||0),statusText:String(response?.statusText||"")},notes:`host=${imageHost(url)}; queueMs=${queueMs}; fetchMs=${fetchStarted?Date.now()-fetchStarted:0}; totalMs=${queueMs+Date.now()-started}; settle=failed`});throw error}
   });imagePathCache.set(url,task);return task
 }
 function CachedThumbnail({url,stage,frame,cornerRadius}:{url:string;stage:"home-thumbnail"|"preview-thumbnail";frame:{width:number;height:number};cornerRadius:number}){const[filePath,setFilePath]=useState("");const[error,setError]=useState("");useEffect(()=>{let cancelled=false;setFilePath("");setError("");void cachedImagePath(url,stage).then(path=>{if(!cancelled)setFilePath(path)}).catch(caught=>{if(!cancelled)setError("图片加载失败，请稍后重试")});return()=>{cancelled=true}},[url,stage]);if(error)return <Image systemName="exclamationmark.triangle" frame={frame} foregroundStyle="systemOrange"/>;if(!filePath)return <ProgressView progressViewStyle="circular" frame={frame}/>;return <Image filePath={filePath} resizable scaleToFill frame={frame} clipShape={{type:"rect",cornerRadius}}/>}
