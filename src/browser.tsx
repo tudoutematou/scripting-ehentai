@@ -1,8 +1,8 @@
 // ==UserScript==
-// @name E-Hentai Login Bridge
+// @name E-Hentai Login Bridge (Experimental)
 // @namespace scripting-ehentai
-// @version 0.2.8
-// @description Capture E-Hentai login cookies from real Safari for the Scripting app.
+// @version 0.2.9
+// @description Experimental Safari bridge; capture login cookies for the Scripting app.
 // @match https://forums.e-hentai.org/*
 // @match https://e-hentai.org/*
 // @match https://exhentai.org/*
