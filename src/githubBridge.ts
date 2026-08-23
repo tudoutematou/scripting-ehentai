@@ -2,7 +2,7 @@ import { Script } from "scripting"
 
 const fileManager: any = (globalThis as any).FileManager
 const scriptDirectory: string = (Script as any).directory
-const REPO = { owner: "tudoutematou", repo: "scripting-ehentai", branch: "fix/0.2.9-stabilization" }
+const REPO = { owner: "tudoutematou", repo: "scripting-ehentai" }
 const SOURCE_ROOT = "src"
 const SOURCE_EXTENSIONS = [".ts", ".tsx", ".json"]
 const EXCLUDED_SEGMENTS = new Set([".git", "node_modules", "tests", "runtime", "bridge"])
@@ -44,8 +44,12 @@ function safeText(value?: unknown) {
 
 function safeError(error: unknown) {
   if (!error) return undefined
-  const value = error as { name?: unknown; message?: unknown }
-  return { name: safeText(value.name || "Error"), message: safeText(value.message || error) }
+  const value = error as { name?: unknown; message?: unknown; stack?: unknown }
+  return {
+    name: safeText(value.name || "Error"),
+    message: safeText(value.message || error),
+    stack: safeText(value.stack || "").slice(0, 1200),
+  }
 }
 
 export async function reportDiagnostic(input: DiagnosticInput) {
@@ -76,9 +80,9 @@ async function listLocalSource(relativeDirectory = ""): Promise<string[]> {
   return files.sort()
 }
 
-async function getRemoteSha(path: string): Promise<string | undefined> {
+async function getRemoteSha(branch: string, path: string): Promise<string | undefined> {
   try {
-    const content = await GitHub.getContent({ ...REPO, path, ref: REPO.branch }) as { sha?: string }
+    const content = await GitHub.getContent({ ...REPO, path, ref: branch }) as { sha?: string }
     return content.sha
   } catch (error) {
     if (/404|not found/i.test(String((error as Error)?.message || error))) return undefined
@@ -86,10 +90,11 @@ async function getRemoteSha(path: string): Promise<string | undefined> {
   }
 }
 
-async function putTextContent(path: string, message: string, content: string) {
+async function putTextContent(branch: string, path: string, message: string, content: string) {
+  if (!branch || branch === "main") throw new Error("源码同步必须显式指定非 main 的临时分支。")
   for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
-      return await GitHub.putContent({ ...REPO, path, message, content, sha: await getRemoteSha(path), branch: REPO.branch })
+      return await GitHub.putContent({ ...REPO, path, message, content, sha: await getRemoteSha(branch, path), branch })
     } catch (error) {
       if (attempt || !/409|does not match.*sha/i.test(String((error as Error)?.message || error))) throw error
     }
@@ -105,17 +110,20 @@ export async function ensureGitHubPermissions() {
   return allowed
 }
 
-export async function readSetupRules() {
+export async function readSetupRules(branch: string) {
+  if (!branch || branch === "main") throw new Error("读取同步规则必须显式指定非 main 的临时分支。")
   await ensureGitHubPermissions()
-  return GitHub.getTextContent({ ...REPO, path: "bridge/SCRIPTING_SETUP.md", ref: REPO.branch })
+  return GitHub.getTextContent({ ...REPO, path: "bridge/SCRIPTING_SETUP.md", ref: branch })
 }
 
-export async function pushSourceToGitHub() {
+/** 仅供明确指定的临时分支使用；生产入口不调用此函数。 */
+export async function pushSourceToGitHub(branch: string) {
+  if (!branch || branch === "main") throw new Error("源码同步必须显式指定非 main 的临时分支。")
   await ensureGitHubPermissions()
   const files = await listLocalSource()
   for (const relativePath of files) {
     const content = await fileManager.readAsString(joinPath(scriptDirectory, relativePath))
-    await putTextContent(joinPath(SOURCE_ROOT, relativePath), `sync: ${relativePath}`, content)
+    await putTextContent(branch, joinPath(SOURCE_ROOT, relativePath), `sync: ${relativePath}`, content)
   }
   return files
 }
