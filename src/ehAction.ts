@@ -5,17 +5,24 @@ import { buildGallerySearchUrl, createHomeSearchState, type GalleryCategoryKey, 
 export type EhAction =
   | { type: "account.status" }
   | { type: "search"; query: string; category?: GalleryCategoryKey; language?: QuickFilterKey }
-  | { type: "gallery.detail"; url: string }
+  | { type: "gallery.detail"; galleryRef: string }
 
-type ActionErrorCode = "INVALID_ACTION" | "INVALID_URL" | "REQUEST_FAILED" | "UNAVAILABLE"
-export type EhActionFailure = { ok: false; code: ActionErrorCode; stage: string; message: string }
+type ActionErrorCode = "INVALID_ACTION" | "INVALID_GALLERY_REF" | "GALLERY_REF_EXPIRED" | "REQUEST_FAILED"
+type ActionStage = "validate" | "gallery-ref" | "core"
+export type EhActionFailure = { ok: false; code: ActionErrorCode; stage: ActionStage; message: string }
+export type GallerySearchItem = { galleryRef: string; title: string; category: string; pages: number; uploader: string }
 export type EhActionSuccess =
   | { ok: true; type: "account.status"; account: ReturnType<typeof getAccountStatus> }
-  | { ok: true; type: "search"; resultCount: string; items: Array<{ title: string; category: string; pages: number; uploader: string }> }
+  | { ok: true; type: "search"; resultCount: string; items: GallerySearchItem[] }
   | { ok: true; type: "gallery.detail"; detail: { title: string; titleJpn: string; category: string; uploader: string; rating: number | null; ratingCount: number; previewPages: number; pageCount: number; tags: Array<{ namespace: string; names: string[] }> } }
 export type EhActionResult = EhActionSuccess | EhActionFailure
 
-function failure(code: ActionErrorCode, stage: string, message: string): EhActionFailure {
+type GalleryRefEntry = { url: string; expiresAt: number }
+const GALLERY_REF_TTL_MS = 10 * 60 * 1000
+const MAX_GALLERY_REFS = 100
+const galleryRefs = new Map<string, GalleryRefEntry>()
+
+function failure(code: ActionErrorCode, stage: ActionStage, message: string): EhActionFailure {
   return { ok: false, code, stage, message }
 }
 
@@ -25,15 +32,34 @@ function safeMessage(error: unknown): string {
   return "请求未完成，请检查登录状态或网络后重试。"
 }
 
-function isGalleryUrl(value: string): boolean {
-  try {
-    const url = new URL(value)
-    return url.protocol === "https:" && (url.hostname === "e-hentai.org" || url.hostname === "exhentai.org") && /^\/g\/\d+\/[a-f0-9]+\/?$/i.test(url.pathname)
-  } catch {
-    return false
+function pruneGalleryRefs(now = Date.now()) {
+  for (const [ref, entry] of galleryRefs) if (entry.expiresAt <= now) galleryRefs.delete(ref)
+  while (galleryRefs.size >= MAX_GALLERY_REFS) {
+    const oldest = galleryRefs.keys().next().value
+    if (!oldest) break
+    galleryRefs.delete(oldest)
   }
 }
 
+function createGalleryRef(url: string): string {
+  pruneGalleryRefs()
+  let ref = ""
+  do { ref = `gallery_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}` } while (galleryRefs.has(ref))
+  galleryRefs.set(ref, { url, expiresAt: Date.now() + GALLERY_REF_TTL_MS })
+  return ref
+}
+
+function resolveGalleryRef(galleryRef: unknown): { ok: true; url: string } | EhActionFailure {
+  if (typeof galleryRef !== "string" || !/^gallery_[a-z0-9]+_[a-z0-9]+$/i.test(galleryRef)) return failure("INVALID_GALLERY_REF", "validate", "画廊引用无效，请先重新搜索。")
+  const entry = galleryRefs.get(galleryRef)
+  if (!entry || entry.expiresAt <= Date.now()) {
+    galleryRefs.delete(galleryRef)
+    return failure("GALLERY_REF_EXPIRED", "gallery-ref", "画廊引用已过期，请重新搜索。")
+  }
+  return { ok: true, url: entry.url }
+}
+
+/** Typed AI boundary: opaque search references keep gallery URLs and tokens inside this dispatcher. */
 export async function runEhAction(action: EhAction): Promise<EhActionResult> {
   if (!action || typeof action.type !== "string") return failure("INVALID_ACTION", "validate", "不支持的操作。")
   try {
@@ -43,11 +69,12 @@ export async function runEhAction(action: EhAction): Promise<EhActionResult> {
       if (!query) return failure("INVALID_ACTION", "validate", "搜索词不能为空。")
       const state = createHomeSearchState(query, action.category || "all", action.language || "none")
       const page = await searchGalleries(query, buildGallerySearchUrl(getBaseUrl(), state))
-      return { ok: true, type: action.type, resultCount: page.resultCount, items: page.items.slice(0, 20).map(item => ({ title: item.title, category: item.category, pages: item.pages, uploader: item.uploader })) }
+      return { ok: true, type: action.type, resultCount: page.resultCount, items: page.items.slice(0, 20).map(item => ({ galleryRef: createGalleryRef(item.url), title: item.title, category: item.category, pages: item.pages, uploader: item.uploader })) }
     }
     if (action.type === "gallery.detail") {
-      if (!isGalleryUrl(action.url)) return failure("INVALID_URL", "validate", "仅允许 E-Hentai 或 ExHentai 的画廊详情地址。")
-      const detail = await loadGalleryDetailCore(action.url)
+      const resolved = resolveGalleryRef(action.galleryRef)
+      if (!resolved.ok) return resolved
+      const detail = await loadGalleryDetailCore(resolved.url)
       return { ok: true, type: action.type, detail: { title: detail.title, titleJpn: detail.titleJpn, category: detail.category, uploader: detail.uploader, rating: detail.rating, ratingCount: detail.ratingCount, previewPages: detail.previewPages, pageCount: detail.pageLinks.length, tags: detail.tags.map(group => ({ namespace: group.namespace, names: group.tags.map(tag => tag.name) })) } }
     }
     return failure("INVALID_ACTION", "validate", "不支持的操作。")
