@@ -1,185 +1,190 @@
-# CURRENT_TASK — 0.5 EhViewer Core Feature Expansion
+# CURRENT_TASK — 0.6 EhViewer Interactions & Offline
 
-Branch: `feat/0.5-core-expansion`
-Base: `289d997ed6fda15a41528a7b7c0d591556b6a5c5`
-Reference: `xiaojieonly/Ehviewer_CN_SXJ` current `BiLi_PC_Gamer` behavior.
+Branch: `feat/0.6-interactions-offline`
+Base: `38b55d331c82c40bac4e384df1f78888d17c4797`
+Reference: `xiaojieonly/Ehviewer_CN_SXJ` current behavior.
 
-Read `AGENTS.md` first. Then inspect only the current feature's existing `src/` files and the matching EhViewer reference files. Do not reread project history.
+Read `AGENTS.md` first. Then inspect only the existing code touched by the current capability and the matching EhViewer reference files. Reuse current request/parser/store/UI paths before writing anything new.
 
 ## Working mode
-This is a **large continuous feature package**, not another small review loop.
+This is another **large continuous feature package**.
 
 Work continuously:
-`inspect -> implement -> self-test/runtime -> fix ordinary failures -> commit logical package -> continue next capability`.
+`inspect -> implement -> focused self-test/runtime -> fix ordinary failures -> commit logical package -> continue`.
 
-Do **not** stop for Technical Review after each sub-feature. Do not ask the user to retest routine changes. Stop only for the true blockers already defined in `AGENTS.md`.
+Do not stop for review after each sub-feature. Stop only for a real platform/credential/destructive-data blocker as defined in `AGENTS.md`.
 
-The goal is practical EhViewer-like daily-driver coverage on Scripting/iOS/iPadOS, not a mechanical Android port or pixel-perfect clone. Reuse current code first; do not introduce frameworks or architecture layers unless the existing code genuinely cannot support the feature.
+The target is practical EhViewer-like daily use on Scripting/iOS/iPadOS, not an Android clone. Prefer one small working path over parallel implementations.
 
 ## Preserve throughout
-Never regress:
+Do not regress the accepted 0.5 behavior:
 - Home / Search / Filter / Detail Core-first / background previews / Reader / Account;
-- E-Hentai + ExHentai account/site handling;
+- Favorites categories/search/add/move/remove + `#gdf` state;
+- Comments read parsing and Torrent/Archive detection;
+- History / Continue Reading / reset progress;
+- Quick Search / Watched / Toplist / Settings;
+- E-Hentai + ExHentai routing;
 - image priority `reader-image > preview-thumbnail > home-thumbnail`;
-- local History / Reading Progress;
-- typed `runEhAction()` + opaque short-lived `galleryRef`;
-- AssistantTool search path;
+- opaque short-lived `galleryRef` AI boundary;
 - bounded requests and sanitized diagnostics.
 
-Never expose Cookie, password, gallery/page token, full sensitive URL, search text, user comment text, local path, or full HTML in logs/diagnostics/AI output.
+Never log or expose Cookie, password, apiuid/apikey, gallery/page token, full sensitive URL, search text, user comment text, local path, or full HTML.
 
-## Carry-forward cleanup — fix while continuing, do not stop afterward
-Close the known 0.4 review items before/while touching these paths:
-1. Favorites query from the real UI must use `f_search + sn=on + st=on + sf=on` for the single search box.
-2. Favorites category parser must correctly parse all 10 real `.fp onclick=...favcat=N` blocks, including category 9 without swallowing later HTML.
-3. Destructive History clear must use the verified Scripting native confirmation API (`Dialog.confirm` if current typings confirm it).
-4. Continue Reading must never navigate to an index not yet present in `pageLinks`; show it only when the saved page is currently navigable, then recompute after background previews finish.
-5. Successful Favorites/History AI-item mapping must have a deterministic privacy check without mutating real user data.
+## Carry-forward — first item, then continue
+The remote 0.5 branch still contains the known continuous-reader issue. Fix it first on this branch; do not wait for another 0.5 upload.
 
-These are carry-forward bugs, **not a separate milestone**.
+### Continuous Reader safety
+Current behavior must not mount/resolve the whole gallery at once and must not treat `resolveImagePage()` completion as “visible”.
+
+Implement the smallest safe continuous mode:
+- only mount a bounded window/batch around the current position;
+- advance/load more by explicit user action or a verified Scripting visibility/appear callback;
+- reading progress updates only from explicit navigation or a verified visible-page signal;
+- never allow background resolution order to jump saved progress;
+- keep reader-image priority and bounded image work;
+- preserve single-page mode.
+
+If Scripting has no trustworthy visibility callback, use explicit bounded “load more / next batch” behavior rather than inventing one.
 
 ## Capability targets
-Attempt the following in order. Finish as much as Scripting can safely support before stopping for milestone review.
+Attempt in order. Finish all feasible high-value items before milestone review.
 
-### 1. Library / Favorites complete
-Build on the existing 0.4 core.
-- cloud Favorites: all categories, counts, search, pagination, Detail reuse;
-- show a gallery's favorite state where the server exposes it;
-- add to Favorites, move/change category, remove from Favorites;
-- favorite note only if the current server/API path is clear and small;
-- destructive/removal actions require explicit confirmation;
-- local History: reopen/delete/clear, newest-first, Continue Reading, reset progress;
-- never mix cloud Favorites and local History storage.
+### 1. Foreground Downloads / Offline Reader
+Re-attempt Downloads using only already-verified platform primitives and existing code paths.
 
-### 2. Gallery Detail complete
-Use EhViewer behavior as the reference and extend the existing Detail rather than replacing it.
-- complete useful metadata/tags/preview handling;
-- Comments: load/read first; posting/editing only after verifying the current server form/API and with explicit user action;
-- rating display; rating submission only if the current request path is verified;
-- favorite actions from Detail;
-- expose Torrent / Archive information or safe external/open actions when supported;
-- retry/error states must use existing shared state patterns.
+Important: the previous CommonJS/ESM loader failure may have been caused by introducing a new module, not by `fetch`/`FileManager` themselves. Therefore:
+- first try the smallest implementation inside an already-loading module, or a new module only after a minimal import probe succeeds;
+- do not build a service/background framework;
+- do not claim background download support.
 
-Do not duplicate Detail or create a second HTTP/parser stack.
+Minimum useful implementation:
+- start download from Gallery Detail;
+- persist a small gallery download manifest/record;
+- resolve/download pages with bounded concurrency;
+- progress, failed pages, retry, cancel/pause/resume as far as foreground runtime permits;
+- interrupted partial downloads remain recoverable and resumable;
+- completed gallery opens in a real offline reader with network disabled/unavailable;
+- safe directory/file names and atomic/backup-safe manifest writes;
+- deleting a downloaded gallery requires explicit confirmation;
+- never silently overwrite unrelated files;
+- no automatic real-user download mutation in tests.
 
-### 3. Reader daily-use features
-Keep the current Reader and add only native/useful behavior supported by Scripting:
-- reliable previous/next and page jump;
-- Continue Reading and reset progress;
-- bounded nearby-page prefetch/cache without defeating reader-image priority;
-- retry failed image/page resolution;
-- prefer normal image and offer original/full image when the page exposes a safe path;
-- at least one practical reading layout beyond the current single-page flow if Scripting UI supports it cleanly (for example continuous vertical reading);
-- persist only a small reader preference set that is actually used.
+A foreground-only resumable queue is fully acceptable. If even that cannot be made reliable after one minimal runtime probe, record the exact PLATFORM_GAP and stop adding download scaffolding.
 
-Do not build gesture engines or custom rendering frameworks merely to imitate Android.
+### 2. Gallery Detail interactions
+Extend the existing Detail. No second network stack.
 
-### 4. Downloads / offline reading
-Implement a practical Scripting-native download manager using existing `fetch`, `FileManager` and current gallery/image resolution paths.
-
-Minimum useful behavior:
-- start gallery download from Detail;
-- persistent download record/queue;
-- download pages with bounded concurrency;
-- progress + failed-page state;
-- pause/cancel/retry/resume as far as Scripting runtime permits;
-- completed gallery opens in an offline reader without network;
-- delete downloaded gallery only after explicit confirmation;
-- safe filenames/paths and no silent overwrite of unrelated files;
-- corrupt/incomplete state fails safely and remains recoverable.
-
-If Scripting cannot continue execution in the background, **do not fake background downloading**. Implement resumable foreground downloading and record the platform limitation for final report.
-
-Reading-while-downloading is optional only if it falls naturally out of the queue/cache design.
-
-### 5. Discovery features
-Reuse the existing gallery-list parser/request path wherever structurally compatible.
 Attempt:
-- Watched / subscriptions;
-- Toplists;
-- Quick Search / saved searches;
-- My Tags / tag-oriented navigation;
-- useful advanced/multi-tag search behavior already present in EhViewer when it maps cleanly to E-Hentai URLs.
+- favorite note read/edit when server path is verified;
+- rating submission using the exact verified EhViewer/E-Hentai API path;
+- comment post and edit using the exact verified server form/API;
+- safe Torrent / Archive open/export action when Scripting has a verified native external-open/share path.
 
-Prefer read/browse support first. Add server writes only when the existing authenticated endpoint is verified and the UI makes the mutation explicit.
+Rules:
+- every write is explicit UI action;
+- destructive/replacing actions need confirmation where appropriate;
+- no AI write actions;
+- no automatic tests against the real account;
+- request-builder/parser logic can use pure fixtures;
+- apiuid/apikey, tokens and comment text must never enter diagnostics;
+- if current page/API does not expose required credentials safely, record PLATFORM_GAP instead of guessing.
 
-### 6. Settings / app controls
-Add one small native Settings scene rather than scattering controls.
-Only settings that change implemented behavior belong here, for example:
-- active E/Ex site/account actions;
-- reader mode/preload preference;
-- download concurrency or cache behavior where useful;
-- image/cache clear with explicit confirmation;
-- history/progress maintenance;
-- diagnostics/self-test entry for development if already useful.
+Do not implement comment voting, tag voting, expunge/rename petitions, or moderation workflows unless they fall out trivially from already-verified paths. YAGNI.
 
-Do not port Android-only preferences just because EhViewer has them.
+### 3. My Tags / tag-oriented discovery
+Implement the smallest useful native My Tags experience if the authenticated endpoint can be read reliably.
 
-### 7. Typed AI boundary
-Extend `EhAction` only for capabilities where structured AI access is actually useful.
-- browsing/list/status actions may be exposed read-only;
-- keep `galleryRef` opaque and short-lived;
-- no gid/token/full URL/local path in action output;
-- manual UI and AI actions must share the same core;
-- do not expose destructive cloud/local mutations to AI merely for feature parity.
+Prefer:
+- list the user's tag sets/tags;
+- open a tag into the existing Results flow;
+- reuse current tag translation/display helpers;
+- read-only first.
+
+Only add tag create/edit/delete if the endpoint is already clear and the mutation is explicit. Otherwise record the write side as PLATFORM_GAP.
+
+### 4. Resource / cache maintenance
+Add only controls backed by real implemented behavior:
+- clear image cache with explicit confirmation;
+- if Downloads works: show downloaded galleries and delete/retry/resume there;
+- show small cache/offline status only if it can be obtained cheaply;
+- keep History/Quick Search maintenance in their existing scenes rather than duplicating controls.
+
+Do not add fake download settings when Downloads is unavailable.
+
+### 5. Reader polish that reuses current paths
+After continuous mode is safe:
+- original-image preference must also behave sensibly in continuous/offline mode when available;
+- failed page retry should not reset unrelated pages;
+- bounded preload should remain bounded in both layouts;
+- offline reader should share as much UI/state logic with normal Reader as practical.
+
+No custom gesture engine, no page-turn animation framework, no image rendering rewrite.
+
+### 6. Typed AI boundary
+Only expose new **read-only** capabilities where useful, for example download status/list if Downloads is real.
+
+Keep:
+- opaque `galleryRef`;
+- no gid/token/full URL/local path/api credentials;
+- same core functions as manual UI;
+- no comment/rating/favorite/download deletion writes through AI.
+
+Skip AI additions entirely if they do not improve the implemented feature.
 
 ## Platform-gap rule
-For an EhViewer feature that depends on Android-only services, unrestricted background execution, SAF/storage permissions, notification services, VPN/system hooks, or another capability Scripting genuinely lacks:
-1. check current Scripting typings/docs;
-2. make one minimal runtime probe only if needed;
-3. implement the closest safe native equivalent when useful;
-4. otherwise skip it and record one concise `PLATFORM_GAP` item for final report.
+For any missing EhViewer feature:
+1. inspect current Scripting typings/docs;
+2. run at most one minimal runtime probe if necessary;
+3. use the closest safe native equivalent;
+4. otherwise record one concise `PLATFORM_GAP` and move on.
 
-Do not write compatibility scaffolding for unavailable APIs.
+Do not keep dead UI, dead settings, or unused scaffolding for a PLATFORM_GAP feature.
 
-## Safety rules for mutations
-Cloud Favorites changes, comments, ratings, downloaded-file deletion and bulk local-data deletion are user-visible mutations.
-- no automatic mutation during tests;
-- require an explicit UI action;
-- destructive actions require confirmation;
-- never test against real user data when an injected/temp fixture can prove the logic;
-- network failure must not leave local state claiming a remote write succeeded.
+## Data safety
+For History, Settings, Quick Search, download manifests and offline files:
+- malformed/unreadable state must fail safely;
+- do not overwrite unreadable real data with empty defaults;
+- use temp/backup/restore or another verified atomic-enough replacement pattern;
+- concurrent writes must not lose records;
+- tests use injected/temp stores only.
 
-## Verification while developing
-Keep using the existing harness; extend it instead of creating competing test systems.
+## Verification
+Extend the existing harness instead of creating another test system.
 
-After each logical package, run only the affected focused checks plus baseline smoke tests when needed. Fix ordinary failures yourself and continue.
-
-At the **end of the whole 0.5 package**, run one closure pass:
+At package end run:
+- TypeScript diagnostics;
 - `src/runSelfTests.ts`;
 - `src/runActionSmoke.ts`;
 - `src/runAssistantToolSmoke.ts`;
 - `src/runNetworkSelfTest.ts`;
-- any focused download/library/discovery checks added during development;
-- real Scripting runtime flows for Browse -> Detail -> Reader, Favorites, History/Resume, Downloads/Offline, and each implemented discovery scene;
-- verify E and Ex reopening/routing where applicable;
+- focused pure/parser/store tests for every new write/download path;
+- real runtime: single Reader + continuous Reader; Favorites; Detail interactions that can be safely human-tested; My Tags; download -> interrupt/resume -> offline open -> delete if Downloads is implemented;
 - verify no sensitive diagnostics/output;
-- verify destructive actions are never triggered by automated tests.
+- verify tests never perform cloud writes or delete real user files/history.
 
-A green harness is evidence, not permission to ignore a broken real UI path.
+A green harness does not override a broken runtime path.
 
 ## Git / reporting
-- Work only on `feat/0.5-core-expansion`.
-- Keep commits grouped by logical capability, not tiny fixes.
+- Work only on `feat/0.6-interactions-offline`.
+- Group commits by capability.
 - Do not write `main`.
-- Do not wait for review between capabilities.
-- A Draft PR may target `feat/0.4-library` while PR #23 remains unmerged; retarget later if the accepted baseline moves.
+- Do not stop between capabilities for review.
+- Draft PR targets `feat/0.5-core-expansion` while PR #24 remains open.
 
 ## Completion / stop condition
-Do not stop after Library, Downloads, Reader, or any single feature.
+Stop for one Closure Review only when:
+1. carry-forward continuous Reader is fixed;
+2. capabilities 1-5 have all been attempted;
+3. feasible items are implemented and infeasible items have concrete PLATFORM_GAP reasons;
+4. all ordinary failures are fixed;
+5. no known privacy/data-loss blocker remains.
 
-Stop for Technical Closure Review only when:
-1. capabilities 1-6 have all been attempted;
-2. every feasible high-value capability is implemented or has a concrete `PLATFORM_GAP` reason;
-3. end-of-package verification has been run and ordinary failures fixed;
-4. no known data-loss/privacy blocker remains.
-
-Final report must be compact:
+Final report only:
 - implemented capabilities;
-- skipped `PLATFORM_GAP` items;
-- test/runtime results;
+- PLATFORM_GAP items;
+- diagnostics/tests/runtime results;
 - changed files and final head SHA;
 - known remaining defects;
 - at most 2-5 human-only acceptance items.
 
-Then stop. Do not start another feature package until Closure Review is complete.
+Then stop. Do not start 0.7 until Closure Review is complete.
