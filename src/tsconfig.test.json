@@ -11,6 +11,8 @@
   "include": [
     "account.ts",
     "appV2.tsx",
+    "GalleryFlow.tsx",
+    "StateView.tsx",
     "browser.tsx",
     "detailHtml.ts",
     "ehentai.ts",
@@ -22,11 +24,10 @@
     "searchHtml.ts",
     "tagTranslation.ts",
     "tourist.ts",
-    "StateView.tsx",
-    "GalleryFlow.tsx",
     "selfTest.ts",
     "runSelfTests.ts",
     "ehAction.ts",
-    "runActionSmoke.ts"
+    "runActionSmoke.ts",
+    "runNetworkSelfTest.ts"
   ]
 }
