@@ -52,8 +52,8 @@ function safeError(error: unknown) {
   }
 }
 
-export async function reportDiagnostic(input: DiagnosticInput) {
-  const payload = {
+export function sanitizeDiagnostic(input: DiagnosticInput) {
+  return {
     time: new Date().toISOString(),
     stage: safeText(input.stage),
     ok: Boolean(input.ok),
@@ -61,6 +61,10 @@ export async function reportDiagnostic(input: DiagnosticInput) {
     request: { host: safeRequestUrl(input.request?.url), status: Number(input.request?.status || 0), statusText: safeText(input.request?.statusText) },
     notes: safeText(input.notes),
   }
+}
+
+export async function reportDiagnostic(input: DiagnosticInput) {
+  const payload = sanitizeDiagnostic(input)
   // 诊断只保留在本机控制台：绝不将搜索词、画廊 URL、token 或 Cookie 上传至仓库。
   console.log("[ehentai diagnostic]", JSON.stringify(payload))
   return payload
