@@ -1,0 +1,15 @@
+{
+  "displayName": "搜索 E-Hentai 画廊",
+  "id": "ehentai_gallery_search",
+  "description": "Searches E-Hentai or ExHentai galleries and returns opaque gallery references for follow-up details.",
+  "icon": "magnifyingglass",
+  "color": "systemIndigo",
+  "parameters": [
+    { "name": "query", "type": "string", "description": "Search keywords.", "required": true },
+    { "name": "category", "type": "string", "description": "Optional gallery category key.", "required": false },
+    { "name": "language", "type": "string", "description": "Optional language filter key.", "required": false }
+  ],
+  "requireApproval": true,
+  "autoApprove": false,
+  "scriptEditorOnly": false
+}
