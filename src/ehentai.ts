@@ -23,7 +23,9 @@ function httpError(message: string, response: any, url: string): Error {
 }
 function stageError(stage: string, error: unknown): Error { const value = error as any; const wrapped = new Error(`[${stage}] ${String(value?.message || error || "未知错误")}`); wrapped.name = String(value?.name || "Error"); if (value?.stack) wrapped.stack = `${wrapped.name}: ${wrapped.message}\nCaused by:\n${String(value.stack)}`; return wrapped }
 async function reportSafely(input: Parameters<typeof reportDiagnostic>[0]) { try { await reportDiagnostic(input) } catch {} }
-function requestOptions(url: string): Record<string, any> | undefined { const cookie = getCookieHeader(url); return cookie ? { headers: { Cookie: cookie } } : undefined }
+const HTML_REQUEST_TIMEOUT_MS = 20_000
+
+function requestOptions(url: string): Record<string, any> { const cookie = getCookieHeader(url); return { ...(cookie ? { headers: { Cookie: cookie } } : {}), signal: AbortSignal.timeout(HTML_REQUEST_TIMEOUT_MS) } }
 async function fetchHtml(url: string, stagePrefix: string): Promise<{ html: string; finalUrl: string; response: Response }> {
   let response: Response; try { response = await fetch(url, requestOptions(url)) } catch (error) { throw stageError(`${stagePrefix}.fetch`, error) }
   const finalUrl = String(response?.url || url); const status = Number(response?.status || 0); const statusText = String(response?.statusText || "")
