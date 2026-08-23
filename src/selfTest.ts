@@ -1,4 +1,5 @@
-import { getAccountStatus } from "./account"
+import { getAccountStatus, getBaseUrl } from "./account"
+import { loadGalleryDetailCore, resolveImagePage, searchGalleries } from "./ehentai"
 import { parseDetailHtml, parsePreviewPageHtml } from "./detailHtml"
 import { parseImagePageHtml } from "./pageHtml"
 import { parseSearchHtml } from "./searchHtml"
@@ -15,7 +16,9 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
 
-export async function runSelfTests(): Promise<SelfTestResult[]> {
+export type SelfTestOptions = { network?: boolean }
+
+export async function runSelfTests(options: SelfTestOptions = {}): Promise<SelfTestResult[]> {
   const checks: Check[] = [
     { name: "account.local-state", run: () => { const status = getAccountStatus(); assert(typeof status.loggedIn === "boolean" && (status.site === "e" || status.site === "ex"), "账号本地状态无效") } },
     { name: "search.url-builder", run: () => { const url = new URL(buildGallerySearchUrl(BASE, createHomeSearchState("test", "manga", "chinese"))); assert(url.searchParams.get("f_search") === "test language:chinese", "搜索词或语言筛选错误"); assert(url.searchParams.get("f_cats") === "1019", "分类筛选错误") } },
@@ -25,6 +28,7 @@ export async function runSelfTests(): Promise<SelfTestResult[]> {
     { name: "parser.image-page", run: () => { const result = parseImagePageHtml('<div id="i3"><img id="img" src="/image.jpg"></div><a href="/fullimg.php?x=1">Download original</a>', BASE); assert(result.imageUrl === "https://e-hentai.org/image.jpg" && result.originalUrl.includes("fullimg"), "图片页解析错误") } },
     { name: "diagnostic.sanitizer", run: () => { const payload = sanitizeDiagnostic({ stage: "search https://e-hentai.org/g/123/token", ok: false, request: { url: "https://e-hentai.org/g/123/token", status: 403 }, notes: "Cookie=secret ipb_pass_hash=secret", error: new Error("https://e-hentai.org/s/token") }); const text = JSON.stringify(payload); assert(!text.includes("secret") && !text.includes("/g/123/") && payload.request.host === "https://e-hentai.org/[redacted]", "诊断脱敏泄漏") } },
   ]
+  if (options.network) checks.push({ name: "network.search-detail-reader", run: async () => { const list = await searchGalleries("", getBaseUrl()); assert(list.items.length > 0, "画廊列表为空"); const detail = await loadGalleryDetailCore(list.items[0].url); assert(Boolean(detail.title) && detail.pageLinks.length > 0, "画廊详情或预览为空"); const image = await resolveImagePage(detail.pageLinks[0].pageUrl); assert(Boolean(image.imageUrl), "阅读器图片页未解析到图片") } })
   const results: SelfTestResult[] = []
   for (const check of checks) {
     const started = Date.now()
