@@ -1,0 +1,12 @@
+{
+  "time": "2026-08-23T14:53:14.347Z",
+  "scriptVersion": "0.2.9",
+  "stage": "gallery-search-filter",
+  "ok": true,
+  "request": {
+    "url": "https://e-hentai.org/?f_cats=1021",
+    "status": 0,
+    "statusText": ""
+  },
+  "notes": "items=25; category=doujinshi; tagPresent=false"
+}
