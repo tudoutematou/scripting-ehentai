@@ -1,212 +1,185 @@
-# CURRENT_TASK — 0.4 Library / Favorites / History
+# CURRENT_TASK — 0.5 EhViewer Core Feature Expansion
 
-Branch: `feat/0.4-library`
-Base: `ba192e16f04e7f834a2e0a1bdfe54edb5e470600`
+Branch: `feat/0.5-core-expansion`
+Base: `289d997ed6fda15a41528a7b7c0d591556b6a5c5`
+Reference: `xiaojieonly/Ehviewer_CN_SXJ` current `BiLi_PC_Gamer` behavior.
 
-Read `AGENTS.md` first, then only the relevant `src/` files. Do not reread historical planning unless this task explicitly requires it.
+Read `AGENTS.md` first. Then inspect only the current feature's existing `src/` files and the matching EhViewer reference files. Do not reread project history.
 
-## Accepted baseline
-0.3 is accepted. Preserve these behaviors and regression checks:
+## Working mode
+This is a **large continuous feature package**, not another small review loop.
+
+Work continuously:
+`inspect -> implement -> self-test/runtime -> fix ordinary failures -> commit logical package -> continue next capability`.
+
+Do **not** stop for Technical Review after each sub-feature. Do not ask the user to retest routine changes. Stop only for the true blockers already defined in `AGENTS.md`.
+
+The goal is practical EhViewer-like daily-driver coverage on Scripting/iOS/iPadOS, not a mechanical Android port or pixel-perfect clone. Reuse current code first; do not introduce frameworks or architecture layers unless the existing code genuinely cannot support the feature.
+
+## Preserve throughout
+Never regress:
 - Home / Search / Filter / Detail Core-first / background previews / Reader / Account;
+- E-Hentai + ExHentai account/site handling;
 - image priority `reader-image > preview-thumbnail > home-thumbnail`;
-- typed `runEhAction()` with opaque short-lived `galleryRef`;
-- approved Scripting `AssistantTool` search path;
-- diagnostics and errors must not expose Cookie, full gallery/page URL, gallery token, search text, or full HTML;
-- current checks: SelfTest 8/8, Action Smoke PASS, AssistantTool Smoke PASS, Network SelfTest 9/9.
+- local History / Reading Progress;
+- typed `runEhAction()` + opaque short-lived `galleryRef`;
+- AssistantTool search path;
+- bounded requests and sanitized diagnostics.
 
-Do not change 0.3 architecture simply to make this task look cleaner.
+Never expose Cookie, password, gallery/page token, full sensitive URL, search text, user comment text, local path, or full HTML in logs/diagnostics/AI output.
 
-## Reference behavior already confirmed
-Use EhViewer_CN_SXJ as behavior reference, not as code to port mechanically.
+## Carry-forward cleanup — fix while continuing, do not stop afterward
+Close the known 0.4 review items before/while touching these paths:
+1. Favorites query from the real UI must use `f_search + sn=on + st=on + sf=on` for the single search box.
+2. Favorites category parser must correctly parse all 10 real `.fp onclick=...favcat=N` blocks, including category 9 without swallowing later HTML.
+3. Destructive History clear must use the verified Scripting native confirmation API (`Dialog.confirm` if current typings confirm it).
+4. Continue Reading must never navigate to an index not yet present in `pageLinks`; show it only when the saved page is currently navigable, then recompute after background previews finish.
+5. Successful Favorites/History AI-item mapping must have a deterministic privacy check without mutating real user data.
 
-Relevant reference files:
-- `ui/scene/gallery/list/FavoritesScene.kt`
-- `client/data/FavListUrlBuilder.java`
-- `client/parser/FavoritesParser.java`
-- `ui/scene/history/HistoryScene.java`
-- `dao/HistoryInfo.java`
+These are carry-forward bugs, **not a separate milestone**.
 
-Reference findings:
-- cloud Favorites is the E-Hentai/ExHentai `favorites.php` list, with 10 remote favorite categories (0-9), category names/counts, pagination and favorite search;
-- favorite search uses `f_search` plus name/tag/note search flags;
-- Favorites gallery rows ultimately use the normal gallery/detail flow;
-- History is local data and opens the same Gallery Detail flow, not a separate detail implementation;
-- EhViewer history keeps gallery identity plus display metadata and visit time.
+## Capability targets
+Attempt the following in order. Finish as much as Scripting can safely support before stopping for milestone review.
 
-Do not combine cloud Favorites and local History into one storage model.
+### 1. Library / Favorites complete
+Build on the existing 0.4 core.
+- cloud Favorites: all categories, counts, search, pagination, Detail reuse;
+- show a gallery's favorite state where the server exposes it;
+- add to Favorites, move/change category, remove from Favorites;
+- favorite note only if the current server/API path is clear and small;
+- destructive/removal actions require explicit confirmation;
+- local History: reopen/delete/clear, newest-first, Continue Reading, reset progress;
+- never mix cloud Favorites and local History storage.
 
-## Goal
-Deliver one coherent Library package with:
-1. read-only cloud Favorites browsing;
-2. local History;
-3. local Reading Progress / Continue Reading;
-4. a small Library UI entry that reuses existing Gallery Detail and Reader;
-5. read-only typed AI actions for the new data without exposing sensitive gallery identity.
+### 2. Gallery Detail complete
+Use EhViewer behavior as the reference and extend the existing Detail rather than replacing it.
+- complete useful metadata/tags/preview handling;
+- Comments: load/read first; posting/editing only after verifying the current server form/API and with explicit user action;
+- rating display; rating submission only if the current request path is verified;
+- favorite actions from Detail;
+- expose Torrent / Archive information or safe external/open actions when supported;
+- retry/error states must use existing shared state patterns.
 
-This is a foundation package. Do not add cloud favorite writes yet.
+Do not duplicate Detail or create a second HTTP/parser stack.
 
-## A. Cloud Favorites — read only
-Add a focused Favorites core on top of the existing account/network/parser code.
+### 3. Reader daily-use features
+Keep the current Reader and add only native/useful behavior supported by Scripting:
+- reliable previous/next and page jump;
+- Continue Reading and reset progress;
+- bounded nearby-page prefetch/cache without defeating reader-image priority;
+- retry failed image/page resolution;
+- prefer normal image and offer original/full image when the page exposes a safe path;
+- at least one practical reading layout beyond the current single-page flow if Scripting UI supports it cleanly (for example continuous vertical reading);
+- persist only a small reader preference set that is actually used.
 
-Requirements:
-- reuse `getBaseUrl()`, `getCookieHeader()` and the existing bounded HTML request path; do not create a second HTTP stack;
-- Favorites root is the active E/Ex site `favorites.php`;
-- support all remote favorites plus category 0-9;
-- parse and expose category names and counts from the favorites page;
-- parse gallery items using the existing gallery-list/search parser where structurally compatible; do not duplicate the normal gallery-list parser;
-- support favorites pagination using returned hrefs;
-- support optional favorite search using the server behavior represented by `FavListUrlBuilder` (`f_search`, name/tag/note flags);
-- detect login-required responses and return a sanitized user-facing error;
-- Favorites UI must open the existing `GalleryDetailView`, not another detail screen.
+Do not build gesture engines or custom rendering frameworks merely to imitate Android.
 
-Suggested public shape; exact names may differ if existing types make a smaller API:
-```ts
-type FavoriteCategory = { index: number; name: string; count: number }
-type FavoritesPage = {
-  categories: FavoriteCategory[]
-  items: GallerySummary[]
-  resultCount: string
-  prevHref: string
-  nextHref: string
-}
-```
+### 4. Downloads / offline reading
+Implement a practical Scripting-native download manager using existing `fetch`, `FileManager` and current gallery/image resolution paths.
 
-Parser-only logic should live outside the UI and have a fixture test.
+Minimum useful behavior:
+- start gallery download from Detail;
+- persistent download record/queue;
+- download pages with bounded concurrency;
+- progress + failed-page state;
+- pause/cancel/retry/resume as far as Scripting runtime permits;
+- completed gallery opens in an offline reader without network;
+- delete downloaded gallery only after explicit confirmation;
+- safe filenames/paths and no silent overwrite of unrelated files;
+- corrupt/incomplete state fails safely and remains recoverable.
 
-## B. Local History + Reading Progress
-Implement a small local persistence module. First inspect current Scripting typings/docs for the supported persistent file/KV APIs and reuse an existing project mechanism if suitable. Do not add SQLite, ORM, state-management or storage dependencies for this package.
+If Scripting cannot continue execution in the background, **do not fake background downloading**. Implement resumable foreground downloading and record the platform limitation for final report.
 
-Store enough internal identity to reopen the gallery without depending on an in-memory `galleryRef`. Prefer an internal identity such as `gid + token` parsed from an already validated E/Ex gallery URL rather than persisting arbitrary full URLs.
+Reading-while-downloading is optional only if it falls naturally out of the queue/cache design.
 
-The token may exist only in the local persistence/internal core required to reopen a gallery. It must never appear in:
-- UI text;
-- logs or diagnostics;
-- exceptions returned to the user;
-- `runEhAction()` results;
-- AssistantTool output;
-- committed fixtures.
+### 5. Discovery features
+Reuse the existing gallery-list parser/request path wherever structurally compatible.
+Attempt:
+- Watched / subscriptions;
+- Toplists;
+- Quick Search / saved searches;
+- My Tags / tag-oriented navigation;
+- useful advanced/multi-tag search behavior already present in EhViewer when it maps cleanly to E-Hentai URLs.
 
-History record should contain only the useful minimum, for example:
-```ts
-type HistoryRecordV1 = {
-  gid: string
-  token: string // internal persistence only
-  title: string
-  titleJpn?: string
-  thumb?: string
-  category?: string
-  uploader?: string
-  pages?: number
-  lastPageIndex?: number
-  viewedAt: number
-  updatedAt: number
-}
-```
+Prefer read/browse support first. Add server writes only when the existing authenticated endpoint is verified and the UI makes the mutation explicit.
 
-Behavior:
-- dedupe/update by stable gallery identity;
-- successful Gallery Detail visit creates/refreshes History;
-- opening Reader records `lastPageIndex`;
-- changing Reader page updates progress without blocking image navigation;
-- Detail shows a clear `继续阅读` action when saved progress is valid;
-- History is newest-first;
-- allow deleting one history item;
-- allow clearing all history only behind an explicit confirmation UI;
-- storage parse/corruption failure must fail safely and preserve a recoverable path where possible; do not silently overwrite unreadable real data during startup;
-- tests must use an injected/temp store and must never clear or mutate the user's real History.
+### 6. Settings / app controls
+Add one small native Settings scene rather than scattering controls.
+Only settings that change implemented behavior belong here, for example:
+- active E/Ex site/account actions;
+- reader mode/preload preference;
+- download concurrency or cache behavior where useful;
+- image/cache clear with explicit confirmation;
+- history/progress maintenance;
+- diagnostics/self-test entry for development if already useful.
 
-Do not implement cross-device sync in 0.4.
+Do not port Android-only preferences just because EhViewer has them.
 
-## C. Library UI
-Add a small Library entry from Home with two destinations:
-- 收藏 Favorites
-- 历史 History / Continue Reading
+### 7. Typed AI boundary
+Extend `EhAction` only for capabilities where structured AI access is actually useful.
+- browsing/list/status actions may be exposed read-only;
+- keep `galleryRef` opaque and short-lived;
+- no gid/token/full URL/local path in action output;
+- manual UI and AI actions must share the same core;
+- do not expose destructive cloud/local mutations to AI merely for feature parity.
 
-Keep new screens out of `GalleryFlow.tsx` as much as practical. Prefer files such as:
-- `src/library.ts` or `src/libraryStore.ts`
-- `src/favorites.ts`
-- `src/favoritesHtml.ts`
-- `src/LibraryScene.tsx`
+## Platform-gap rule
+For an EhViewer feature that depends on Android-only services, unrestricted background execution, SAF/storage permissions, notification services, VPN/system hooks, or another capability Scripting genuinely lacks:
+1. check current Scripting typings/docs;
+2. make one minimal runtime probe only if needed;
+3. implement the closest safe native equivalent when useful;
+4. otherwise skip it and record one concise `PLATFORM_GAP` item for final report.
 
-Exact filenames are not important.
+Do not write compatibility scaffolding for unavailable APIs.
 
-Rules:
-- do not move all existing scenes merely for folder aesthetics;
-- extract only the smallest shared presentation piece necessary to avoid duplicating gallery rows;
-- reuse `GalleryDetailView` and `ReaderView`;
-- use existing `StateView` patterns for loading/empty/error/retry;
-- wide/iPad layout must remain usable;
-- no fake local Favorite category presented as if it were an E-Hentai cloud category.
+## Safety rules for mutations
+Cloud Favorites changes, comments, ratings, downloaded-file deletion and bulk local-data deletion are user-visible mutations.
+- no automatic mutation during tests;
+- require an explicit UI action;
+- destructive actions require confirmation;
+- never test against real user data when an injected/temp fixture can prove the logic;
+- network failure must not leave local state claiming a remote write succeeded.
 
-## D. Typed AI boundary — read only
-Extend `EhAction` without weakening the opaque reference boundary.
+## Verification while developing
+Keep using the existing harness; extend it instead of creating competing test systems.
 
-Minimum useful actions:
-```ts
-| { type: "favorites.list"; category?: number; query?: string }
-| { type: "history.list"; limit?: number }
-```
+After each logical package, run only the affected focused checks plus baseline smoke tests when needed. Fix ordinary failures yourself and continue.
 
-Requirements:
-- results return sanitized display fields plus short-lived `galleryRef` where follow-up detail is needed;
-- no `gid`, token, full URL or local storage path in action results;
-- reuse the same Favorites/History core called by manual UI;
-- clamp unreasonable limits;
-- malformed category/query/limit returns a typed validation failure;
-- keep the existing AssistantTool search registration working;
-- do NOT add cloud favorite write/delete actions or automatic mutations in this package;
-- a second user-facing AssistantTool registration is not required unless current Scripting API makes it trivial and clearly useful. Typed dispatcher support is required.
-
-## E. Tests and verification
-Extend the existing harness instead of creating competing test systems.
-
-Add coverage for at least:
-- favorites URL/category state builder;
-- favorites HTML fixture: 10 category names/counts + gallery list + pagination;
-- favorites login-required/error sanitization;
-- History create/update/dedupe/sort;
-- Reading Progress update and resume index validation;
-- storage malformed-data behavior using temp/injected storage;
-- `favorites.list` and `history.list` action output contains no URL/token/gid leakage;
-- existing search `galleryRef -> gallery.detail` behavior still works.
-
-Before upload, run and fix until green:
-- existing `src/runSelfTests.ts` plus new tests;
+At the **end of the whole 0.5 package**, run one closure pass:
+- `src/runSelfTests.ts`;
 - `src/runActionSmoke.ts`;
 - `src/runAssistantToolSmoke.ts`;
 - `src/runNetworkSelfTest.ts`;
-- any new focused Favorites/Library smoke test you add;
-- `tsconfig.test.json` must include all new non-runtime entry points.
+- any focused download/library/discovery checks added during development;
+- real Scripting runtime flows for Browse -> Detail -> Reader, Favorites, History/Resume, Downloads/Offline, and each implemented discovery scene;
+- verify E and Ex reopening/routing where applicable;
+- verify no sensitive diagnostics/output;
+- verify destructive actions are never triggered by automated tests.
 
-Runtime exercise at least once:
-1. Home -> Library -> Favorites -> category -> gallery -> Detail;
-2. Home/Search -> Detail -> Reader -> change page -> back -> Continue Reading;
-3. Home -> Library -> History -> reopen gallery;
-4. delete one History item and verify persistence;
-5. do not clear the user's real History as part of automated verification.
+A green harness is evidence, not permission to ignore a broken real UI path.
 
-If the account is logged out, Favorites network verification may report a clear authenticated-skip/login-required result; it must not fabricate PASS data.
+## Git / reporting
+- Work only on `feat/0.5-core-expansion`.
+- Keep commits grouped by logical capability, not tiny fixes.
+- Do not write `main`.
+- Do not wait for review between capabilities.
+- A Draft PR may target `feat/0.4-library` while PR #23 remains unmerged; retarget later if the accepted baseline moves.
 
-## Out of scope
-Do not implement in 0.4:
-- add/move/delete cloud favorites;
-- favorite notes editing;
-- local Favorites clone unless it is strictly necessary for the cloud Favorites architecture (normally it is not);
-- Downloads;
-- Comments / Rating writes;
-- Watched / My Tags;
-- Torrent / Archive;
-- History sync/export/import;
-- full parser rewrite;
-- new state-management framework;
-- new login architecture;
-- writes to `main`.
+## Completion / stop condition
+Do not stop after Library, Downloads, Reader, or any single feature.
 
-## Completion
-Work continuously on `feat/0.4-library`: inspect -> implement -> self-test -> runtime check -> fix routine failures -> rerun -> commit logical package.
+Stop for Technical Closure Review only when:
+1. capabilities 1-6 have all been attempted;
+2. every feasible high-value capability is implemented or has a concrete `PLATFORM_GAP` reason;
+3. end-of-package verification has been run and ordinary failures fixed;
+4. no known data-loss/privacy blocker remains.
 
-When complete:
-1. push only logical commits to `feat/0.4-library`;
-2. if PR #22 is still unmerged, create one Draft PR targeting `feat/0.3-ui-foundation`; if #22 has been merged, target the branch that now contains the accepted 0.3 baseline;
-3. report completed features, test/runtime results, changed files, final commit SHA, known issues and at most 2-5 human-only acceptance items;
-4. stop for technical review. Do not begin Downloads or the next feature package.
+Final report must be compact:
+- implemented capabilities;
+- skipped `PLATFORM_GAP` items;
+- test/runtime results;
+- changed files and final head SHA;
+- known remaining defects;
+- at most 2-5 human-only acceptance items.
+
+Then stop. Do not start another feature package until Closure Review is complete.
