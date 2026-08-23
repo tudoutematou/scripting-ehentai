@@ -21,6 +21,10 @@
     "pure.ts",
     "searchHtml.ts",
     "tagTranslation.ts",
-    "tourist.ts"
+    "tourist.ts",
+    "agent/**/*.ts",
+    "dev/**/*.ts",
+    "components/**/*.tsx",
+    "scenes/**/*.tsx"
   ]
 }
