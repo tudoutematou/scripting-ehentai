@@ -1,4 +1,4 @@
-import { Button, Canvas, HStack, Image, LazyVGrid, List, Navigation, NavigationLink, NavigationStack, ProgressView, Script, ScrollView, Section, Spacer, Text, TextField, VStack, useEffect, useState } from "scripting"
+import { Button, Canvas, HStack, Image, LazyVGrid, List, Navigation, NavigationLink, NavigationStack, ProgressView, Script, ScrollView, Section, Spacer, Text, TextField, VStack, useEffect, useRef, useState } from "scripting"
 import { GalleryDetail, GalleryPageLink, GallerySummary, loadGalleryDetailCore, loadRemainingPreviewPages, resolveImagePage, searchGalleries } from "./ehentai"
 import { getAccountStatus, getBaseUrl, importCookiesFromText, importSafariLogin, openSafariLogin, refreshAccountStatus, setActiveSite, signOut } from "./account"
 import { reportDiagnostic } from "./githubBridge"
@@ -15,74 +15,111 @@ function PreviewThumbnail({page}:{page:GalleryPageLink}){const[filePath,setFileP
 function GalleryRow({item}:{item:GallerySummary}){return <HStack spacing={12}>{item.thumb?<Image imageUrl={item.thumb} resizable scaleToFill frame={{width:82,height:112}} cornerRadius={9} placeholder={<ProgressView progressViewStyle="circular"/>}/>:<Image systemName="photo" frame={{width:82,height:112}} foregroundStyle="secondaryLabel"/>}<VStack alignment="leading" spacing={7} frame={{maxWidth:"infinity"}}><Text font="headline" lineLimit={3}>{item.title||"未命名画廊"}</Text>{item.category?<Text font="caption" padding={{horizontal:8,vertical:3}} background="secondarySystemBackground" cornerRadius={7}>{localizeCategory(item.category)}</Text>:null}<Text font="caption" foregroundStyle="secondaryLabel" lineLimit={2}>{[item.uploader,item.pages?`${item.pages} 页`:"",item.posted].filter(Boolean).join(" · ")}</Text></VStack></HStack>}
 async function reportSafe(input:Parameters<typeof reportDiagnostic>[0]){try{await reportDiagnostic(input)}catch{}}
 
-function FilterView({initial,onApply}:{initial:GallerySearchState;onApply:(state:GallerySearchState)=>void}){const dismiss=Navigation.useDismiss();const[category,setCategory]=useState<GalleryCategoryKey>(initial.category);const[quick,setQuick]=useState<QuickFilterKey>(initial.quickFilter);const[advanced,setAdvanced]=useState(initial.advanced);return <List navigationTitle="搜索筛选" navigationBarTitleDisplayMode="inline"><Section header={<Text textCase={null}>分类</Text>}><VStack alignment="leading" spacing={8}>{[GALLERY_CATEGORIES.slice(0,4),GALLERY_CATEGORIES.slice(4,8),GALLERY_CATEGORIES.slice(8)].map((row,i)=><HStack key={String(i)} spacing={7}>{row.map(item=><Button key={item.key} title={item.shortLabel} buttonStyle={category===item.key?"borderedProminent":"bordered"} action={()=>setCategory(item.key)}/>)}</HStack>)}</VStack></Section><Section header={<Text textCase={null}>语言与常用筛选</Text>}><VStack alignment="leading" spacing={8}>{[QUICK_FILTERS.slice(0,3),QUICK_FILTERS.slice(3)].map((row,i)=><HStack key={String(i)} spacing={7}>{row.map(item=><Button key={item.key} title={item.label} buttonStyle={quick===item.key?"borderedProminent":"bordered"} action={()=>setQuick(item.key)}/>)}</HStack>)}</VStack></Section><Section header={<Text textCase={null}>高级搜索</Text>}><Button title={advanced.enabled?"关闭高级搜索":"启用高级搜索"} buttonStyle={advanced.enabled?"borderedProminent":"bordered"} action={()=>setAdvanced({...advanced,enabled:!advanced.enabled})}/>{advanced.enabled?<VStack alignment="leading" spacing={8}><Button title={`${advanced.searchName?"✓":"○"} 搜索画廊名称`} action={()=>setAdvanced({...advanced,searchName:!advanced.searchName})}/><Button title={`${advanced.searchTags?"✓":"○"} 搜索画廊标签`} action={()=>setAdvanced({...advanced,searchTags:!advanced.searchTags})}/><Button title={`${advanced.searchDescription?"✓":"○"} 搜索画廊描述`} action={()=>setAdvanced({...advanced,searchDescription:!advanced.searchDescription})}/></VStack>:null}</Section><Section><Button title="应用筛选" buttonStyle="borderedProminent" action={()=>{onApply({...cloneSearchState(initial),category,quickFilter:quick,advanced});dismiss()}}/></Section></List>}
+function FilterView({ initial, onApply, dismissAfterApply = true }: {
+  initial: GallerySearchState
+  onApply: (state: GallerySearchState) => void
+  dismissAfterApply?: boolean
+}) {
+  const dismiss = Navigation.useDismiss()
+  const [category, setCategory] = useState<GalleryCategoryKey>(initial.category)
+  const [quick, setQuick] = useState<QuickFilterKey>(initial.quickFilter)
+  const [advanced, setAdvanced] = useState(initial.advanced)
+  const apply = () => {
+    onApply({ ...cloneSearchState(initial), category, quickFilter: quick, advanced })
+    if (dismissAfterApply) dismiss()
+  }
+  return <List navigationTitle="搜索筛选" navigationBarTitleDisplayMode="inline">
+    <Section header={<Text textCase={null}>分类</Text>}><VStack alignment="leading" spacing={8}>{[GALLERY_CATEGORIES.slice(0, 4), GALLERY_CATEGORIES.slice(4, 8), GALLERY_CATEGORIES.slice(8)].map((row, index) => <HStack key={String(index)} spacing={7}>{row.map(item => <Button key={item.key} title={item.shortLabel} buttonStyle={category === item.key ? "borderedProminent" : "bordered"} action={() => setCategory(item.key)} />)}</HStack>)}</VStack></Section>
+    <Section header={<Text textCase={null}>语言与常用筛选</Text>}><VStack alignment="leading" spacing={8}>{[QUICK_FILTERS.slice(0, 3), QUICK_FILTERS.slice(3)].map((row, index) => <HStack key={String(index)} spacing={7}>{row.map(item => <Button key={item.key} title={item.label} buttonStyle={quick === item.key ? "borderedProminent" : "bordered"} action={() => setQuick(item.key)} />)}</HStack>)}</VStack></Section>
+    <Section header={<Text textCase={null}>高级搜索</Text>}><Button title={advanced.enabled ? "关闭高级搜索" : "启用高级搜索"} buttonStyle={advanced.enabled ? "borderedProminent" : "bordered"} action={() => setAdvanced({ ...advanced, enabled: !advanced.enabled })} />{advanced.enabled ? <VStack alignment="leading" spacing={8}><Button title={`${advanced.searchName ? "✓" : "○"} 搜索画廊名称`} action={() => setAdvanced({ ...advanced, searchName: !advanced.searchName })} /><Button title={`${advanced.searchTags ? "✓" : "○"} 搜索画廊标签`} action={() => setAdvanced({ ...advanced, searchTags: !advanced.searchTags })} /><Button title={`${advanced.searchDescription ? "✓" : "○"} 搜索画廊描述`} action={() => setAdvanced({ ...advanced, searchDescription: !advanced.searchDescription })} /></VStack> : null}</Section>
+    <Section><Button title="应用筛选" buttonStyle="borderedProminent" action={apply} /></Section>
+  </List>
+}
 
-function ResultsView({initial}:{initial:GallerySearchState}){const[state,setState]=useState(cloneSearchState(initial));const[items,setItems]=useState<GallerySummary[]>([]);const[loading,setLoading]=useState(false);const[error,setError]=useState("");const[resultCount,setResultCount]=useState("");const[prev,setPrev]=useState("");const[next,setNext]=useState("");const[sequence,setSequence]=useState(0);const load=async(direct?:string,nextState:GallerySearchState=state)=>{const seq=sequence+1;setSequence(seq);setLoading(true);setError("");const url=direct||buildGallerySearchUrl(getBaseUrl(),nextState);try{const page=await searchGalleries("",url);setItems(page.items);setResultCount(page.resultCount);setPrev(page.prevHref);setNext(page.nextHref);await reportSafe({stage:"gallery-search-filter",ok:true,request:{url:page.url},notes:`items=${page.items.length}; category=${nextState.category}; tagPresent=${nextState.mode==="tag"}`})}catch(e){setError(e instanceof Error?e.message:String(e));setItems([])}finally{setLoading(false)}};useEffect(()=>{void load(undefined,initial)},[]);const apply=(value:GallerySearchState)=>{setState(value);setPrev("");setNext("");void load(undefined,value)};return <List navigationTitle={searchTitle(state)} navigationBarTitleDisplayMode="inline" overlay={loading&&items.length===0?<ProgressView title="正在搜索…" progressViewStyle="circular"/>:undefined}><Section><HStack><VStack alignment="leading" spacing={3}><Text font="headline">{searchTitle(state)}</Text>{searchRawQuery(state)?<Text font="caption" foregroundStyle="secondaryLabel">{searchRawQuery(state)}</Text>:null}<Text font="caption" foregroundStyle="secondaryLabel">{getCategoryOption(state.category).label} · {getQuickFilter(state.quickFilter).label}</Text></VStack><Spacer/><NavigationLink destination={<FilterView initial={state} onApply={apply}/>}><Text>筛选</Text></NavigationLink></HStack><ErrorText message={error}/></Section><Section header={<Text textCase={null}>{[resultCount?`结果 ${resultCount}`:"",items.length?`本页 ${items.length} 条`:""].filter(Boolean).join(" · ")||"搜索结果"}</Text>}>{items.map(item=><NavigationLink key={item.id} destination={<GalleryDetailView summary={item}/>}><GalleryRow item={item}/></NavigationLink>)}</Section>{prev||next?<Section><HStack><Button title="上一页" systemImage="chevron.left" disabled={!prev||loading} action={()=>{if(prev)void load(prev)}}/><Spacer/><Button title="下一页" systemImage="chevron.right" disabled={!next||loading} action={()=>{if(next)void load(next)}}/></HStack></Section>:null}</List>}
+function ResultsView({ initial }: { initial: GallerySearchState }) {
+  const [state, setState] = useState(cloneSearchState(initial))
+  const [items, setItems] = useState<GallerySummary[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState("")
+  const [resultCount, setResultCount] = useState("")
+  const [prev, setPrev] = useState("")
+  const [next, setNext] = useState("")
+  const requestEpoch = useRef(0)
+  const load = async (direct?: string, nextState: GallerySearchState = state) => {
+    const epoch = ++requestEpoch.current
+    setLoading(true); setError("")
+    const url = direct || buildGallerySearchUrl(getBaseUrl(), nextState)
+    try {
+      const page = await searchGalleries("", url)
+      if (epoch !== requestEpoch.current) return
+      setItems(page.items); setResultCount(page.resultCount); setPrev(page.prevHref); setNext(page.nextHref)
+      await reportSafe({ stage: "gallery-search-filter", ok: true, request: { url: page.url }, notes: `items=${page.items.length}; category=${nextState.category}; tagPresent=${nextState.mode === "tag"}` })
+    } catch (caught) {
+      if (epoch !== requestEpoch.current) return
+      setError(caught instanceof Error ? caught.message : String(caught)); setItems([])
+    } finally {
+      if (epoch === requestEpoch.current) setLoading(false)
+    }
+  }
+  useEffect(() => { void load(undefined, initial) }, [])
+  const apply = (value: GallerySearchState) => { setState(value); setPrev(""); setNext(""); void load(undefined, value) }
+  return <List navigationTitle={searchTitle(state)} navigationBarTitleDisplayMode="inline" overlay={loading && items.length === 0 ? <ProgressView title="正在搜索…" progressViewStyle="circular" /> : undefined}>
+    <Section><HStack><VStack alignment="leading" spacing={3}><Text font="headline">{searchTitle(state)}</Text>{searchRawQuery(state) ? <Text font="caption" foregroundStyle="secondaryLabel">{searchRawQuery(state)}</Text> : null}<Text font="caption" foregroundStyle="secondaryLabel">{getCategoryOption(state.category).label} · {getQuickFilter(state.quickFilter).label}</Text></VStack><Spacer /><NavigationLink destination={<FilterView initial={state} onApply={apply} />}><Text>筛选</Text></NavigationLink></HStack><ErrorText message={error} /></Section>
+    <Section header={<Text textCase={null}>{[resultCount ? `结果 ${resultCount}` : "", items.length ? `本页 ${items.length} 条` : ""].filter(Boolean).join(" · ") || "搜索结果"}</Text>}>{items.map(item => <NavigationLink key={item.id} destination={<GalleryDetailView summary={item} />}><GalleryRow item={item} /></NavigationLink>)}</Section>
+    {prev || next ? <Section><HStack><Button title="上一页" systemImage="chevron.left" disabled={!prev || loading} action={() => { if (prev) void load(prev) }} /><Spacer /><Button title="下一页" systemImage="chevron.right" disabled={!next || loading} action={() => { if (next) void load(next) }} /></HStack></Section> : null}
+  </List>
+}
 
 function HomeFilterEntry({ initial }: { initial: GallerySearchState }) {
   const [result, setResult] = useState<GallerySearchState | null>(null)
-  return result
-    ? <ResultsView initial={result} />
-    : <FilterView initial={initial} onApply={setResult} />
+  return result ? <ResultsView initial={result} /> : <FilterView initial={initial} onApply={setResult} dismissAfterApply={false} />
 }
 
-function AccountSection() {
-  const [account, setAccount] = useState(getAccountStatus())
+function AccountSection({ account, onAccountContextChanged }: { account: ReturnType<typeof getAccountStatus>; onAccountContextChanged: (status: ReturnType<typeof getAccountStatus>) => void }) {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState("")
+  const updateContext = (status: ReturnType<typeof getAccountStatus>) => onAccountContextChanged(status)
   const run = async (action: "manual" | "safari" | "import" | "refresh" | "logout" | "e" | "ex") => {
     if (busy) return
     setBusy(true); setMessage("")
     try {
       if (action === "manual") {
         const text = await prompt({ title: "导入 Cookie", message: "仅保存到本机 Keychain。可粘贴 Cookie 字符串或 Cookie JSON 数组。", obscureText: true, placeholder: "ipb_member_id=…; ipb_pass_hash=…", confirmLabel: "导入" })
-        if (text) setAccount(importCookiesFromText(text))
+        if (text) updateContext(importCookiesFromText(text))
       } else if (action === "safari") {
-        await openSafariLogin()
-        setMessage("已打开 Safari。Safari 登录桥为实验功能；完成登录并确认捕获后，再点“导入实验桥登录”。")
-      } else if (action === "import") setAccount(await importSafariLogin())
-      else if (action === "refresh") setAccount(await refreshAccountStatus())
-      else if (action === "logout") { signOut(); setAccount(getAccountStatus()) }
-      else { setActiveSite(action); setAccount({ ...account, site: action }) }
-    } catch (error) { setMessage(error instanceof Error ? error.message : String(error)) }
+        await openSafariLogin(); setMessage("已打开 Safari。Safari 登录桥为实验功能；完成登录并确认捕获后，再点“导入实验桥登录”。")
+      } else if (action === "import") updateContext(await importSafariLogin())
+      else if (action === "refresh") updateContext(await refreshAccountStatus())
+      else if (action === "logout") { signOut(); updateContext(getAccountStatus()) }
+      else { setActiveSite(action); updateContext(getAccountStatus()) }
+    } catch (caught) { setMessage(caught instanceof Error ? caught.message : String(caught)) }
     finally { setBusy(false) }
   }
-  return <Section header={<Text textCase={null}>账号</Text>}>
-    <VStack alignment="leading" spacing={8}>
-      <Text font="headline">{account.loggedIn ? "已登录" : "游客模式"}</Text>
-      <Text font="caption" foregroundStyle="secondaryLabel">Cookie 仅存本机 Keychain · E：{String(account.eHentaiReachable ?? "待检测")} · Ex：{String(account.exAvailable ?? "待检测")}</Text>
-      <HStack spacing={8}>
-        <Button title="手工导入 Cookie" disabled={busy} action={() => { void run("manual") }} />
-        <Button title="刷新状态" disabled={busy || !account.loggedIn} action={() => { void run("refresh") }} />
-        <Button title="退出" disabled={busy || !account.loggedIn} action={() => { void run("logout") }} />
-      </HStack>
-      <HStack spacing={8}>
-        <Button title="E-Hentai" buttonStyle={account.site === "e" ? "borderedProminent" : "bordered"} disabled={busy || account.site === "e"} action={() => { void run("e") }} />
-        <Button title="ExHentai" buttonStyle={account.site === "ex" ? "borderedProminent" : "bordered"} disabled={busy || account.site === "ex" || account.exAvailable !== true} action={() => { void run("ex") }} />
-      </HStack>
-      <Text font="caption" foregroundStyle="secondaryLabel">Safari 登录桥（实验功能，不是核心登录路径）</Text>
-      <HStack spacing={8}><Button title="在 Safari 登录" disabled={busy} action={() => { void run("safari") }} /><Button title="导入实验桥登录" disabled={busy} action={() => { void run("import") }} /></HStack>
-      {busy ? <ProgressView progressViewStyle="circular" /> : null}<ErrorText message={message} />
-    </VStack>
-  </Section>
+  return <Section header={<Text textCase={null}>账号</Text>}><VStack alignment="leading" spacing={8}>
+    <Text font="headline">{account.loggedIn ? "已登录" : "游客模式"}</Text>
+    <Text font="caption" foregroundStyle="secondaryLabel">Cookie 仅存本机 Keychain · E：{String(account.eHentaiReachable ?? "待检测")} · Ex：{String(account.exAvailable ?? "待检测")}</Text>
+    <HStack spacing={8}><Button title="手工导入 Cookie" disabled={busy} action={() => { void run("manual") }} /><Button title="刷新状态" disabled={busy || !account.loggedIn} action={() => { void run("refresh") }} /><Button title="退出" disabled={busy || !account.loggedIn} action={() => { void run("logout") }} /></HStack>
+    <HStack spacing={8}><Button title="E-Hentai" buttonStyle={account.site === "e" ? "borderedProminent" : "bordered"} disabled={busy || account.site === "e"} action={() => { void run("e") }} /><Button title="ExHentai" buttonStyle={account.site === "ex" ? "borderedProminent" : "bordered"} disabled={busy || account.site === "ex" || account.exAvailable !== true} action={() => { void run("ex") }} /></HStack>
+    <Text font="caption" foregroundStyle="secondaryLabel">Safari 登录桥（实验功能，不是核心登录路径）</Text>
+    <HStack spacing={8}><Button title="在 Safari 登录" disabled={busy} action={() => { void run("safari") }} /><Button title="导入实验桥登录" disabled={busy} action={() => { void run("import") }} /></HStack>
+    {busy ? <ProgressView progressViewStyle="circular" /> : null}<ErrorText message={message} />
+  </VStack></Section>
 }
 
 function HomeView() {
   const dismiss = Navigation.useDismiss()
+  const [account, setAccount] = useState(getAccountStatus())
   const [keyword, setKeyword] = useState("")
   const [items, setItems] = useState<GallerySummary[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const loadHome = async () => { setLoading(true); setError(""); try { setItems((await searchGalleries("", getBaseUrl())).items) } catch (e) { setError(e instanceof Error ? e.message : String(e)) } finally { setLoading(false) } }
+  const loadHome = async () => { setLoading(true); setError(""); try { setItems((await searchGalleries("", getBaseUrl())).items) } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)) } finally { setLoading(false) } }
+  const onAccountContextChanged = (status: ReturnType<typeof getAccountStatus>) => { setAccount(status); void loadHome() }
   useEffect(() => { void loadHome(); void ensureTagTranslations() }, [])
   const searchState = createHomeSearchState(keyword)
-  return <List navigationTitle="E-Hentai" navigationBarTitleDisplayMode="inline" refreshable={loadHome} toolbar={{ cancellationAction: <Button title="关闭" action={dismiss} /> }} overlay={loading && !items.length ? <ProgressView title="正在加载画廊…" progressViewStyle="circular" /> : undefined}>
-    <AccountSection />
-    <Section><VStack alignment="leading" spacing={10}>
-      <HStack><Text font="title3">发现画廊</Text><Spacer /><NavigationLink destination={<HomeFilterEntry initial={searchState} />}><Text>筛选</Text></NavigationLink></HStack>
-      <TextField title="搜索画廊" value={keyword} onChanged={setKeyword} prompt="标题、作者、标签…" submitLabel="search" />
-      <NavigationLink destination={<ResultsView initial={searchState} />}><HStack><Image systemName="magnifyingglass" /><Text>搜索</Text></HStack></NavigationLink>
-    </VStack></Section>
+  return <List navigationTitle={account.site === "ex" ? "ExHentai" : "E-Hentai"} navigationBarTitleDisplayMode="inline" refreshable={loadHome} toolbar={{ cancellationAction: <Button title="关闭" action={dismiss} /> }} overlay={loading && !items.length ? <ProgressView title="正在加载画廊…" progressViewStyle="circular" /> : undefined}>
+    <AccountSection account={account} onAccountContextChanged={onAccountContextChanged} />
+    <Section><VStack alignment="leading" spacing={10}><HStack><Text font="title3">发现画廊</Text><Spacer /><NavigationLink destination={<HomeFilterEntry initial={searchState} />}><Text>筛选</Text></NavigationLink></HStack><TextField title="搜索画廊" value={keyword} onChanged={setKeyword} prompt="标题、作者、标签…" submitLabel="search" /><NavigationLink destination={<ResultsView initial={searchState} />}><HStack><Image systemName="magnifyingglass" /><Text>搜索</Text></HStack></NavigationLink></VStack></Section>
     <Section header={<Text textCase={null}>快速分类</Text>}><VStack alignment="leading" spacing={8}>{[GALLERY_CATEGORIES.slice(1, 5), GALLERY_CATEGORIES.slice(5, 9)].map((row, index) => <HStack key={String(index)} spacing={8}>{row.map(item => <NavigationLink key={item.key} destination={<ResultsView initial={createHomeSearchState("", item.key, "none")} />}><Text>{item.shortLabel}</Text></NavigationLink>)}</HStack>)}</VStack></Section>
     <Section header={<Text textCase={null}>最新画廊</Text>}><ErrorText message={error} />{items.map(item => <NavigationLink key={item.id} destination={<GalleryDetailView summary={item} />}><GalleryRow item={item} /></NavigationLink>)}</Section>
   </List>
