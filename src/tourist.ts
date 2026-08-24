@@ -26,7 +26,7 @@ export const QUICK_FILTERS: QuickFilterOption[] = [
   { key:"speechless",label:"无对白",query:"language:speechless" },
 ]
 
-export type GallerySearchMode = "normal" | "tag" | "uploader"
+export type GallerySearchMode = "normal" | "tag" | "uploader" | "popular"
 export type AdvancedSearchOptions = { enabled:boolean; searchName:boolean; searchTags:boolean; searchDescription:boolean }
 export const DEFAULT_ADVANCED_SEARCH: AdvancedSearchOptions = { enabled:false, searchName:true, searchTags:true, searchDescription:false }
 export type GallerySearchState = {
@@ -64,16 +64,18 @@ export function createTagSearchState(searchUrl:string,namespace:string,tag:strin
   try{const value=new URL(searchUrl).searchParams.get("f_search");if(value)rawQuery=value}catch{}
   return {keyword:"",category:"all",quickFilter:"none",mode:"tag",sourceUrl:String(searchUrl||""),rawQuery,displayQuery:translated||tag,advanced:{...DEFAULT_ADVANCED_SEARCH}}
 }
+export function createPopularSearchState():GallerySearchState{return {keyword:"",category:"all",quickFilter:"none",mode:"popular",sourceUrl:"",rawQuery:"",displayQuery:"热门画廊",advanced:{...DEFAULT_ADVANCED_SEARCH}}}
 export function cloneSearchState(state:GallerySearchState):GallerySearchState{return {...state,advanced:{...state.advanced}}}
 function applyCategory(url:URL,key:GalleryCategoryKey){const option=getCategoryOption(key);if(option.bit)url.searchParams.set("f_cats",String(ALL_CATEGORY_MASK&~option.bit));else url.searchParams.delete("f_cats")}
 function applyAdvanced(url:URL,advanced:AdvancedSearchOptions){for(const key of ["advsearch","f_sname","f_stags","f_sdesc"])url.searchParams.delete(key);if(!advanced.enabled)return;url.searchParams.set("advsearch","1");if(advanced.searchName)url.searchParams.set("f_sname","on");if(advanced.searchTags)url.searchParams.set("f_stags","on");if(advanced.searchDescription)url.searchParams.set("f_sdesc","on")}
 export function buildGallerySearchUrl(baseUrl:string,state:GallerySearchState):string{
   let url:URL
   if(state.mode==="uploader"&&state.keyword.trim())url=new URL(`/uploader/${encodeURIComponent(state.keyword.trim())}/`,baseUrl)
+  else if(state.mode==="popular")url=new URL("popular",baseUrl)
   else if(state.sourceUrl)url=new URL(state.sourceUrl,baseUrl)
   else url=new URL(baseUrl)
   applyCategory(url,state.category)
-  if(state.mode!=="uploader"){
+  if(state.mode!=="uploader"&&state.mode!=="popular"){
     const existing=String(url.searchParams.get("f_search")||"").trim()
     const primary=existing||(!state.sourceUrl?state.rawQuery.trim()||state.keyword.trim():"")
     const quick=getQuickFilter(state.quickFilter).query
@@ -85,5 +87,5 @@ export function buildGallerySearchUrl(baseUrl:string,state:GallerySearchState):s
 }
 export function buildTouristBrowseUrl(baseUrl:string,keyword:string,category:GalleryCategoryKey="all",quick:QuickFilterKey="none"){return buildGallerySearchUrl(baseUrl,createHomeSearchState(keyword,category,quick))}
 export function searchTitle(state:GallerySearchState){if(state.displayQuery.trim())return state.displayQuery.trim();if(state.keyword.trim())return state.keyword.trim();const c=getCategoryOption(state.category),q=getQuickFilter(state.quickFilter);if(state.category!=="all"&&state.quickFilter!=="none")return `${c.label} · ${q.label}`;if(state.category!=="all")return c.label;if(state.quickFilter!=="none")return q.label;return "画廊搜索"}
-export function searchRawQuery(state:GallerySearchState){if(state.mode==="uploader")return state.keyword.trim()?`uploader:${state.keyword.trim()}`:"";return state.rawQuery.trim()||state.keyword.trim()}
+export function searchRawQuery(state:GallerySearchState){if(state.mode==="popular")return "";if(state.mode==="uploader")return state.keyword.trim()?`uploader:${state.keyword.trim()}`:"";return state.rawQuery.trim()||state.keyword.trim()}
 export function browseSummary(keyword:string,category:GalleryCategoryKey,quick:QuickFilterKey){const parts:string[]=[];if(category!=="all")parts.push(getCategoryOption(category).label);if(quick!=="none")parts.push(getQuickFilter(quick).label);if(String(keyword||"").trim())parts.push(`“${String(keyword).trim()}”`);return parts.length?parts.join(" · "):"最新公开画廊"}
