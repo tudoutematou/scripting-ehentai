@@ -32,7 +32,6 @@
     "favorites.ts",
     "libraryStore.ts",
     "LibraryScene.tsx",
-    "runAssistantToolSmoke.ts",
-    "../assistant_tool.tsx"
+    "runAssistantToolSmoke.ts"
   ]
 }
