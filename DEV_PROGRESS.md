@@ -5,16 +5,17 @@ Task commit: `a263d5bc5c19f50e505ec5b7f4bf58fc7a1e16ad`
 Branch: `feat/0.8-ui-ux-consolidation`
 
 ## Current phase
-Package A — App navigation + Home complete.
+Packages A–B complete.
 
 ## Completed
-- Home reorganized by user intent: search/browse, quick discovery, personal content, category browsing, latest galleries, and low-frequency external destinations.
-- Account/login and My Home overview moved off the Home top-level into `账号与设置`; Home now links to that scene and the Library.
-- Reused existing NavigationStack/List/Section/NavigationLink and current scenes; no tab bar, dependency, network/parser/store change.
+- **A / Navigation + Home**: user-intent Home hierarchy for search/browse, discovery, library, account/settings and external destinations.
+- **B / Gallery lists + Search**: shared `GalleryRow` is now reused for results, Home and Library gallery summaries; title/category/secondary metadata hierarchy is consistent. Filter category and language options are compact native sections without narrow-screen horizontal wrapping. Search pagination is visually secondary but explicit.
+- Reused existing native controls/components only; no dependency, search parameter, network/parser/store change.
 
 ## Verification
 - `src/runSelfTests.ts`: passed (29 items).
-- DEV script `E-Hentai 浏览器 DEV` launch was invoked; CLI remained attached to the interactive Navigation session until its 45-second timeout, with no startup exception output.
+- `src/runActionSmoke.ts`: passed; typed `galleryRef` boundary and detail action remain intact.
+- DEV script `E-Hentai 浏览器 DEV` launch invoked; interactive Navigation session stayed active through the 45-second CLI window with no startup exception output.
 
 ## Preserve
 - All accepted 0.7 feature families and safe storage/network/privacy behavior.
@@ -28,8 +29,8 @@ Package A — App navigation + Home complete.
 
 ## Work order
 A. App navigation + Home — completed
-B. Gallery lists + Search/Filter — next
-C. Gallery Detail
+B. Gallery lists + Search/Filter — completed
+C. Gallery Detail — next
 D. Library
 E. Downloads/offline
 F. Reader
@@ -37,4 +38,4 @@ G. Account/Settings/maintenance
 H. UI copy/state/consistency sweep
 
 ## Next step
-Begin Package B. Reuse the current `GalleryRow`, `StateView`, native List/Section controls and existing search state; do not add search parameters or rewrite core architecture.
+Begin Package C. Preserve existing favorite/download/bookmark behavior while separating identity, reading, ownership, relationships and resource actions into a clear Detail hierarchy.
