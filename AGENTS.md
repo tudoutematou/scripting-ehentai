@@ -7,7 +7,7 @@ You are the primary implementation and runtime-debugging agent for this Scriptin
 1. `CURRENT_TASK.md`
 2. Relevant files under `src/`
 3. Current Scripting typings/docs only when an API is uncertain
-4. EhViewer reference source only for the feature being implemented
+4. EhViewer reference source only when `CURRENT_TASK.md` requires it
 
 Do NOT reread the full project history unless `CURRENT_TASK.md` explicitly asks for it.
 
@@ -15,46 +15,38 @@ Do NOT reread the full project history unless `CURRENT_TASK.md` explicitly asks 
 The GitHub repository may be private and the current local workspace may be empty. **That is not a blocker and does not mean credentials are missing.**
 
 - Do NOT use shell/local `git clone`, `git pull`, PAT, SSH keys, credential helpers, or ask the user to configure Git credentials for this project.
-- Do NOT infer repository inaccessibility from an unauthenticated GitHub webpage returning 404; private repositories commonly do that.
-- Use the **Scripting native GitHub API / built-in GitHub integration** for repository reads, writes, commits and branch work. This project has already been developed through that path without PAT/local-git authentication.
-- If the local `scripting-ehentai` directory is empty, bootstrap from the branch named in `CURRENT_TASK.md` through the native GitHub API: read `AGENTS.md`, `CURRENT_TASK.md`, `DEV_PROGRESS.md`, then fetch the relevant `src/*` files and copy/sync them into the isolated `E-Hentai 浏览器 DEV` script as needed.
+- Do NOT infer repository inaccessibility from an unauthenticated GitHub webpage returning 404.
+- Use the **Scripting native GitHub API / built-in GitHub integration** for repository reads, writes, commits and branch work.
+- If the local workspace is empty, bootstrap from the branch named in `CURRENT_TASK.md` through the native GitHub integration: read `AGENTS.md`, `CURRENT_TASK.md`, `DEV_PROGRESS.md`, then fetch only the relevant source files and sync them into the isolated `E-Hentai 浏览器 DEV` script as needed.
 - Repository state on the named remote branch is authoritative; a pre-existing local checkout is not required.
-- If a GitHub API action is not immediately visible, inspect the available Scripting tools/integrations first. Only report a blocker if the native GitHub integration is genuinely unavailable after checking. **Never fall back to requesting a PAT/local Git credential.**
+- If a GitHub API action is not immediately visible, inspect available Scripting tools/integrations first. Only report a blocker if the native GitHub integration is genuinely unavailable after checking. **Never fall back to requesting PAT/local Git credentials.**
 
-## Development mode — feature first
-The project is currently in **feature-completion mode**.
+## Development mode
+`CURRENT_TASK.md` is authoritative for the current project phase.
 
-Work continuously:
-`inspect -> implement -> focused test -> run in Scripting DEV copy -> fix blockers -> commit -> continue feature work`.
+- If it says feature-completion: prioritize completing useful functionality and defer broad polish.
+- If it says UI/UX consolidation: preserve feature behavior and reorganize native UI without expanding scope.
+- If it says stabilization/final review: **freeze feature scope**, perform the requested broad audit, fix defects by root cause in severity groups, run consolidated regression, and do not reopen feature work.
 
-Prioritize completing useful EhViewer functionality before broad bug-polish rounds.
+Never invent a new phase or continue into the next version automatically.
 
-Fix immediately only when a defect:
-- prevents the current feature or app from running;
-- risks data loss, privacy/security exposure, or destructive incorrect writes;
-- blocks further development;
-- makes a claimed feature fundamentally unusable.
+## Root-cause rule
+A bug report names a symptom, not necessarily the fix location.
 
-For non-blocking UI quirks, edge cases, minor parser gaps, polish issues, and isolated regressions: record them in the final report and continue. Do not stop the feature package for repeated micro-review/fix loops.
+Before editing a shared function/store/parser/network path:
+- inspect its callers and related state flow;
+- prefer one fix at the common boundary over repeated guards in individual screens;
+- preserve validation, error handling, privacy/security and data-safety behavior;
+- add the smallest deterministic regression check for non-trivial logic.
 
-A comprehensive bug/stability pass happens **after the planned feature set is substantially complete**.
+Do not perform speculative architecture rewrites during bug fixing.
 
 ## Runtime script policy
-Never overwrite the user's existing stable local `E-Hentai 浏览器` script during development.
+Never overwrite the user's existing stable local `E-Hentai 浏览器` script during development or stabilization.
 
-For real-runtime testing, create or update a separate local Scripting script/project with an obvious development identity, for example:
-- display name: `E-Hentai 浏览器 DEV`;
-- internal script name distinct from the stable script;
-- `script.json` version/description identifying the current development package.
+Use the separate local `E-Hentai 浏览器 DEV` project for real-runtime validation. Keep the normal `index.tsx -> runAppV2()` entry path and identify the active DEV/RC version in `script.json` as required by `CURRENT_TASK.md`.
 
-Populate that DEV script with the current branch business source and keep the normal `index.tsx -> runAppV2()` entry path.
-
-A feature package is runtime-accepted when:
-1. repository diagnostics/tests for that package pass;
-2. the separate DEV script launches successfully in the real Scripting app;
-3. the package's main new user-visible capability can be exercised there.
-
-Do not require replacing the stable script, and do not block progress on exhaustive manual bug hunting once those conditions pass.
+Real-runtime evidence from the Scripting app takes precedence over assumptions from repository-only execution.
 
 ## Product rules
 - Preserve manual UI operation even when AI automation exists.
@@ -65,31 +57,36 @@ Do not require replacing the stable script, and do not block progress on exhaust
 - No fake UI/settings for unimplemented features.
 
 ## Testing policy
-- Sub-feature: focused automated/runtime check by the agent.
-- Feature package: one integration regression by the agent.
-- Runtime acceptance: use the separate local DEV script.
-- Do not ask the user to rerun the whole app after every small change.
+- Use focused checks while changing one root cause or UI path.
+- Run the complete existing harness only at checkpoints/final verification unless `CURRENT_TASK.md` says otherwise.
+- Do not ask the user to rerun the whole app after every small fix.
 - `scripting-ts run` is useful evidence but does not replace a real Scripting DEV-script launch.
-- Do not reopen already-passed areas unless the current change touches them or a blocker is observed.
+- Do not reopen already-passed areas unless the current change touches them or the active audit/review explicitly samples them.
 
 ## Privacy and data safety
-Never log/commit Cookie values, passwords, apiuid/apikey, full sensitive URLs, gallery/page tokens, search terms, user comments, local private paths, or full HTML.
+Never log/commit Cookie values, passwords, apiuid/apikey, full sensitive URLs, gallery/page tokens, search terms, user comments, private local paths, or full HTML.
 
-Do not simplify away validation, safe storage replacement, destructive-action confirmation, or protections against deleting unrelated files.
+Do not simplify away validation, safe storage replacement, destructive-action confirmation, atomic/recoverable writes, or protections against deleting unrelated files.
+
+## Context safety
+Never rely on automatic conversation compression during an active tool-call chain.
+
+When a session becomes large:
+- finish active tool calls and the current logical batch;
+- run its focused checks;
+- commit/push completed work;
+- update `DEV_PROGRESS.md` (and the active audit file when relevant);
+- stop the session and resume from repository state in a fresh conversation.
 
 ## Git
 - Work only on the branch named in `CURRENT_TASK.md`.
 - Use Scripting native GitHub API; no PAT/local git requirement.
 - Never write `main` unless explicitly instructed.
 - Do not upload runtime diagnostics containing user data.
-- Commit by logical capability, not every tiny edit.
+- Commit by logical capability/fix batch, not every tiny edit.
+- Never merge a PR unless the user explicitly asks.
 
 ## Reporting
-Keep reports compact:
-- completed capabilities;
-- tests + DEV-script runtime result;
-- changed files/final SHA;
-- PLATFORM_GAP items;
-- known non-blocking defects deferred to the final stabilization phase.
+Follow the report format in `CURRENT_TASK.md`.
 
-Do not stop for a separate Technical Closure Review unless `CURRENT_TASK.md` explicitly says the project has entered final stabilization.
+Keep interim reports compact. During stabilization, do not stop after each bug for another review round; complete the requested audit/fix batch unless an S0 safety blocker requires immediate interruption.
