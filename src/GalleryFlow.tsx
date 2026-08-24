@@ -8,7 +8,7 @@ import { GalleryCategoryKey, GallerySearchState, GALLERY_CATEGORIES, QUICK_FILTE
 import { ErrorText, EmptyState } from "./StateView"
 import { ensureTagTranslations, getTagTranslationStatus, translateTag } from "./tagTranslation"
 import { createDownload, addLocalBookmark, loadLocalBookmarks, removeLocalBookmark } from "./libraryStore"
-import { openResource } from "./ehentai"
+import { openExternalDestination, openResource } from "./ehentai"
 import { LibraryScene } from "./LibraryScene"
 import { recordHistory, updateReadingProgress, loadHistory, resumeIndex, runDownload } from "./libraryStore"
 const fileManager:any=(globalThis as any).FileManager
@@ -149,6 +149,7 @@ export function HomeScene() {
     <AccountSection account={account} onAccountContextChanged={onAccountContextChanged} />
     <AccountOverviewEntry loggedIn={account.loggedIn} />
     <Section><VStack alignment="leading" spacing={10}><HStack><Text font="title3">发现画廊</Text><Spacer /><NavigationLink destination={<LibraryScene />}><Text>书库</Text></NavigationLink><NavigationLink destination={<ResultsView initial={createPopularSearchState()} />}><Text>热门</Text></NavigationLink><NavigationLink destination={<HomeFilterEntry initial={searchState} />}><Text>筛选</Text></NavigationLink></HStack><TextField title="搜索画廊" value={keyword} onChanged={setKeyword} prompt="标题、作者、标签…" submitLabel="search" /><NavigationLink destination={<ResultsView initial={searchState} />}><HStack><Image systemName="magnifyingglass" /><Text>搜索</Text></HStack></NavigationLink></VStack></Section>
+    <Section header={<Text textCase={null}>外部入口</Text>}><HStack spacing={8}><Button title="新闻" action={()=>void openExternalDestination("news").catch(setError)}/><Button title="论坛" action={()=>void openExternalDestination("forums").catch(setError)}/><Button title="Wiki" action={()=>void openExternalDestination("wiki").catch(setError)}/><Button title="种子" action={()=>void openExternalDestination("torrents").catch(setError)}/></HStack></Section>
     <Section header={<Text textCase={null}>快速分类</Text>}><VStack alignment="leading" spacing={8}>{[GALLERY_CATEGORIES.slice(1, 5), GALLERY_CATEGORIES.slice(5, 9)].map((row, index) => <HStack key={String(index)} spacing={8}>{row.map(item => <NavigationLink key={item.key} destination={<ResultsView initial={createHomeSearchState("", item.key, "none")} />}><Text>{item.shortLabel}</Text></NavigationLink>)}</HStack>)}</VStack></Section>
     <Section header={<Text textCase={null}>最新画廊</Text>}><ErrorText message={error} />{error ? <Button title="重试加载" buttonStyle="bordered" action={() => { void loadHome() }} /> : null}{!loading && !error && items.length === 0 ? <EmptyState message="暂时没有可显示的画廊，稍后下拉刷新或重试。" /> : null}{items.map(item => <NavigationLink key={item.id} destination={<GalleryDetailView summary={item} />}><GalleryRow item={item} /></NavigationLink>)}</Section>
   </List>
