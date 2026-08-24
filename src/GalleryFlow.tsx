@@ -1,10 +1,10 @@
 import { Button, Canvas, HStack, Image, LazyVGrid, List, Navigation, NavigationLink, ProgressView, Script, ScrollView, Section, Spacer, Text, TextField, VStack, useEffect, useRef, useState } from "scripting"
-import { GalleryDetail, GalleryPageLink, GallerySummary, loadGalleryDetailCore, loadRemainingPreviewPages, resolveImagePage, searchGalleries } from "./ehentai"
+import { GalleryDetail, GalleryPageLink, GallerySummary, loadAccountOverview, loadGalleryDetailCore, loadRemainingPreviewPages, resolveImagePage, searchGalleries } from "./ehentai"
 import { changeFavorite, loadFavoriteState } from "./favorites"
 import { loadPreferences, type ReaderPreferences } from "./libraryStore"
 import { getAccountStatus, getBaseUrl, getCookieHeader, importCookiesFromText, importSafariLogin, openSafariLogin, refreshAccountStatus, setActiveSite, signOut } from "./account"
 import { reportDiagnostic } from "./githubBridge"
-import { GalleryCategoryKey, GallerySearchState, GALLERY_CATEGORIES, QUICK_FILTERS, QuickFilterKey, buildGallerySearchUrl, cloneSearchState, createHomeSearchState, createTagSearchState, getCategoryOption, getQuickFilter, localizeCategory, localizeCommonTag, localizeMetadataKey, localizeTagNamespace, searchRawQuery, searchTitle } from "./tourist"
+import { GalleryCategoryKey, GallerySearchState, GALLERY_CATEGORIES, QUICK_FILTERS, QuickFilterKey, buildGallerySearchUrl, cloneSearchState, createHomeSearchState, createPopularSearchState, createTagSearchState, getCategoryOption, getQuickFilter, localizeCategory, localizeCommonTag, localizeMetadataKey, localizeTagNamespace, searchRawQuery, searchTitle } from "./tourist"
 import { ErrorText, EmptyState } from "./StateView"
 import { ensureTagTranslations, getTagTranslationStatus, translateTag } from "./tagTranslation"
 import { createDownload, runDownload } from "./libraryStore"
@@ -132,6 +132,8 @@ function AccountSection({ account, onAccountContextChanged }: { account: ReturnT
   </VStack></Section>
 }
 
+function AccountOverviewEntry({loggedIn}:{loggedIn:boolean}){const[data,setData]=useState<Awaited<ReturnType<typeof loadAccountOverview>>|null>(null),[loading,setLoading]=useState(false),[error,setError]=useState("");const load=async()=>{if(!loggedIn){setError("账户概览需要登录。");return}setLoading(true);setError("");try{setData(await loadAccountOverview())}catch(caught){setError(caught instanceof Error?caught.message:String(caught))}finally{setLoading(false)}};useEffect(()=>{if(loggedIn)void load();else{setData(null);setError("")}},[loggedIn]);return <Section header={<Text textCase={null}>My Home</Text>}><VStack alignment="leading" spacing={7}><HStack><Text font="headline">账户概览</Text><Spacer/><Button title="刷新" disabled={loading||!loggedIn} action={()=>void load()}/></HStack>{loading?<ProgressView progressViewStyle="circular"/>:null}{data?.imageLimitCurrent&&data.imageLimitMax?<Text>图片限额：{data.imageLimitCurrent} / {data.imageLimitMax}</Text>:null}{data?.resetCost?<Text font="caption" foregroundStyle="secondaryLabel">重置成本：{data.resetCost}</Text>:null}{data?.values.map(item=><Text key={item.label} font="caption" foregroundStyle="secondaryLabel">{item.label}：{item.value}</Text>)}{data&&!data.imageLimitCurrent&&!data.values.length?<Text font="caption" foregroundStyle="secondaryLabel">当前页面未提供可稳定显示的账户数据。</Text>:null}<ErrorText message={error}/></VStack></Section>}
+
 export function HomeScene() {
   const dismiss = Navigation.useDismiss()
   const [account, setAccount] = useState(getAccountStatus())
@@ -145,7 +147,8 @@ export function HomeScene() {
   const searchState = createHomeSearchState(keyword)
   return <List navigationTitle={account.site === "ex" ? "ExHentai" : "E-Hentai"} navigationBarTitleDisplayMode="inline" refreshable={loadHome} toolbar={{ cancellationAction: <Button title="关闭" action={dismiss} /> }} overlay={loading && !items.length ? <ProgressView title="正在加载画廊…" progressViewStyle="circular" /> : undefined}>
     <AccountSection account={account} onAccountContextChanged={onAccountContextChanged} />
-    <Section><VStack alignment="leading" spacing={10}><HStack><Text font="title3">发现画廊</Text><Spacer /><NavigationLink destination={<LibraryScene />}><Text>书库</Text></NavigationLink><NavigationLink destination={<HomeFilterEntry initial={searchState} />}><Text>筛选</Text></NavigationLink></HStack><TextField title="搜索画廊" value={keyword} onChanged={setKeyword} prompt="标题、作者、标签…" submitLabel="search" /><NavigationLink destination={<ResultsView initial={searchState} />}><HStack><Image systemName="magnifyingglass" /><Text>搜索</Text></HStack></NavigationLink></VStack></Section>
+    <AccountOverviewEntry loggedIn={account.loggedIn} />
+    <Section><VStack alignment="leading" spacing={10}><HStack><Text font="title3">发现画廊</Text><Spacer /><NavigationLink destination={<LibraryScene />}><Text>书库</Text></NavigationLink><NavigationLink destination={<ResultsView initial={createPopularSearchState()} />}><Text>热门</Text></NavigationLink><NavigationLink destination={<HomeFilterEntry initial={searchState} />}><Text>筛选</Text></NavigationLink></HStack><TextField title="搜索画廊" value={keyword} onChanged={setKeyword} prompt="标题、作者、标签…" submitLabel="search" /><NavigationLink destination={<ResultsView initial={searchState} />}><HStack><Image systemName="magnifyingglass" /><Text>搜索</Text></HStack></NavigationLink></VStack></Section>
     <Section header={<Text textCase={null}>快速分类</Text>}><VStack alignment="leading" spacing={8}>{[GALLERY_CATEGORIES.slice(1, 5), GALLERY_CATEGORIES.slice(5, 9)].map((row, index) => <HStack key={String(index)} spacing={8}>{row.map(item => <NavigationLink key={item.key} destination={<ResultsView initial={createHomeSearchState("", item.key, "none")} />}><Text>{item.shortLabel}</Text></NavigationLink>)}</HStack>)}</VStack></Section>
     <Section header={<Text textCase={null}>最新画廊</Text>}><ErrorText message={error} />{error ? <Button title="重试加载" buttonStyle="bordered" action={() => { void loadHome() }} /> : null}{!loading && !error && items.length === 0 ? <EmptyState message="暂时没有可显示的画廊，稍后下拉刷新或重试。" /> : null}{items.map(item => <NavigationLink key={item.id} destination={<GalleryDetailView summary={item} />}><GalleryRow item={item} /></NavigationLink>)}</Section>
   </List>
