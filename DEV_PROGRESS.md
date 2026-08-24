@@ -1,20 +1,15 @@
 # DEV_PROGRESS
 
-Head before checkpoint: `9eee7216cbe150fd57680e4e1a6d2e7acc279d4d`
+Head before checkpoint: `04f3a7e824d3703aa0cd11ef3d8b674697827ca9`
 
-## Completed
-- Isolated `E-Hentai 浏览器 DEV` script; stable browser unchanged.
-- Bounded continuous Reader, local image retry, and protected reading progress.
-- Foreground resumable offline downloads, atomic page writes, recoverable manifest/file deletion, offline reader, and cache/download maintenance.
-- Favorite category/note read-edit, Torrent/Archive safe external open, read-only My Tags with translated display.
-- Focused self-tests, action/assistant smoke tests, and network self-test passed with sanitized diagnostics.
+## Completed target
+- 0.7 target 1: native Popular uses the existing Results/Detail/pagination path; My Home read-only overview loads `home.php` and shows only parsable image limit, reset cost, and a compact exposed-value set.
+- Deterministic Popular URL and account-overview parser fixtures passed; existing self-test and action smoke passed.
+- Isolated `E-Hentai 浏览器 DEV` remains the only development script. Its project run held the expected Navigation session open until the CLI timeout; no startup exception was emitted.
 
-## PLATFORM_GAP
+## Current PLATFORM_GAP
 - Rating submission: no exact verified authenticated E-Hentai API/form path; no `apiuid`/`apikey` storage.
 - Comment post/edit: no exact verified action, CSRF field set, or edit-ownership signal.
 
-## Human acceptance (one concentrated pass)
-1. Single-page + continuous Reader: force an image failure where practical; use `重试图片`; confirm page/index/progress do not jump.
-2. Download: start a small gallery → pause/stop → continue → complete → offline open → delete with confirmation.
-3. My Tags: verify logged-in listing and opening a tag into existing tag-search results.
-4. Favorite note: read/echo existing note where supported; edit/save once; reopen and verify server result.
+## Next step
+- 0.7 target 2: Local Bookmarks / Local Favorites, reusing the existing safe local-store and Detail/Library paths.
