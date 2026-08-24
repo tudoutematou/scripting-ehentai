@@ -5,17 +5,19 @@ Task commit: `a263d5bc5c19f50e505ec5b7f4bf58fc7a1e16ad`
 Branch: `feat/0.8-ui-ux-consolidation`
 
 ## Current phase
-Packages A–D complete.
+Packages A–F complete.
 
 ## Completed
 - **A / Navigation + Home**: Home hierarchy distinguishes search/browse, discovery, personal content and low-frequency external destinations.
 - **B / Gallery lists + Search**: shared `GalleryRow` covers Home, results and Library lists; filters/pagination use clearer native sections.
 - **C / Gallery Detail**: detail actions are ordered as reading, ownership/offline, relationships and resources.
-- **D / Library**: Library is grouped by cloud favorites, local content, offline reading, discovery/tags, and settings/maintenance. Existing confirmation and safe-storage behavior remain intact.
+- **D / Library**: Library is grouped by cloud favorites, local content, offline reading, discovery/tags, and settings/maintenance.
+- **E / Downloads**: visible state now uses Chinese user language (downloading, paused/resumable, retry needed, completed), shows completed/failed page counts, highlights the next primary action, and retains confirmed destructive deletion.
+- **F / Reader**: controls use consistent bordered presentation and clearer terms for retry current page, viewing original, reading position and end of continuous batches; rendering/resume/preload behavior unchanged.
 - Reused native controls/components only; no dependency, feature, network/parser/store change.
 
 ## Verification
-- `src/runSelfTests.ts`: passed (29 items) after D.
+- `src/runSelfTests.ts`: passed (29 items) after E/F.
 - DEV script `E-Hentai 浏览器 DEV` launch invoked; interactive Navigation session stayed active through the 45-second CLI window with no startup exception output.
 
 ## Preserve
@@ -33,10 +35,10 @@ A. App navigation + Home — completed
 B. Gallery lists + Search/Filter — completed
 C. Gallery Detail — completed
 D. Library — completed
-E. Downloads/offline — next
-F. Reader
-G. Account/Settings/maintenance
+E. Downloads/offline — completed
+F. Reader — completed
+G. Account/Settings/maintenance — next
 H. UI copy/state/consistency sweep
 
 ## Next step
-Begin Package E with presentation-only changes to DownloadsScene: clarify download state/progress and primary next action while retaining foreground resumability and destructive confirmation.
+Begin Package G: group account/site/login, reader preferences, offline/cache and data maintenance in user-understandable sections; keep account My Home read-only and avoid exposing internal controls.
