@@ -27,8 +27,8 @@ export const QUICK_FILTERS: QuickFilterOption[] = [
 ]
 
 export type GallerySearchMode = "normal" | "tag" | "uploader" | "popular"
-export type AdvancedSearchOptions = { enabled:boolean; searchName:boolean; searchTags:boolean; searchDescription:boolean }
-export const DEFAULT_ADVANCED_SEARCH: AdvancedSearchOptions = { enabled:false, searchName:true, searchTags:true, searchDescription:false }
+export type AdvancedSearchOptions = { enabled:boolean; searchName:boolean; searchTags:boolean; searchDescription:boolean; minimumRating:""|"2"|"3"|"4"|"5"; pageFrom:string; pageTo:string; searchTorrents:boolean; showExpunged:boolean }
+export const DEFAULT_ADVANCED_SEARCH: AdvancedSearchOptions = { enabled:false, searchName:true, searchTags:true, searchDescription:false, minimumRating:"", pageFrom:"", pageTo:"", searchTorrents:false, showExpunged:false }
 export type GallerySearchState = {
   keyword:string
   category:GalleryCategoryKey
@@ -68,7 +68,7 @@ export function createUploaderSearchState(uploader:string):GallerySearchState{co
 export function createPopularSearchState():GallerySearchState{return {keyword:"",category:"all",quickFilter:"none",mode:"popular",sourceUrl:"",rawQuery:"",displayQuery:"热门画廊",advanced:{...DEFAULT_ADVANCED_SEARCH}}}
 export function cloneSearchState(state:GallerySearchState):GallerySearchState{return {...state,advanced:{...state.advanced}}}
 function applyCategory(url:URL,key:GalleryCategoryKey){const option=getCategoryOption(key);if(option.bit)url.searchParams.set("f_cats",String(ALL_CATEGORY_MASK&~option.bit));else url.searchParams.delete("f_cats")}
-function applyAdvanced(url:URL,advanced:AdvancedSearchOptions){for(const key of ["advsearch","f_sname","f_stags","f_sdesc"])url.searchParams.delete(key);if(!advanced.enabled)return;url.searchParams.set("advsearch","1");if(advanced.searchName)url.searchParams.set("f_sname","on");if(advanced.searchTags)url.searchParams.set("f_stags","on");if(advanced.searchDescription)url.searchParams.set("f_sdesc","on")}
+function applyAdvanced(url:URL,advanced:AdvancedSearchOptions){for(const key of ["advsearch","f_sname","f_stags","f_sdesc","f_srdd","f_spf","f_spt","f_sto","f_sh"])url.searchParams.delete(key);if(!advanced.enabled)return;url.searchParams.set("advsearch","1");if(advanced.searchName)url.searchParams.set("f_sname","on");if(advanced.searchTags)url.searchParams.set("f_stags","on");if(advanced.searchDescription)url.searchParams.set("f_sdesc","on");if(advanced.minimumRating)url.searchParams.set("f_srdd",advanced.minimumRating);const from=Math.max(0,Math.floor(Number(advanced.pageFrom)));const to=Math.max(0,Math.floor(Number(advanced.pageTo)));if(Number.isFinite(from)&&from>0)url.searchParams.set("f_spf",String(from));if(Number.isFinite(to)&&to>0)url.searchParams.set("f_spt",String(to));if(advanced.searchTorrents)url.searchParams.set("f_sto","on");if(advanced.showExpunged)url.searchParams.set("f_sh","on")}
 export function buildGallerySearchUrl(baseUrl:string,state:GallerySearchState):string{
   let url:URL
   if(state.mode==="uploader"&&state.keyword.trim())url=new URL(`/uploader/${encodeURIComponent(state.keyword.trim())}/`,baseUrl)
