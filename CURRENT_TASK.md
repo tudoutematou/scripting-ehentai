@@ -1,185 +1,162 @@
-# CURRENT_TASK — Feature Completion Wave
+# CURRENT_TASK — 0.7 Feature Gap Sweep
 
-Branch: `feat/0.6-interactions-offline`
-Base: `38b55d331c82c40bac4e384df1f78888d17c4797`
-Reference: `xiaojieonly/Ehviewer_CN_SXJ` current behavior.
+Branch: `feat/0.7-feature-gap-sweep`
+Base: accepted 0.6 head `739be76bc8c51d097afa4086a04bfaeb12de5984`
+Reference: `xiaojieonly/Ehviewer_CN_SXJ` branch `BiLi_PC_Gamer`.
 
-Read `AGENTS.md` first. The project is now in **feature-completion mode**: keep building until the practical high-value EhViewer feature set is substantially complete. Do not stop for repeated bug-review rounds.
+Read `AGENTS.md` first. This is the **last feature-gap sweep before UI/UX consolidation**. Do not turn 0.7 into a stabilization round and do not spend the package polishing already-working screens unless a defect blocks the new capability.
 
-## Runtime rule
-Do **not** overwrite the user's existing stable local `E-Hentai 浏览器` script.
-
-Create/update a separate local Scripting project for runtime validation:
-- display name: `E-Hentai 浏览器 DEV`;
-- distinct internal script name;
-- `script.json` clearly identifies DEV + current package/version;
-- current branch source is copied into that DEV project's actual script root;
-- production entry remains `index.tsx -> runAppV2()`.
-
-A development package is considered runnable when the DEV script launches in the real Scripting app and the newly added main capability is visible/usable. This is enough to continue development; do not wait for exhaustive bug hunting.
-
-## Development loop
-Work continuously:
-`inspect -> implement -> focused tests -> run DEV script -> fix blockers -> commit logical capability -> continue`.
-
-Immediately fix only:
-- startup/build/runtime blockers;
-- data-loss/privacy/security issues;
-- destructive wrong writes;
-- defects that make the current claimed feature fundamentally unusable.
-
-Record and defer ordinary UI quirks, edge cases, minor parser gaps, visual polish and isolated regressions to the final stabilization phase.
+## Runtime / session rules
+- Keep the stable local `E-Hentai 浏览器` untouched.
+- Continue using the separate `E-Hentai 浏览器 DEV` script and keep it synced with this branch.
+- Real Scripting DEV launch is required for each logical package's main path.
+- A package may span multiple Agent conversations. Repository state is authoritative; conversation history is not.
+- Before automatic context compression becomes likely: finish active tool calls, commit/push completed work, update `DEV_PROGRESS.md` with current head + next step, then stop the session. Resume from GitHub in a fresh conversation. Never rely on a compressed/broken tool-call chain.
 
 ## Preserve
-Do not intentionally remove working behavior:
-- Home / Search / Filter / Detail / Reader / Account;
-- E-Hentai + ExHentai routing;
-- Favorites / History / Continue Reading / Quick Search;
-- Watched / Toplist / My Tags read path;
-- continuous + single reader;
-- foreground downloads / offline reader;
-- image priority/bounded requests;
-- opaque short-lived `galleryRef` AI boundary;
-- sanitized diagnostics and safe local storage.
+Do not regress the accepted 0.6 families:
+- Home/Search/Filter/Detail/Reader/Account;
+- E + Ex routing;
+- cloud Favorites + note, History/Continue, Quick Search;
+- Watched, Toplists, My Tags read/browse;
+- single + bounded continuous Reader and current-image retry;
+- foreground resumable Downloads + offline Reader;
+- safe storage/manifest recovery, bounded requests, sanitized diagnostics;
+- opaque short-lived `galleryRef` AI boundary.
 
-Never expose Cookie, password, apiuid/apikey, gallery/page token, full sensitive URL, search text, user comment text, private local path or full HTML.
+Never expose Cookie, password, apiuid/apikey, gallery/page token, full sensitive URL, search text, user comment text, private local path, or full HTML.
 
-# Project-completion targets
+## Development mode
+Work continuously:
+`inspect existing path -> compare matching EhViewer behavior -> implement smallest reusable path -> focused test -> real DEV run -> commit -> continue`.
 
-The agent should continue through the targets below without stopping for a Technical Closure Review after each section.
+Fix immediately only startup/runtime blockers, privacy/data-loss/security issues, destructive wrong writes, or defects that make the newly claimed feature unusable. Record ordinary polish/edge bugs for 0.9 stabilization.
 
-## 1. Make the DEV script real and keep it current
-Before adding more features:
-- create/update the separate `E-Hentai 浏览器 DEV` local script;
-- populate it from the current branch source without modifying the stable script;
-- verify the real Scripting app shows current 0.6 UI, including `下载离线` on Gallery Detail and Library download/My Tags entries;
-- update the DEV copy as development continues.
+# 0.7 capability targets
 
-Do not build a complex updater. A simple agent-managed copy/sync into the DEV project is enough.
+## 1. Popular + account overview
+These are confirmed first-class EhViewer/E-Hentai destinations and are absent from the current app.
 
-## 2. Finish core Gallery/Library interactions
-Build on existing paths; no second network stack.
+### Popular
+- add native `Popular` entry using current E/Ex base URL and the existing gallery-list request/parser/UI path;
+- pagination/detail navigation must reuse existing Results/Detail behavior;
+- no second gallery parser.
 
-Attempt the remaining useful interactions where the actual endpoint is verifiable:
-- favorite category + note read/update;
-- rating submit;
-- comment post/edit;
-- Torrent / Archive open/share;
-- gallery version/parent/uploader navigation when exposed;
-- useful comment/resource status presentation.
+### My Home / account overview (read-only)
+Use `home.php` only for small useful status, not a full website clone.
+Attempt to parse and show:
+- image-limit current/limit;
+- reset cost when present;
+- a small set of clearly exposed account overview values only if cheap and stable.
 
-If a write endpoint cannot be verified safely, record `PLATFORM_GAP` and keep the read side. Do not invent forms or credentials.
+Do **not** implement reset-image-limit, torrent-key reset, GP/Hath exchange, moderation or other destructive/economic actions in 0.7.
 
-Skip moderation/admin-only workflows unless nearly free from an already-verified path.
+Add realistic fixtures and sanitized errors.
 
-## 3. Complete Downloads / offline daily use
-The existing foreground queue is the base. Improve only practical gaps:
-- download list/status that stays accurate across restarts;
-- pause/resume/retry/cancel/delete;
-- partial download recovery;
-- offline open with no network;
-- clear distinction between completed / partial / failed;
-- original-image preference where practical;
-- safe storage cleanup;
-- no fake background claim.
+## 2. Local Bookmarks / Local Favorites
+EhViewer has local favorite/bookmark storage; current app only has cloud Favorites/History.
 
-If Scripting cannot provide persistent background execution, foreground-resumable is the final supported model.
+Implement one small local bookmark system:
+- add/remove bookmark from Gallery Detail;
+- Library entry with newest-first list;
+- reopen existing Detail;
+- delete one / clear all with confirmation;
+- versioned local storage with the same safe read/write principles already used by History/Settings/Downloads;
+- E/Ex identity must remain correct;
+- do not mix or pretend-sync with cloud Favorites.
 
-## 4. Reader daily-use completion
-Keep both single-page and bounded continuous mode.
+No folders/tags/cloud sync unless they fall out nearly free; one useful local list is enough for 0.7.
 
-Add only high-value controls that map cleanly to native Scripting UI:
-- jump/page navigation;
-- retry current failed page;
-- original image preference;
-- bounded preload;
-- sensible offline-reader parity;
-- a small reader settings surface for implemented behavior.
+## 3. Gallery relationship and discovery navigation
+Extend existing Detail/search rather than adding a new scene stack.
 
-Do not build gesture engines, page-turn animation systems, or custom rendering frameworks.
+Where the actual page exposes a verified target, attempt:
+- uploader -> existing search/results flow;
+- parent / newer-version / gallery-version relationship -> existing Detail;
+- useful category/tag navigation already represented by current search state;
+- safe `Open in Safari` for the current gallery if native `Safari.openURL` is already verified.
 
-## 5. Discovery / search completion
-Reuse existing list/search paths.
+Do not expose full gallery URLs through AI or diagnostics. Manual UI may open the current gallery URL because that is the user's explicit action.
 
-Complete useful native coverage for:
-- Watched/subscriptions;
-- Toplists;
-- Quick Search/saved searches;
-- My Tags read/browse;
-- tag navigation;
-- advanced/multi-tag search where it maps directly to current E-Hentai URL parameters;
-- uploader/category links where useful.
+If a relation is not present in the page, simply omit the control.
 
-Cloud writes for My Tags remain optional unless the endpoint is clearly verified.
+## 4. Advanced search completion
+Compare current `GallerySearchState` with EhViewer's `ListUrlBuilder` / current E-Hentai URL parameters and add only high-value options that map cleanly to one request path.
 
-## 6. Account / Settings / maintenance completion
-Keep one compact native Settings/Account experience.
+Prioritize, if verified by current URL behavior:
+- minimum rating;
+- page-count bounds;
+- torrent-related search flag;
+- show/allow expunged or other directly supported advanced flags;
+- multi-tag/raw advanced query without breaking existing translated tag navigation.
 
-Only include controls that actually work:
-- active E/Ex site and login/account status/actions;
-- reader preferences;
-- cache clear;
-- download/offline management entry;
-- history/progress maintenance;
-- Quick Search maintenance if useful;
-- diagnostics/self-test entry only if it helps development.
+Do not make a giant filter screen. Add only options that materially improve search and are actually wired into the builder.
 
-Remove/no-op controls rather than keeping placeholders.
+Each added option gets one deterministic URL-builder check.
 
-## 7. Typed AI boundary
-Keep AI secondary to the manual app.
+## 5. Reverse image search — attempt once
+EhViewer exposes image search. Attempt it only if current Scripting typings/runtime provide a clean native file/photo picker and the E-Hentai upload form/multipart request can be verified.
 
-Add only useful read-only structured access such as:
-- search/list/detail;
-- favorites/history;
-- download status/list if safe and implemented.
+If feasible:
+- pick one local image explicitly by user action;
+- upload through the verified form/request;
+- feed results into the existing gallery-list/results flow;
+- never persist the selected image or upload path in diagnostics/AI.
 
-Never expose gid/token/full URL/local path/api credentials. Do not expose destructive/comment/rating/favorite writes through AI just for parity.
+If native picker or multipart/form behavior is unreliable after one minimal probe, record `PLATFORM_GAP` and move on. No custom picker or upload framework.
 
-## 8. Remaining EhViewer parity triage
-After the above, inspect the current EhViewer reference feature/navigation set once and classify remaining gaps:
+## 6. Safe external destinations
+Add only small read/open shortcuts that are useful and already clear in E-Hentai/EhViewer, for example:
+- News;
+- Forums/Wiki;
+- My Uploads / Torrents if a stable authenticated URL is directly available.
 
-- `HIGH_VALUE_FEASIBLE`: implement now;
-- `PLATFORM_GAP`: Scripting/iOS limitation or unsafe/unverified endpoint;
-- `LOW_VALUE_DEFERRED`: niche/admin/Android-specific behavior not needed for a practical daily-driver.
+Prefer `Safari.openURL` over building native replicas. Do not spend significant code on these links.
 
-Implement all reasonable `HIGH_VALUE_FEASIBLE` items before declaring feature completion.
+## 7. Final parity triage for handoff to 0.8
+After targets 1-6, inspect the current EhViewer primary navigation / practical daily-use features once and classify every remaining meaningful gap:
+- `HIGH_VALUE_FEASIBLE` — implement before ending 0.7;
+- `PLATFORM_GAP` — Scripting/iOS limitation or unsafe/unverified endpoint;
+- `LOW_VALUE_DEFERRED` — Android-only, moderation/admin/economic/niche behavior, or not worth owning.
 
-Do not mechanically port Android services, notifications, SAF, VPN/system hooks, background services, gesture engines, or preferences that have no Scripting equivalent.
+Do not mechanically port background services, Android SAF/notifications/VPN/system hooks, gesture engines, H@H administration, GP/Hath economy actions, moderation/tag-voting/expunge workflows, or every preference.
 
-# Verification during feature-completion mode
+## Typed AI boundary
+Only add structured read-only actions if a new 0.7 feature clearly benefits from them. Local bookmarks, account overview, or Popular do not automatically need AI actions.
 
-For each logical capability:
+Never add cloud mutation, local deletion, image upload, rating/comment, or bookmark mutation through AI just for parity.
+
+# Verification
+For each logical package:
 - TypeScript diagnostics;
-- focused existing harness checks;
-- one real DEV-script launch/path that proves the new main capability works.
+- one focused deterministic check for new parser/builder/store logic;
+- relevant existing smoke test;
+- real `E-Hentai 浏览器 DEV` launch/path proving the new main capability.
 
-At checkpoints, run the baseline harnesses, but **do not stop development merely because a non-blocking bug is found**. Record it and continue unless it meets the blocker criteria in `AGENTS.md`.
+At the end of 0.7 run the existing full harness once:
+- `src/runSelfTests.ts`;
+- `src/runActionSmoke.ts`;
+- `src/runAssistantToolSmoke.ts`;
+- `src/runNetworkSelfTest.ts`;
+- focused new 0.7 checks.
 
-Automated tests must never perform real cloud writes, delete real downloads/history, or expose sensitive data.
+Automated tests must not perform real cloud writes, image-limit resets, economic/account actions, or delete real user data.
 
-# When feature development finally stops
+# Completion
+0.7 stops only when:
+1. targets 1-6 have all been attempted;
+2. all remaining `HIGH_VALUE_FEASIBLE` items from target 7 are implemented;
+3. unresolved items are explicitly `PLATFORM_GAP` or `LOW_VALUE_DEFERRED`;
+4. DEV script launches and major new 0.7 families are reachable;
+5. no startup/privacy/data-loss/destructive-write blocker is known.
 
-Stop feature development only when:
-1. targets 1-8 have all been attempted;
-2. all `HIGH_VALUE_FEASIBLE` items are implemented;
-3. remaining gaps are explicitly classified as `PLATFORM_GAP` or `LOW_VALUE_DEFERRED`;
-4. the separate `E-Hentai 浏览器 DEV` script launches and the major feature families are reachable;
-5. there is no known privacy/data-loss/startup blocker.
+Then freeze features and report one compact checkpoint. **Do not begin UI redesign inside 0.7.** The planned next phase is 0.8 UI/UX consolidation, followed by 0.9 stabilization and then 1.0 release candidate/promotion.
 
-Then enter a **separate final stabilization phase**:
-- one broad bug review;
-- fix blockers and high-impact defects in consolidated passes;
-- concentrated user acceptance;
-- only after that consider replacing/promoting the stable local script.
-
-## Reporting
-At each feature checkpoint report only:
-- newly completed capabilities;
-- DEV-script runtime result;
+## Report
+- completed 0.7 capabilities;
+- DEV runtime result;
 - tests;
 - final head SHA;
-- new PLATFORM_GAP items;
-- deferred non-blocking bugs.
-
-Do not ask for review approval before continuing to the next feature target.
+- PLATFORM_GAP / LOW_VALUE_DEFERRED list;
+- deferred non-blocking bugs;
+- at most 3-5 human-only acceptance flows.
