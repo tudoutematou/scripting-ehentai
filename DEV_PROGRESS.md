@@ -5,7 +5,16 @@ Task commit: `a263d5bc5c19f50e505ec5b7f4bf58fc7a1e16ad`
 Branch: `feat/0.8-ui-ux-consolidation`
 
 ## Current phase
-0.8 UI/UX consolidation has started. Feature scope from 0.7 is frozen.
+Package A — App navigation + Home complete.
+
+## Completed
+- Home reorganized by user intent: search/browse, quick discovery, personal content, category browsing, latest galleries, and low-frequency external destinations.
+- Account/login and My Home overview moved off the Home top-level into `账号与设置`; Home now links to that scene and the Library.
+- Reused existing NavigationStack/List/Section/NavigationLink and current scenes; no tab bar, dependency, network/parser/store change.
+
+## Verification
+- `src/runSelfTests.ts`: passed (29 items).
+- DEV script `E-Hentai 浏览器 DEV` launch was invoked; CLI remained attached to the interactive Navigation session until its 45-second timeout, with no startup exception output.
 
 ## Preserve
 - All accepted 0.7 feature families and safe storage/network/privacy behavior.
@@ -18,8 +27,8 @@ Branch: `feat/0.8-ui-ux-consolidation`
 - Comment post/edit action + CSRF/edit-ownership path unverified.
 
 ## Work order
-A. App navigation + Home
-B. Gallery lists + Search/Filter
+A. App navigation + Home — completed
+B. Gallery lists + Search/Filter — next
 C. Gallery Detail
 D. Library
 E. Downloads/offline
@@ -28,7 +37,4 @@ G. Account/Settings/maintenance
 H. UI copy/state/consistency sweep
 
 ## Next step
-Read `AGENTS.md` and `CURRENT_TASK.md`, then begin Package A. Reuse current native Scripting UI and existing components; do not add new feature families or rewrite core architecture.
-
-## Context rule
-Before automatic conversation compression becomes likely: finish current package, test, commit/push, update this checkpoint with current head + next package, then stop and resume in a fresh conversation.
+Begin Package B. Reuse the current `GalleryRow`, `StateView`, native List/Section controls and existing search state; do not add search parameters or rewrite core architecture.
