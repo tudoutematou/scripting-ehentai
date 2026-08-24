@@ -64,6 +64,7 @@ export function createTagSearchState(searchUrl:string,namespace:string,tag:strin
   try{const value=new URL(searchUrl).searchParams.get("f_search");if(value)rawQuery=value}catch{}
   return {keyword:"",category:"all",quickFilter:"none",mode:"tag",sourceUrl:String(searchUrl||""),rawQuery,displayQuery:translated||tag,advanced:{...DEFAULT_ADVANCED_SEARCH}}
 }
+export function createUploaderSearchState(uploader:string):GallerySearchState{const value=String(uploader||"").trim();return {keyword:value,category:"all",quickFilter:"none",mode:"uploader",sourceUrl:"",rawQuery:value?`uploader:${value}`:"",displayQuery:value?`上传者：${value}`:"上传者",advanced:{...DEFAULT_ADVANCED_SEARCH}}}
 export function createPopularSearchState():GallerySearchState{return {keyword:"",category:"all",quickFilter:"none",mode:"popular",sourceUrl:"",rawQuery:"",displayQuery:"热门画廊",advanced:{...DEFAULT_ADVANCED_SEARCH}}}
 export function cloneSearchState(state:GallerySearchState):GallerySearchState{return {...state,advanced:{...state.advanced}}}
 function applyCategory(url:URL,key:GalleryCategoryKey){const option=getCategoryOption(key);if(option.bit)url.searchParams.set("f_cats",String(ALL_CATEGORY_MASK&~option.bit));else url.searchParams.delete("f_cats")}
