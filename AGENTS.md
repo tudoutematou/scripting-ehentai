@@ -9,52 +9,77 @@ You are the primary implementation and runtime-debugging agent for this Scriptin
 3. Current Scripting typings/docs only when an API is uncertain
 4. EhViewer reference source only for the feature being implemented
 
-Do NOT reread the full project history or governance docs unless `CURRENT_TASK.md` explicitly asks for them.
+Do NOT reread the full project history unless `CURRENT_TASK.md` explicitly asks for it.
 
-## Development loop
-Work continuously inside the current feature package:
+## Development mode — feature first
+The project is currently in **feature-completion mode**.
 
-`inspect existing code -> implement -> run diagnostics/self-test -> run in Scripting -> fix ordinary bugs yourself -> repeat -> commit package`
+Work continuously:
+`inspect -> implement -> focused test -> run in Scripting DEV copy -> fix blockers -> commit -> continue feature work`.
 
-Do not stop for ordinary TypeScript errors, component prop errors, parser errors, timeouts, non-2xx responses, layout/navigation bugs, or routine runtime failures. Diagnose and fix them yourself.
+Prioritize completing useful EhViewer functionality before broad bug-polish rounds.
 
-Only stop early for a true blocker:
-- user credential/Cookie/CAPTCHA/system permission required;
-- destructive migration of real user data;
-- human-only visual/gesture/product decision;
-- Scripting capability remains unknown after checking typings/docs and a minimal real-runtime reproduction;
-- a product/architecture decision changes scope materially.
+Fix immediately only when a defect:
+- prevents the current feature or app from running;
+- risks data loss, privacy/security exposure, or destructive incorrect writes;
+- blocks further development;
+- makes a claimed feature fundamentally unusable.
+
+For non-blocking UI quirks, edge cases, minor parser gaps, polish issues, and isolated regressions: record them in the final report and continue. Do not stop the feature package for repeated micro-review/fix loops.
+
+A comprehensive bug/stability pass happens **after the planned feature set is substantially complete**.
+
+## Runtime script policy
+Never overwrite the user's existing stable local `E-Hentai 浏览器` script during development.
+
+For real-runtime testing, create or update a separate local Scripting script/project with an obvious development identity, for example:
+- display name: `E-Hentai 浏览器 DEV`;
+- internal script name distinct from the stable script;
+- `script.json` version/description identifying the current development package.
+
+Populate that DEV script with the current branch business source and keep the normal `index.tsx -> runAppV2()` entry path.
+
+A feature package is runtime-accepted when:
+1. repository diagnostics/tests for that package pass;
+2. the separate DEV script launches successfully in the real Scripting app;
+3. the package's main new user-visible capability can be exercised there.
+
+Do not require replacing the stable script, and do not block progress on exhaustive manual bug hunting once those conditions pass.
 
 ## Product rules
 - Preserve manual UI operation even when AI automation exists.
-- AI actions and manual UI MUST call the same typed core/use-case functions; never automate the UI by simulated taps when a direct action exists.
+- AI actions and manual UI must share the same typed core/use-case functions.
 - UI does not build E-Hentai URLs, parse HTML, or read raw Keychain data.
-- Reuse existing network/account/parser/cache functions before adding new ones.
-- Preserve Detail Core-first behavior.
-- Preserve TagRef raw namespace/href semantics.
-- Keep `loggedIn`, E-Hentai reachability, and Ex availability separate.
+- Reuse existing network/account/parser/cache/store functions before adding new ones.
+- Preserve Detail Core-first behavior and E/Ex routing.
+- No fake UI/settings for unimplemented features.
 
 ## Testing policy
-- Sub-feature: self-test locally/runtime yourself.
-- Feature package: one integration regression by you.
-- Milestone: user performs one concentrated acceptance pass.
-- Do not ask the user to rerun the whole app after every small fix.
-- `scripting-ts run` is useful evidence but does not override behavior observed in the real Scripting App.
+- Sub-feature: focused automated/runtime check by the agent.
+- Feature package: one integration regression by the agent.
+- Runtime acceptance: use the separate local DEV script.
+- Do not ask the user to rerun the whole app after every small change.
+- `scripting-ts run` is useful evidence but does not replace a real Scripting DEV-script launch.
+- Do not reopen already-passed areas unless the current change touches them or a blocker is observed.
 
-## Privacy
-Never log/commit Cookie values, passwords, full sensitive URLs, gallery/page tokens, search terms, comments, or full HTML. Diagnostics may contain sanitized stage, host, status, duration, counts, error type, and non-sensitive metrics.
+## Privacy and data safety
+Never log/commit Cookie values, passwords, apiuid/apikey, full sensitive URLs, gallery/page tokens, search terms, user comments, local private paths, or full HTML.
+
+Do not simplify away validation, safe storage replacement, destructive-action confirmation, or protections against deleting unrelated files.
 
 ## Git
 - Work only on the branch named in `CURRENT_TASK.md`.
 - Use Scripting native GitHub API; no PAT/local git requirement.
 - Never write `main` unless explicitly instructed.
-- Do not upload runtime diagnostics.
-- Commit by logical package, not every tiny edit.
+- Do not upload runtime diagnostics containing user data.
+- Commit by logical capability, not every tiny edit.
 
 ## Reporting
-Do not produce long progress reports during implementation. At completion, report only:
-- completed features;
-- self-tests/runtime checks;
-- changed files/commit SHA;
-- known remaining issues;
-- at most 2-5 human-only acceptance items.
+Keep reports compact:
+- completed capabilities;
+- tests + DEV-script runtime result;
+- changed files/final SHA;
+- PLATFORM_GAP items;
+- known non-blocking defects deferred to the final stabilization phase.
+
+Do not stop for a separate Technical Closure Review unless `CURRENT_TASK.md` explicitly says the project has entered final stabilization.
