@@ -56,6 +56,7 @@ export type DetailExtractData = {
   comments: Array<{ author: string; posted: string; text: string }>
   torrentUrl: string
   archiveUrl: string
+  relations: Array<{ label: string; url: string }>
   error: string
 }
 
