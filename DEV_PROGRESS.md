@@ -1,15 +1,17 @@
 # DEV_PROGRESS
 
-Head before checkpoint: `4f34e1a05c5c95133788fa44a672c5e5a0e8112a`
+Head before checkpoint: `06dbf7c7bd6029f24ac6284896081b34ba28d04f`
 
 ## Completed target
-- 0.7 targets 1–3: Popular + read-only My Home; local bookmarks; Detail uploader/relationship/Safari navigation.
-- 0.7 target 4: advanced search now supports verified minimum rating, page-count bounds, torrent-only and show-expunged flags through the shared URL builder; existing raw/tag query behavior remains intact.
-- Focused advanced-search URL fixture and full self-test passed. Isolated DEV launch held its expected UI session with no startup exception before CLI timeout.
+- 0.7 targets 1–4: Popular + read-only My Home; local bookmarks; Detail uploader/relationship/Safari navigation; verified advanced search options.
+- 0.7 target 5 attempted once: native `Photos.pick` exists, but the public E-Hentai image-search form could not be retrieved/verified and this runtime has no documented multipart upload contract. No picker/upload UI or dead scaffolding added.
+- 0.7 target 6: safe white-listed Safari shortcuts for News, Forums, Wiki, and Torrents; URLs are fixed HTTPS destinations and checked by deterministic test.
+- Self-test and action smoke passed. Isolated DEV launch held its expected UI session without startup exception before CLI timeout.
 
 ## Current PLATFORM_GAP
+- Reverse image search: E-Hentai upload form fields/action and Scripting multipart upload behavior remain unverified after the one allowed probe; avoid unsafe guessed upload requests.
 - Rating submission: no exact verified authenticated E-Hentai API/form path; no `apiuid`/`apikey` storage.
 - Comment post/edit: no exact verified action, CSRF field set, or edit-ownership signal.
 
 ## Next step
-- 0.7 target 5: one bounded reverse-image-search feasibility probe (native picker + verified multipart form), then classify PLATFORM_GAP or implement.
+- 0.7 target 7: final EhViewer parity triage; implement any remaining HIGH_VALUE_FEASIBLE, then run full harness and final DEV checkpoint.
