@@ -1,15 +1,15 @@
 # DEV_PROGRESS
 
-Head before checkpoint: `f7f7f5241a9c08a1dfddabc827f1db23c4bf275c`
+Head before checkpoint: `4f34e1a05c5c95133788fa44a672c5e5a0e8112a`
 
 ## Completed target
-- 0.7 targets 1–2: Popular + read-only My Home overview; locally persisted bookmarks with atomic safe storage and E/Ex identity.
-- 0.7 target 3: Detail opens uploader through the existing Results flow, conditionally exposes verified parent/newer/older/version relations only when page anchors exist, and offers explicit current-gallery Safari open. No URL enters diagnostics or AI.
-- Focused self-tests (uploader builder + relation parser) and action smoke passed. The isolated DEV project again held its UI session with no startup exception before CLI timeout.
+- 0.7 targets 1–3: Popular + read-only My Home; local bookmarks; Detail uploader/relationship/Safari navigation.
+- 0.7 target 4: advanced search now supports verified minimum rating, page-count bounds, torrent-only and show-expunged flags through the shared URL builder; existing raw/tag query behavior remains intact.
+- Focused advanced-search URL fixture and full self-test passed. Isolated DEV launch held its expected UI session with no startup exception before CLI timeout.
 
 ## Current PLATFORM_GAP
 - Rating submission: no exact verified authenticated E-Hentai API/form path; no `apiuid`/`apikey` storage.
 - Comment post/edit: no exact verified action, CSRF field set, or edit-ownership signal.
 
 ## Next step
-- 0.7 target 4: Advanced search completion—only verified high-value URL parameters plus deterministic builder checks.
+- 0.7 target 5: one bounded reverse-image-search feasibility probe (native picker + verified multipart form), then classify PLATFORM_GAP or implement.
