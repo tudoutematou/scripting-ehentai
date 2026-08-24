@@ -5,40 +5,43 @@ Task commit: `a263d5bc5c19f50e505ec5b7f4bf58fc7a1e16ad`
 Branch: `feat/0.8-ui-ux-consolidation`
 
 ## Current phase
-Packages A–F complete.
+0.8 UI/UX consolidation complete and frozen pending review.
 
 ## Completed
-- **A / Navigation + Home**: Home hierarchy distinguishes search/browse, discovery, personal content and low-frequency external destinations.
-- **B / Gallery lists + Search**: shared `GalleryRow` covers Home, results and Library lists; filters/pagination use clearer native sections.
-- **C / Gallery Detail**: detail actions are ordered as reading, ownership/offline, relationships and resources.
-- **D / Library**: Library is grouped by cloud favorites, local content, offline reading, discovery/tags, and settings/maintenance.
-- **E / Downloads**: visible state now uses Chinese user language (downloading, paused/resumable, retry needed, completed), shows completed/failed page counts, highlights the next primary action, and retains confirmed destructive deletion.
-- **F / Reader**: controls use consistent bordered presentation and clearer terms for retry current page, viewing original, reading position and end of continuous batches; rendering/resume/preload behavior unchanged.
-- Reused native controls/components only; no dependency, feature, network/parser/store change.
+- **A / Home**: hierarchy for search/browse, discovery, personal content and external destinations.
+- **B / Lists + Search**: shared GalleryRow for Home/results/Library summaries; clearer Filter and pagination hierarchy.
+- **C / Detail**: identity, reading, ownership/offline, relationships and resources are grouped in order.
+- **D / Library**: cloud, local, offline, discovery and maintenance hub grouping.
+- **E / Downloads**: Chinese state/progress labels and an obvious primary next action, while keeping foreground resumable behavior and confirmed deletion.
+- **F / Reader**: consistent retry/current-page/original/continuous-control language and presentation.
+- **G / Account + Settings**: account/site/login state, read-only account overview, reader preferences, downloads/cache and data maintenance are grouped into user-understandable sections.
+- **H / Consistency**: DEV manifest clearly identifies the isolated 0.8 DEV build; account headings and labels were made consistent with the rest of the app.
+- Native Scripting controls and existing components only. No new feature family, dependency, custom navigation framework, network/parser/store/core rewrite.
 
-## Verification
-- `src/runSelfTests.ts`: passed (29 items) after E/F.
-- DEV script `E-Hentai 浏览器 DEV` launch invoked; interactive Navigation session stayed active through the 45-second CLI window with no startup exception output.
+## Final verification
+- `src/runSelfTests.ts`: passed (29 items).
+- `src/runActionSmoke.ts`: passed; gallery detail action and typed opaque `galleryRef` boundary pass.
+- `src/runAssistantToolSmoke.ts`: passed.
+- `src/runNetworkSelfTest.ts`: passed search → detail → reader image page. Diagnostics stayed URL/token/Cookie redacted.
+- Final `E-Hentai 浏览器 DEV` launch invoked: the interactive Navigation session stayed active through the 45-second CLI window without startup exception output.
+
+## DEV walkthrough coverage
+- Home navigation exposes search/results, Popular, Discovery, Library and Account/Settings in ordered sections.
+- Detail presents Read/Continue, Favorite/local Bookmark/Download, relationship and Safari/resource actions in visible sections.
+- Library exposes Favorites, Bookmarks, History/Continue Reading and Downloads.
+- Discovery exposes Watched/Toplists/My Tags routes.
+- Account/Settings exposes login state, read-only My Home information, reader preferences, downloads/cache and history maintenance.
+- Native List/Section layout avoids page-level fixed widths; no custom tab/sidebar added.
 
 ## Preserve
-- All accepted 0.7 feature families and safe storage/network/privacy behavior.
 - Stable local `E-Hentai 浏览器` remains untouched.
-- Runtime target is `E-Hentai 浏览器 DEV`.
+- Runtime target is isolated `E-Hentai 浏览器 DEV` version `0.8.0-dev`.
+- All accepted 0.7 feature families and safe storage/network/privacy behavior remain.
 
-## Accepted PLATFORM_GAP — do not reopen in 0.8
+## Accepted PLATFORM_GAP — intentionally unchanged
 - Reverse image search upload path/multipart behavior unverified.
 - Rating submission authenticated API/form path unverified.
 - Comment post/edit action + CSRF/edit-ownership path unverified.
 
-## Work order
-A. App navigation + Home — completed
-B. Gallery lists + Search/Filter — completed
-C. Gallery Detail — completed
-D. Library — completed
-E. Downloads/offline — completed
-F. Reader — completed
-G. Account/Settings/maintenance — next
-H. UI copy/state/consistency sweep
-
-## Next step
-Begin Package G: group account/site/login, reader preferences, offline/cache and data maintenance in user-understandable sections; keep account My Home read-only and avoid exposing internal controls.
+## UI-only deferred
+- No known UI-only blocker. Further broad parser/network/storage bug hunting is deferred to the separate 0.9 stabilization phase.
