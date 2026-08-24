@@ -1,14 +1,14 @@
 {
-  "name": "ehentai-browser",
+  "name": "ehentai-browser-dev",
   "icon": "books.vertical.fill",
   "color": "#8B5CF6",
-  "version": "0.2.9",
-  "description": "E-Hentai / ExHentai gallery browser for Scripting.",
+  "version": "0.8.0-dev",
+  "description": "Development build of the E-Hentai / ExHentai gallery browser.",
   "localizedNames": {
-    "zh-Hans": "E-Hentai 浏览器"
+    "zh-Hans": "E-Hentai 浏览器 DEV"
   },
   "localizedDescriptions": {
-    "zh-Hans": "游客模式第二轮：标签搜索、组合筛选、详情首屏加速与中文标签缓存。"
+    "zh-Hans": "0.8 开发版：统一导航、书库、详情、下载与阅读体验。"
   },
   "runInApp": true
 }

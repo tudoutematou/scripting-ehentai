@@ -11,6 +11,16 @@ You are the primary implementation and runtime-debugging agent for this Scriptin
 
 Do NOT reread the full project history unless `CURRENT_TASK.md` explicitly asks for it.
 
+## Repository bootstrap / authentication — mandatory
+The GitHub repository may be private and the current local workspace may be empty. **That is not a blocker and does not mean credentials are missing.**
+
+- Do NOT use shell/local `git clone`, `git pull`, PAT, SSH keys, credential helpers, or ask the user to configure Git credentials for this project.
+- Do NOT infer repository inaccessibility from an unauthenticated GitHub webpage returning 404; private repositories commonly do that.
+- Use the **Scripting native GitHub API / built-in GitHub integration** for repository reads, writes, commits and branch work. This project has already been developed through that path without PAT/local-git authentication.
+- If the local `scripting-ehentai` directory is empty, bootstrap from the branch named in `CURRENT_TASK.md` through the native GitHub API: read `AGENTS.md`, `CURRENT_TASK.md`, `DEV_PROGRESS.md`, then fetch the relevant `src/*` files and copy/sync them into the isolated `E-Hentai 浏览器 DEV` script as needed.
+- Repository state on the named remote branch is authoritative; a pre-existing local checkout is not required.
+- If a GitHub API action is not immediately visible, inspect the available Scripting tools/integrations first. Only report a blocker if the native GitHub integration is genuinely unavailable after checking. **Never fall back to requesting a PAT/local Git credential.**
+
 ## Development mode — feature first
 The project is currently in **feature-completion mode**.
 
