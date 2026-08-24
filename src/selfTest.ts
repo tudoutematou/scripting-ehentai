@@ -2,12 +2,12 @@ import { mapGalleryActionItem, runEhAction } from "./ehAction"
 import { buildFavoritesUrl, favoriteLoginError, parseFavoriteCategories, parseFavoritePopupHtml } from "./favorites"
 import { deleteHistory, deleteOfflineDirectoryTransaction, deleteSavedSearch, historySummary, loadHistory, loadPreferences, loadSavedSearches, parseDownloads, recordHistory, resumeIndex, savePreferences, saveSearch, updateReadingProgress, writeOfflinePageAtomically, type HistoryStore } from "./libraryStore"
 import { getAccountStatus, getBaseUrl } from "./account"
-import { loadGalleryDetailCore, parseMyTagsHtml, resolveImagePage, searchGalleries } from "./ehentai"
+import { loadGalleryDetailCore, parseAccountOverviewHtml, parseMyTagsHtml, resolveImagePage, searchGalleries } from "./ehentai"
 import { parseDetailHtml, parsePreviewPageHtml } from "./detailHtml"
 import { parseImagePageHtml } from "./pageHtml"
 import { parseSearchHtml } from "./searchHtml"
 import { sanitizeDiagnostic } from "./githubBridge"
-import { buildGallerySearchUrl, createHomeSearchState, createTagSearchState } from "./tourist"
+import { buildGallerySearchUrl, createHomeSearchState, createPopularSearchState, createTagSearchState } from "./tourist"
 
 export type SelfTestResult = { name: string; ok: boolean; durationMs: number; detail?: string }
 
@@ -34,6 +34,8 @@ export async function runSelfTests(options: SelfTestOptions = {}): Promise<SelfT
   const checks: Check[] = [
     { name: "account.local-state", run: () => { const status = getAccountStatus(); assert(typeof status.loggedIn === "boolean" && (status.site === "e" || status.site === "ex"), "账号本地状态无效") } },
     { name: "search.url-builder", run: () => { const url = new URL(buildGallerySearchUrl(BASE, createHomeSearchState("test", "manga", "chinese"))); assert(url.searchParams.get("f_search") === "test language:chinese", "搜索词或语言筛选错误"); assert(url.searchParams.get("f_cats") === "1019", "分类筛选错误") } },
+    { name: "popular.url-builder", run: () => { const url=new URL(buildGallerySearchUrl(BASE,createPopularSearchState())); assert(url.pathname==="/popular"&&!url.search,"Popular URL 构建错误") } },
+    { name: "account.overview-parser", run: () => { const overview=parseAccountOverviewHtml('<div>Image Limits: 1,234 / 5,000</div><div>Reset Cost: 10 GP</div><div>GP: 42.5</div>'); assert(overview.imageLimitCurrent==="1234"&&overview.imageLimitMax==="5000"&&overview.resetCost==="10 GP"&&overview.values[0]?.label==="GP","账户概览解析错误") } },
     { name: "search.tag-state", run: () => { const state = createTagSearchState("https://e-hentai.org/?f_search=female%3Atest", "female", "test", "测试"); assert(state.mode === "tag" && state.rawQuery === "female:test" && state.displayQuery === "测试", "标签搜索状态错误") } },
     { name: "parser.search", run: () => { const page = parseSearchHtml('<div class="searchtext">Found 1 results</div><table><tr><td class="glname"><a href="/g/123/abcdef/">Sample &amp; Title</a></td><td class="cn">Manga</td><td>12 pages</td><td id="posted_123">today</td><img src="/thumb.jpg"></tr></table>', BASE); assert(page.items.length === 1 && page.items[0].title === "Sample & Title" && page.items[0].pages === 12, "搜索解析错误") } },
     { name: "parser.detail-preview", run: () => { const html = '<div id="gn">Detail title</div><div id="gdn">tester</div><div id="gdc"><span class="cn">Manga</span></div><div id="rating_label">Average: 4.5</div><div id="rating_count">12</div><table id="gdd"><tr><td>Length:</td><td>2 pages</td></tr></table><table id="taglist"><tr><td>language:</td><td><a href="/?f_search=language%3Achinese">chinese</a></td></tr></table><div id="gdt"><a href="/s/token/123-1"><img title="Page 1" src="/1.jpg"></a></div>'; const detail = parseDetailHtml(html, BASE); const preview = parsePreviewPageHtml(html, BASE); assert(detail.title === "Detail title" && detail.rating === 4.5 && detail.tags[0]?.tags[0]?.name === "chinese" && preview.length === 1, "详情或预览解析错误") } },
