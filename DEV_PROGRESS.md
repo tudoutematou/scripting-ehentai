@@ -14,7 +14,7 @@ DEV target: isolated `E-Hentai 浏览器 DEV` (`0.9.0-rc-dev`)
 
 - TypeScript diagnostics: **0**.
 - `src/runSelfTests.ts`: **41/41 passed**.
-- Prior consolidated verification: Action Smoke, Assistant Tool Smoke, Network Self Test passed; network test included live Search -> Detail Core -> Image Page.
+- Action Smoke, Assistant Tool Smoke, Network Self Test passed; network test included live Search -> Detail Core -> Image Page.
 - DEV launch was invoked and remained active through the CLI observation window without startup exception output.
 
 ## Freeze boundary
