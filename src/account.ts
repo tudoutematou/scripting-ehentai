@@ -137,6 +137,8 @@ type SafariBridgeStatus = {
   errorMessage?: string
 }
 
+function invalidateGallerySessionCache(){try{(globalThis as any).__ehentaiInvalidateGalleryCaches?.()}catch{}}
+
 function keychain(): any {
   const api = (globalThis as any).Keychain
   if (!api) throw new Error("当前 Scripting 运行时未提供 Keychain API。")
@@ -495,6 +497,7 @@ export function setActiveSite(site: GallerySite, api = keychain()): void {
     synchronizable: false,
   })
   if (!ok) throw new Error("站点设置写入 Keychain 失败。")
+  invalidateGallerySessionCache()
 }
 
 export function getBaseUrl(site = getActiveSite()): string {
@@ -612,4 +615,5 @@ export async function signOut(dependencies = credentialDependencies()): Promise<
     failures.push("bridge")
   }
   if (failures.length) throw new Error("退出登录时部分凭据未能清理，请重试并检查 Safari 登录桥临时文件。")
+  invalidateGallerySessionCache()
 }
