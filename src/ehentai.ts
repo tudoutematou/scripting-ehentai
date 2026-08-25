@@ -23,7 +23,8 @@ function httpError(message: string, response: any, url: string): Error {
   const error = new Error(message) as Error & { status?: number; statusText?: string; url?: string }
   error.status = Number(response?.status || 0); error.statusText = String(response?.statusText || ""); error.url = String(response?.url || url); return error
 }
-function stageError(stage: string, error: unknown): Error { const value = error as any; const wrapped = new Error(`[${stage}] ${String(value?.message || error || "未知错误")}`); wrapped.name = String(value?.name || "Error"); if (value?.stack) wrapped.stack = `${wrapped.name}: ${wrapped.message}\nCaused by:\n${String(value.stack)}`; return wrapped }
+export function userSafeError(error:unknown,fallback="操作未完成，请稍后重试。"){const message=String((error as any)?.message||error||"");return /https?:|cookie|ipb_|\/var\/|\/private\/|token/i.test(message)?fallback:message||fallback}
+function stageError(stage: string, error: unknown): Error { const value = error as any; const wrapped = new Error(`[${stage}] ${userSafeError(value?.message || error)}`); wrapped.name = String(value?.name || "Error"); return wrapped }
 async function reportSafely(input: Parameters<typeof reportDiagnostic>[0]) { try { await reportDiagnostic(input) } catch {} }
 const HTML_REQUEST_TIMEOUT_MS = 20_000
 
