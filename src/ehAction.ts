@@ -1,6 +1,6 @@
 import { loadFavorites } from "./favorites"
 import { historySummary, loadHistory } from "./libraryStore"
-import { getAccountStatus, getBaseUrl } from "./account"
+import { getAccountSessionGeneration, getAccountStatus, getBaseUrl } from "./account"
 import { GallerySummary, loadGalleryDetailCore, searchGalleries } from "./ehentai"
 import { buildGallerySearchUrl, createHomeSearchState, type GalleryCategoryKey, type QuickFilterKey } from "./tourist"
 
@@ -23,7 +23,7 @@ export type EhActionSuccess =
   | { ok: true; type: "history.list"; items: GallerySearchItem[] }
 export type EhActionResult = EhActionSuccess | EhActionFailure
 
-type GalleryRefEntry = { url: string; expiresAt: number }
+type GalleryRefEntry = { url: string; expiresAt: number; sessionGeneration:number }
 const GALLERY_REF_TTL_MS = 10 * 60 * 1000
 const MAX_GALLERY_REFS = 100
 const galleryRefs = new Map<string, GalleryRefEntry>()
@@ -47,11 +47,12 @@ function pruneGalleryRefs(now = Date.now()) {
   }
 }
 
+export function isGalleryRefSessionCurrent(entryGeneration:number,currentGeneration=getAccountSessionGeneration()){return entryGeneration===currentGeneration}
 function createGalleryRef(url: string): string {
   pruneGalleryRefs()
   let ref = ""
   do { ref = `gallery_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}` } while (galleryRefs.has(ref))
-  galleryRefs.set(ref, { url, expiresAt: Date.now() + GALLERY_REF_TTL_MS })
+  galleryRefs.set(ref, { url, expiresAt: Date.now() + GALLERY_REF_TTL_MS,sessionGeneration:getAccountSessionGeneration() })
   return ref
 }
 
@@ -62,6 +63,7 @@ function resolveGalleryRef(galleryRef: unknown): { ok: true; url: string } | EhA
     galleryRefs.delete(galleryRef)
     return failure("GALLERY_REF_EXPIRED", "gallery-ref", "画廊引用已过期，请重新搜索。")
   }
+  if(!isGalleryRefSessionCurrent(entry.sessionGeneration)){galleryRefs.delete(galleryRef);return failure("GALLERY_REF_EXPIRED", "gallery-ref", "画廊引用已因账号或站点变更失效，请重新搜索。")}
   return { ok: true, url: entry.url }
 }
 
