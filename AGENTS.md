@@ -13,16 +13,20 @@ You are the primary implementation and runtime-debugging agent for this Scriptin
 Do NOT reread the full project history unless `CURRENT_TASK.md` explicitly asks for it.
 
 ## Repository bootstrap / authentication — mandatory
-The GitHub repository may be private and the current local workspace may be empty. **That is not a blocker and does not mean credentials are missing.**
+The GitHub repository may be private and the current local workspace may be empty. **That is not a blocker by itself.**
 
-- Do NOT use shell/local `git clone`, `git pull`, PAT, SSH keys, credential helpers, or ask the user to configure Git credentials for this project.
+Scripting's native GitHub API is a PRO capability and requires a GitHub Personal Access Token configured once in **Scripting Settings -> GitHub**. The token stays in Scripting's Keychain and must never be pasted into chat, source code, logs, or repository files. Each script/skill keeps its own GitHub capability grants, so a new throwaway helper can trigger a fresh permission prompt even when another script was already authorized.
+
+- Do NOT use shell/local `git clone`, `git pull`, PAT in source/prompt, SSH keys, or credential helpers for this project.
 - Do NOT infer repository inaccessibility from an unauthenticated GitHub webpage returning 404.
 - Use the **Scripting native GitHub API / built-in GitHub integration** for repository reads, writes, commits and branch work.
-- If the local workspace is empty, bootstrap from the branch named in `CURRENT_TASK.md` through the native GitHub integration: read the repository task/checkpoint files, then fetch only the relevant source files and sync them into the isolated `E-Hentai 浏览器 DEV` script as needed.
+- Prefer one persistent GitHub-capable script/context for this project instead of creating a new one-off helper for every session; repeated throwaway scripts cause repeated per-script permission prompts.
+- Request only `read_contents` and `write_contents` for normal project work. `read_issues` / `read_pull_requests` are optional and must not block development when repository task files already contain the instructions.
+- If the local workspace is empty, bootstrap from the branch named in `CURRENT_TASK.md`: read the repository task/checkpoint files, then fetch only the relevant source files and sync them into the isolated `E-Hentai 浏览器 DEV` script as needed.
 - Repository state on the named remote branch is authoritative; a pre-existing local checkout is not required.
-- **Repository files are the authoritative execution contract. PR/Issue comments are supplemental only. Never require `read_issues` / `read_pull_requests` permission merely to continue work when the same instructions are already present in `CURRENT_TASK.md`, `STABILIZATION_AUDIT.md`, or `DEV_PROGRESS.md`. If a PR comment cannot be read without an extra authorization prompt, skip it and continue from repository documents.**
-- Do not call `GitHub.requestPermissions(...)` solely to read a referenced PR/Issue comment unless `CURRENT_TASK.md` explicitly says the comment contains unique instructions unavailable in repository files.
-- If a GitHub API action is not immediately visible, inspect available Scripting tools/integrations first. Only report a blocker if repository file read/write itself is genuinely unavailable after checking. **Never fall back to requesting PAT/local Git credentials.**
+- Repository files are the authoritative execution contract. PR/Issue comments are supplemental only. If a comment needs extra authorization, skip it and continue from `CURRENT_TASK.md`, `STABILIZATION_AUDIT.md`, and `DEV_PROGRESS.md`.
+- Do not loop on permission requests/timeouts. If `read_contents` itself cannot read a known repository file, first verify the call is running in the Scripting main app using the persistent authorized script/context. If it still fails, report a genuine native GitHub integration blocker.
+- Never ask the user to paste or reveal the GitHub token. If the Settings token is absent/invalid, ask only that they configure/refresh it in Scripting Settings -> GitHub.
 
 ## Development mode
 `CURRENT_TASK.md` is authoritative for the current project phase.
@@ -83,7 +87,7 @@ When a session becomes large:
 
 ## Git
 - Work only on the branch named in `CURRENT_TASK.md`.
-- Use Scripting native GitHub API; no PAT/local git requirement.
+- Use Scripting native GitHub API; no PAT/local git in prompts/source/workspace.
 - Never write `main` unless explicitly instructed.
 - Do not upload runtime diagnostics containing user data.
 - Commit by logical capability/fix batch, not every tiny edit.
