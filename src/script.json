@@ -2,13 +2,13 @@
   "name": "ehentai-browser-dev",
   "icon": "books.vertical.fill",
   "color": "#8B5CF6",
-  "version": "0.8.0-dev",
+  "version": "0.9.0-rc-dev",
   "description": "Development build of the E-Hentai / ExHentai gallery browser.",
   "localizedNames": {
     "zh-Hans": "E-Hentai 浏览器 DEV"
   },
   "localizedDescriptions": {
-    "zh-Hans": "0.8 开发版：统一导航、书库、详情、下载与阅读体验。"
+    "zh-Hans": "0.9 RC 开发版：稳定化验证中的 E-Hentai / ExHentai 浏览器。"
   },
   "runInApp": true
 }
