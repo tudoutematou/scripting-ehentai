@@ -7,12 +7,12 @@ Date: 2026-08-24
 
 ## Result
 
-- S0: **0**
-- S1: **8**
+- S0: **2**
+- S1: **6**
 - S2: **20**
 - S3: **2**
-- All findings below are `open`.
-- No non-S0 fixes were started in this audit session.
+- A-01 and A-02 are `fixed`; all later findings remain `open`.
+- Batch 0 intentionally did not start S1/S2 fixes.
 
 ## Verification performed
 
@@ -21,30 +21,34 @@ Date: 2026-08-24
 - `src/runActionSmoke.ts`: **passed**.
 - `src/runAssistantToolSmoke.ts`: **passed**.
 - `src/runNetworkSelfTest.ts`: **30/30 passed**, including live Search -> Detail Core -> Image Page.
-- Current-tree privacy scan confirmed 134 committed `runtime/events` files and multiple complete `/g/` and `/s/` URLs.
-- Existing green tests do not cover the async races, restart states, alternate list layouts, filesystem failure combinations, or responsive layouts listed below.
+- Current-tree privacy scan originally confirmed 134 committed `runtime/events` files and multiple complete `/g/` and `/s/` URLs; Batch 0 removed the entire `runtime/` tree and the final deterministic scan reports 0 findings.
+- Existing green tests do not cover the later S1/S2 races, restart states, alternate list layouts, filesystem failure combinations, or responsive layouts listed below.
 
-# S1
+# S0
 
 ## A-01 — Committed runtime diagnostics expose gallery/page/image URLs
 
-- **severity:** S1
+- **severity:** S0
 - **symptom / user risk:** The repository contains browsing-history artifacts with complete gallery gid/token URLs, image-page tokens, and signed Hath image URLs. Anyone able to read the repository can infer specific viewed content; signed URLs may remain usable until expiry.
 - **root cause:** Legacy diagnostics under `runtime/events/` persisted unsanitized request URLs and were committed. The current `reportDiagnostic` is console-only and host-redacted, but old artifacts remain and there is no root ignore rule.
 - **affected paths/features:** diagnostics privacy, gallery/page tokens, repository history and release/source archives.
 - **smallest correct fix location:** remove `runtime/` artifacts from the current tree, add a root ignore rule and a deterministic sensitive-artifact scan; separately assess history rewrite because deleting the current files does not erase already-pushed commits.
-- **validation needed:** scan the full current tree and reachable history for `/g/`, `/s/`, `keystamp=`, Cookie fields, search queries and private paths; verify source archives contain no runtime diagnostics.
-- **status:** open
+- **validation needed:** deterministic current-tree/source-archive scan for materialized gallery/page URLs, signed parameters, Cookie values, search queries, private paths and any `runtime/` member.
+- **fix:** removed all 135 current-tree `runtime/` artifacts, added root `/runtime/` ignore and `tools/scan_sensitive_artifacts.py`; current-tree scan is clean. Previously pushed commits still expose old diagnostics; release handling must assess history cleanup separately, with no history rewrite performed in Batch 0.
+- **status:** fixed
 
 ## A-02 — Safari bridge plaintext credentials have no bounded failure/logout lifecycle
 
-- **severity:** S1
+- **severity:** S0
 - **symptom / user risk:** `login.json` contains complete authentication Cookies in plaintext and can remain indefinitely after malformed input, an expired capture, incomplete Cookies, Keychain failure, or app logout. Logout can therefore leave a reusable credential copy outside Keychain.
 - **root cause:** `importSafariLogin()` deletes bridge files only after successful Keychain round-trip; terminal failure paths and `signOut()` do not clean bridge credentials.
 - **affected paths/features:** Safari login, Cookie/Keychain lifecycle, logout/relogin, local credential privacy.
 - **smallest correct fix location:** the shared account bridge boundary in `src/account.ts`; provide one async credential cleanup used by terminal import failures and logout, while preserving only explicitly recoverable short-lived failures.
-- **validation needed:** fixtures for expired, malformed, incomplete and Keychain-failure captures; logout must remove every candidate `login.json`, and old data must not re-authenticate afterward.
-- **status:** open
+- **validation needed:** deterministic in-memory fixtures for expired, malformed, incomplete and Keychain-failure captures; logout must remove every candidate `login.json`, and old data must not re-authenticate afterward.
+- **fix:** centralized all-candidate async cleanup in `src/account.ts`; every terminal import outcome and async `signOut()` uses it, cleanup continues across candidate failures, and no recoverable plaintext failure is retained. Product caller now awaits logout before refreshing state.
+- **status:** fixed
+
+# S1
 
 ## A-03 — The 31st download silently drops the oldest manifest entry
 
