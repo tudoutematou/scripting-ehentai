@@ -58,7 +58,8 @@ Date: 2026-08-24
 - **affected paths/features:** download creation, manifest persistence, offline library, storage cleanup and restart recovery.
 - **smallest correct fix location:** `saveDownloads()` / `createDownload()` in `src/libraryStore.ts`; never silently truncate in the generic writer. If a limit is required, reject creation or perform an explicit confirmed transactional eviction.
 - **validation needed:** create 30 then 31 tasks and assert no record or directory is silently detached; inject manifest/directory failures for any chosen eviction policy.
-- **status:** open
+- **fix:** Removed generic manifest truncation and reject the 31st new task before persistence.
+- **status:** fixed
 
 - **fix:** Removed generic manifest truncation and rejects the 31st new download before persistence; retained tasks are never silently detached.
 - **status:** fixed
@@ -70,7 +71,8 @@ Date: 2026-08-24
 - **affected paths/features:** delete, active workers, `.tmp -> final`, manifest rollback, restart recovery and privacy deletion guarantees.
 - **smallest correct fix location:** download lifecycle and delete transaction in `src/libraryStore.ts`; track/await the running promise before deletion and make every `{directory, .deleting}` state explicitly recoverable.
 - **validation needed:** barrier-controlled delete during write; manifest-save failure plus rollback failure; restart/retry from every directory/trash combination; final state must contain either a valid task directory and manifest or neither.
-- **status:** open
+- **fix:** Await active worker shutdown before delete and recover interrupted `.deleting` states.
+- **status:** fixed
 
 - **fix:** Active downloads now track and await worker completion before delete; directory/trash recovery handles interrupted `.deleting` state explicitly.
 - **status:** fixed
@@ -82,7 +84,8 @@ Date: 2026-08-24
 - **affected paths/features:** Detail Core-first, Reader, preview pagination, download completeness and true offline reading.
 - **smallest correct fix location:** page-inventory completion boundary shared by `GalleryDetailView` and `createDownload()`; preserve partial/truncated status, block claims of completeness, and expose retry without rewriting the parser architecture.
 - **validation needed:** delayed second preview page, one failed middle page, index gaps/duplicates and `previewPages > 50`; Reader/download must not claim a partial set is final and retry must fill it deterministically.
-- **status:** open
+- **fix:** Preserve preview failures and gate Reader/offline creation until inventory is complete.
+- **status:** fixed
 
 - **fix:** Detail inventory now retains preview failures, gates Reader/offline creation until complete, and offers a bounded retry path.
 - **status:** fixed
@@ -94,7 +97,8 @@ Date: 2026-08-24
 - **affected paths/features:** Home, Search, Filter, Results, Popular, Watched, Favorites and uploader/tag navigation.
 - **smallest correct fix location:** per-item boundary recognition in `src/searchHtml.ts`, reusing the already-present DOM/item isolation pattern where practical.
 - **validation needed:** Compact, Minimal, Minimal+, Extended and Thumbnail fixtures with sharply different adjacent values and missing optional fields.
-- **status:** open
+- **fix:** Isolate actual result containers instead of a fixed neighboring-character window.
+- **status:** fixed
 
 - **fix:** Search parsing now isolates actual table/div result containers for supported display layouts rather than using a neighboring-character window.
 - **status:** fixed
@@ -106,7 +110,8 @@ Date: 2026-08-24
 - **affected paths/features:** queue liveness, failure recovery, manifest accuracy and Offline Reader.
 - **smallest correct fix location:** the image fetch/commit boundary in `runDownload()`.
 - **validation needed:** never-settling fetch, user pause during timeout, 200 `text/html`, empty data and valid JPEG/PNG/WebP; only valid image data may become final/done.
-- **status:** open
+- **fix:** Use per-image timeout plus content-type/signature validation before atomic commit.
+- **status:** fixed
 
 - **fix:** Each image request has an independent timeout; only nonempty JPEG/PNG/WebP payloads with image content type are atomically committed.
 - **status:** fixed
@@ -118,7 +123,8 @@ Date: 2026-08-24
 - **affected paths/features:** E/Ex routing, logout/relogin, Detail Core, favorite category/note and Ex-only content.
 - **smallest correct fix location:** shared account-session/cache boundary in `src/account.ts` and `src/ehentai.ts`, plus favorite mutation cache invalidation; do not patch individual screens only.
 - **validation needed:** account A cache -> logout -> same URL; account A -> account B; E <-> Ex; add/move/remove favorite with note then reopen.
-- **status:** open
+- **fix:** Invalidate detail/preview cache on account lifecycle and confirmed favorite mutation.
+- **status:** fixed
 
 # S2
 
@@ -356,3 +362,10 @@ The code establishes credible narrow-width risk, but final layout decisions need
 - the visual state after successful Favorite/Bookmark/Download and after corrupt Preferences/Quick Search loads.
 
 These evidence requests do not block recording the code-backed findings; they determine the smallest final UI patch.
+
+## Final independent S1 review — 2026-08-26
+
+- **result:** two additional S1 findings were fixed; no remaining known open S0/S1.
+- **online image cache:** rejects non-image/empty/invalid-signature HTTP 200 responses and Reader retry replaces an old cached response.
+- **favorite mutation:** verifies the post-mutation popup state before cache invalidation or UI success feedback.
+- **validation:** deterministic regressions added for both findings; TypeScript diagnostics and full self-test remain green.
