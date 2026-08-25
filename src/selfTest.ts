@@ -1,7 +1,7 @@
 import { mapGalleryActionItem, runEhAction } from "./ehAction"
 import { buildFavoritesUrl, favoriteLoginError, parseFavoriteCategories, parseFavoritePopupHtml } from "./favorites"
 import { addLocalBookmark, deleteHistory, deleteOfflineDirectoryTransaction, deleteSavedSearch, historySummary, loadHistory, loadLocalBookmarks, loadPreferences, loadSavedSearches, localBookmarkSummary, parseDownloads, recordHistory, removeLocalBookmark, resumeIndex, savePreferences, saveSearch, updateReadingProgress, writeOfflinePageAtomically, type HistoryStore } from "./libraryStore"
-import { getAccountStatus, getBaseUrl } from "./account"
+import { getAccountStatus, getBaseUrl, importSafariLogin, signOut, type AccountCredentialDependencies } from "./account"
 import { loadGalleryDetailCore, externalDestinationUrl, parseAccountOverviewHtml, parseMyTagsHtml, resolveImagePage, searchGalleries } from "./ehentai"
 import { parseDetailHtml, parsePreviewPageHtml } from "./detailHtml"
 import { parseImagePageHtml } from "./pageHtml"
@@ -19,6 +19,44 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
 
+const BRIDGE_NOW = Date.parse("2030-01-01T12:00:00.000Z")
+const BRIDGE_ROOTS = ["/fixture/storage", "/fixture/browser", "/fixture/group", "/fixture/documents"]
+const bridgePath = (root: string) => `${root}/ehentai-login-bridge/login.json`
+
+function bridgeDependencies(payloads: string[], options: { keychainSet?: "ok" | "false" | "throw"; keychainRoundTrip?: "ok" | "missing"; removeFailureAt?: number } = {}) {
+  const files = new Map(BRIDGE_ROOTS.map((root, index) => [bridgePath(root), payloads[index] ?? payloads[0]]))
+  const values = new Map<string, string>()
+  const removed: string[] = []
+  const manager = {
+    safariBrowserStorageDirectory: BRIDGE_ROOTS[0], safariBrowserDirectory: BRIDGE_ROOTS[1], appGroupDocumentsDirectory: BRIDGE_ROOTS[2], documentsDirectory: BRIDGE_ROOTS[3],
+    exists: async (path: string) => files.has(path),
+    readAsString: async (path: string) => { if (!files.has(path)) throw new Error("missing"); return files.get(path) as string },
+    remove: async (path: string) => { removed.push(path); if (options.removeFailureAt === removed.length - 1) throw new Error("fixture-remove-failure"); files.delete(path) },
+  }
+  const keychain = {
+    get: (key: string) => options.keychainRoundTrip === "missing" && key === "ehentai.account.cookies.v1" ? null : values.get(key) ?? null,
+    set: (key: string, value: string) => { if (options.keychainSet === "throw") throw new Error("fixture-keychain-failure"); if (options.keychainSet === "false") return false; values.set(key, value); return true },
+    remove: (key: string) => { values.delete(key); return true },
+  }
+  const dependencies: AccountCredentialDependencies = { fileManager: manager, keychain, now: () => BRIDGE_NOW }
+  return { dependencies, files, values, removed }
+}
+
+function freshBridgePayload(cookies: Array<Record<string, unknown>> = [
+  { name: "ipb_member_id", value: "fixture-member", domain: "e-hentai.org", path: "/" },
+  { name: "ipb_pass_hash", value: "fixture-pass-hash", domain: "e-hentai.org", path: "/" },
+]) {
+  return JSON.stringify({ time: new Date(BRIDGE_NOW - 60_000).toISOString(), cookies })
+}
+
+async function expectBridgeImportFailure(payload: string, options: { keychainSet?: "ok" | "false" | "throw"; keychainRoundTrip?: "ok" | "missing" } = {}) {
+  const fixture = bridgeDependencies([payload], options)
+  let failed = false
+  try { await importSafariLogin(fixture.dependencies) } catch { failed = true }
+  assert(failed, "终止失败数据不应导入成功")
+  assert(BRIDGE_ROOTS.every(root => !fixture.files.has(bridgePath(root))), "终止失败后仍残留候选 login.json")
+}
+
 export function safeSelfTestFailureDetail(stage: string, error: unknown): string {
   const value = error as { name?: unknown; code?: unknown }
   const rawName = String(value?.name || "Error")
@@ -33,6 +71,17 @@ export type SelfTestOptions = { network?: boolean }
 export async function runSelfTests(options: SelfTestOptions = {}): Promise<SelfTestResult[]> {
   const checks: Check[] = [
     { name: "account.local-state", run: () => { const status = getAccountStatus(); assert(typeof status.loggedIn === "boolean" && (status.site === "e" || status.site === "ex"), "账号本地状态无效") } },
+    { name: "account.bridge-terminal-cleanup", run: async () => {
+      await expectBridgeImportFailure("{")
+      await expectBridgeImportFailure(JSON.stringify({ time: new Date(BRIDGE_NOW - 3 * 60 * 60 * 1000).toISOString(), cookies: [] }))
+      await expectBridgeImportFailure(freshBridgePayload([{ name: "ipb_member_id", value: "fixture-member", domain: "e-hentai.org", path: "/" }]))
+      await expectBridgeImportFailure(freshBridgePayload(), { keychainSet: "false" })
+      await expectBridgeImportFailure(freshBridgePayload(), { keychainSet: "throw" })
+      await expectBridgeImportFailure(freshBridgePayload(), { keychainRoundTrip: "missing" })
+    } },
+    { name: "account.bridge-success-cleanup", run: async () => { const fixture = bridgeDependencies([freshBridgePayload()]); const status = await importSafariLogin(fixture.dependencies); assert(status.loggedIn, "完整桥凭据未导入"); assert(BRIDGE_ROOTS.every(root => !fixture.files.has(bridgePath(root))), "成功导入后仍残留候选 login.json") } },
+    { name: "account.signout-all-candidates", run: async () => { const fixture = bridgeDependencies([freshBridgePayload()]); fixture.values.set("ehentai.account.cookies.v1", "fixture-stored-cookie"); fixture.values.set("ehentai.account.site.v1", "ex"); await signOut(fixture.dependencies); assert(fixture.values.size === 0, "退出后 Keychain 凭据仍存在"); assert(BRIDGE_ROOTS.every(root => !fixture.files.has(bridgePath(root))), "退出后候选 login.json 仍存在") } },
+    { name: "account.cleanup-continues-after-failure", run: async () => { const fixture = bridgeDependencies([freshBridgePayload()], { removeFailureAt: 0 }); let failed = false; try { await signOut(fixture.dependencies) } catch { failed = true } assert(failed, "部分清理失败不应静默成功"); assert(fixture.removed.length === BRIDGE_ROOTS.length, "单个候选失败阻断了其余清理"); assert(BRIDGE_ROOTS.slice(1).every(root => !fixture.files.has(bridgePath(root))), "其余候选未被清理"); const importing = bridgeDependencies([freshBridgePayload()], { removeFailureAt: 0 }); failed = false; try { await importSafariLogin(importing.dependencies) } catch { failed = true } assert(failed && importing.removed.length === BRIDGE_ROOTS.length, "导入清理失败未报告或阻断了其余候选") } },
     { name: "search.url-builder", run: () => { const url = new URL(buildGallerySearchUrl(BASE, createHomeSearchState("test", "manga", "chinese"))); assert(url.searchParams.get("f_search") === "test language:chinese", "搜索词或语言筛选错误"); assert(url.searchParams.get("f_cats") === "1019", "分类筛选错误") } },
     { name: "search.advanced-url-builder", run: () => { const state=createHomeSearchState("test");state.advanced={...state.advanced,enabled:true,minimumRating:"4",pageFrom:"12",pageTo:"34",searchTorrents:true,showExpunged:true};const url=new URL(buildGallerySearchUrl(BASE,state));assert(url.searchParams.get("f_srdd")==="4"&&url.searchParams.get("f_spf")==="12"&&url.searchParams.get("f_spt")==="34"&&url.searchParams.get("f_sto")==="on"&&url.searchParams.get("f_sh")==="on","高级搜索 URL 构建错误") } },
     { name: "popular.url-builder", run: () => { const url=new URL(buildGallerySearchUrl(BASE,createPopularSearchState())); assert(url.pathname==="/popular"&&!url.search,"Popular URL 构建错误") } },
