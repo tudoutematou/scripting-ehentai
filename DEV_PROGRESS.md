@@ -5,27 +5,32 @@ Branch: `feat/0.9-stabilization`
 
 ## Current phase
 
-The first whole-repo stabilization audit is complete and recorded in `STABILIZATION_AUDIT.md`.
+Batch 0 / S0 is complete. The audit triage correction is recorded in `STABILIZATION_AUDIT.md`; A-01 and A-02 are fixed, and no S1/S2 work was started.
 
-- Audited head: `3eb858dcbabf3f97d4e5eec431b0beb005d1b08d`
-- Audit result: **S0 0 / S1 8 / S2 20 / S3 2**
-- All findings remain `open`.
-- No broad fix pass was started because the audit found no S0.
+- Batch 0 baseline: `455d1da49ccf39c5d06762aa3cd5dcb23126fdeb`
+- Effective audit result: **S0 2 / S1 6 / S2 20 / S3 2**
+- Fixed in this batch: **A-01, A-02**
+- Remaining findings: all A-03 and later findings remain `open`.
 
-## Audit verification
+## Batch 0 fixes
 
-- TypeScript diagnostics: 0 diagnostics.
-- `src/runSelfTests.ts`: 29/29 passed.
+- **A-01 diagnostics privacy:** removed the full current-tree `runtime/` directory (134 event files plus `latest.json`), added root `/runtime/` ignore, and added the dependency-free deterministic `tools/scan_sensitive_artifacts.py` gate. The current tree reports 0 findings for materialized gallery/page URLs, signed parameters, Cookie values, search-query URLs, private iOS paths and runtime artifacts.
+- **History boundary:** deleting the current tree does not remove sensitive diagnostics from previously pushed Git history. Batch 0 did not rewrite history; release handling must assess it separately.
+- **A-02 Safari bridge credentials:** added one all-candidate plaintext `login.json` cleanup in `src/account.ts`; malformed, expired, incomplete, Keychain write/round-trip failures and success all consume the capture. `signOut()` is async, independently removes both Keychain items and every candidate login file, and the UI awaits it before refreshing account state. No recoverable plaintext failure is retained.
+
+## Batch 0 verification
+
+- TypeScript diagnostics using `src/tsconfig.test.json`: 0 diagnostics.
+- `src/runSelfTests.ts`: **33/33 passed**, including 4 new bridge lifecycle checks.
 - `src/runActionSmoke.ts`: passed.
 - `src/runAssistantToolSmoke.ts`: passed.
-- `src/runNetworkSelfTest.ts`: 30/30 passed, including live Search -> Detail Core -> Image Page.
-- Current-tree privacy scan confirmed committed legacy runtime diagnostics containing complete gallery/page/image URLs; this is recorded as S1 A-01.
+- Sensitive-artifact current-tree scan: **0 findings**.
+- Synthetic scanner regression: complete gallery URL fixture was rejected deterministically.
+- Tests use in-memory FileManager/Keychain fixtures only; no real credentials or cloud writes.
 
 ## Next consolidated fix batches
 
-1. **S1 privacy + data integrity**
-   - remove/ignore committed runtime diagnostics and assess history cleanup;
-   - bound Safari bridge plaintext credential lifetime;
+1. **S1 data integrity**
    - stop silent download-manifest truncation;
    - make active-delete and `.deleting` recovery quiescent/recoverable.
 2. **S1 Reader/download/parser/account reliability**
