@@ -137,7 +137,9 @@ type SafariBridgeStatus = {
   errorMessage?: string
 }
 
-function invalidateGallerySessionCache(){try{(globalThis as any).__ehentaiInvalidateGalleryCaches?.()}catch{}}
+let accountSessionGeneration=0
+export function getAccountSessionGeneration(){return accountSessionGeneration}
+function invalidateGallerySessionCache(){accountSessionGeneration+=1;try{(globalThis as any).__ehentaiInvalidateGalleryCaches?.()}catch{}}
 
 function keychain(): any {
   const api = (globalThis as any).Keychain
@@ -194,8 +196,9 @@ function sanitizeCookies(cookies: any[]): StoredCookie[] {
   return [...map.values()]
 }
 
+function cookieIsCurrent(cookie:StoredCookie,now=Date.now()){return !cookie.expiresDate||!Number.isFinite(Date.parse(cookie.expiresDate))||Date.parse(cookie.expiresDate)>now}
 function hasAuthCookies(cookies: StoredCookie[]): boolean {
-  const names = new Set(cookies.map(cookie => cookie.name))
+  const names = new Set(cookies.filter(cookie=>cookieIsCurrent(cookie)).map(cookie => cookie.name))
   return names.has("ipb_member_id") && names.has("ipb_pass_hash")
 }
 
@@ -505,7 +508,7 @@ export function getBaseUrl(site = getActiveSite()): string {
 }
 
 function currentAuthCookieByName(cookies: StoredCookie[], name: string): StoredCookie | undefined {
-  const candidates = cookies.filter(cookie => cookie.name === name && cookie.value)
+  const candidates = cookies.filter(cookie => cookie.name === name && cookie.value && cookieIsCurrent(cookie))
   return candidates.find(cookie => normalizeDomain(cookie.domain) === "e-hentai.org")
     || candidates.find(cookie => normalizeDomain(cookie.domain) === "forums.e-hentai.org")
     || candidates[0]
@@ -543,8 +546,8 @@ export function getCookieHeader(url: string): string {
 }
 
 export function getAccountStatus(api = keychain()): AccountStatus {
-  const cookies = loadCookies(api)
-  const names = new Set(cookies.map(cookie => cookie.name))
+  const now=Date.now(),cookies = loadCookies(api)
+  const names = new Set(cookies.filter(cookie=>cookieIsCurrent(cookie,now)).map(cookie => cookie.name))
   const memberIdPresent = names.has("ipb_member_id")
   const passHashPresent = names.has("ipb_pass_hash")
   return {
