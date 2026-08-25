@@ -5,9 +5,10 @@ You are the primary implementation and runtime-debugging agent for this Scriptin
 
 ## Read order for each work session
 1. `CURRENT_TASK.md`
-2. Relevant files under `src/`
-3. Current Scripting typings/docs only when an API is uncertain
-4. EhViewer reference source only when `CURRENT_TASK.md` requires it
+2. `STABILIZATION_AUDIT.md` / `DEV_PROGRESS.md` when present for the active phase
+3. Relevant files under `src/`
+4. Current Scripting typings/docs only when an API is uncertain
+5. EhViewer reference source only when `CURRENT_TASK.md` requires it
 
 Do NOT reread the full project history unless `CURRENT_TASK.md` explicitly asks for it.
 
@@ -17,9 +18,11 @@ The GitHub repository may be private and the current local workspace may be empt
 - Do NOT use shell/local `git clone`, `git pull`, PAT, SSH keys, credential helpers, or ask the user to configure Git credentials for this project.
 - Do NOT infer repository inaccessibility from an unauthenticated GitHub webpage returning 404.
 - Use the **Scripting native GitHub API / built-in GitHub integration** for repository reads, writes, commits and branch work.
-- If the local workspace is empty, bootstrap from the branch named in `CURRENT_TASK.md` through the native GitHub integration: read `AGENTS.md`, `CURRENT_TASK.md`, `DEV_PROGRESS.md`, then fetch only the relevant source files and sync them into the isolated `E-Hentai 浏览器 DEV` script as needed.
+- If the local workspace is empty, bootstrap from the branch named in `CURRENT_TASK.md` through the native GitHub integration: read the repository task/checkpoint files, then fetch only the relevant source files and sync them into the isolated `E-Hentai 浏览器 DEV` script as needed.
 - Repository state on the named remote branch is authoritative; a pre-existing local checkout is not required.
-- If a GitHub API action is not immediately visible, inspect available Scripting tools/integrations first. Only report a blocker if the native GitHub integration is genuinely unavailable after checking. **Never fall back to requesting PAT/local Git credentials.**
+- **Repository files are the authoritative execution contract. PR/Issue comments are supplemental only. Never require `read_issues` / `read_pull_requests` permission merely to continue work when the same instructions are already present in `CURRENT_TASK.md`, `STABILIZATION_AUDIT.md`, or `DEV_PROGRESS.md`. If a PR comment cannot be read without an extra authorization prompt, skip it and continue from repository documents.**
+- Do not call `GitHub.requestPermissions(...)` solely to read a referenced PR/Issue comment unless `CURRENT_TASK.md` explicitly says the comment contains unique instructions unavailable in repository files.
+- If a GitHub API action is not immediately visible, inspect available Scripting tools/integrations first. Only report a blocker if repository file read/write itself is genuinely unavailable after checking. **Never fall back to requesting PAT/local Git credentials.**
 
 ## Development mode
 `CURRENT_TASK.md` is authoritative for the current project phase.
