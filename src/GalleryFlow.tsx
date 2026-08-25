@@ -116,7 +116,7 @@ function AccountSection({ account, onAccountContextChanged }: { account: ReturnT
         await openSafariLogin(); setMessage("已打开 Safari。Safari 登录桥为实验功能；完成登录并确认捕获后，再点“导入实验桥登录”。")
       } else if (action === "import") updateContext(await importSafariLogin())
       else if (action === "refresh") updateContext(await refreshAccountStatus())
-      else if (action === "logout") { signOut(); updateContext(getAccountStatus()) }
+      else if (action === "logout") { try { await signOut() } finally { updateContext(getAccountStatus()) } }
       else { setActiveSite(action); updateContext(getAccountStatus()) }
     } catch (caught) { setMessage(caught instanceof Error ? caught.message : String(caught)) }
     finally { setBusy(false) }
