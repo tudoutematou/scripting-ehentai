@@ -111,8 +111,7 @@ export function parseSearchHtml(html: string, baseUrl: string): SearchExtractDat
 
     const anchorIndex = match.index || 0
     const block = findBlock(html, anchorIndex)
-    let title = cleanText(match[8])
-    if (!title) title = findClassText(block, "glname") || findClassText(block, "glink")
+    let title = findClassText(block, "glink") || findClassText(block, "glname") || cleanText(match[8])
     if (!title) continue
 
     const rowText = cleanText(block)
