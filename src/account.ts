@@ -8,6 +8,18 @@ const SAFARI_LOGIN_FILE = "login.json"
 const SAFARI_STATUS_FILE = "status.json"
 const AUTH_COOKIE_NAMES = new Set(["ipb_member_id", "ipb_pass_hash", "ipb_session_id", "igneous"])
 const fileManager: any = (globalThis as any).FileManager
+const SAFARI_CAPTURE_MAX_AGE_MS = 2 * 60 * 60 * 1000
+const SAFARI_CAPTURE_FUTURE_SKEW_MS = 5 * 60 * 1000
+
+export type AccountCredentialDependencies = {
+  fileManager: any
+  keychain: any
+  now: () => number
+}
+
+function credentialDependencies(): AccountCredentialDependencies {
+  return { fileManager, keychain: keychain(), now: () => Date.now() }
+}
 
 export type GallerySite = "e" | "ex"
 
@@ -95,8 +107,8 @@ function updateDiagnostic(update: Partial<AccountDiagnostic>) {
   latestDiagnostic = { ...latestDiagnostic, ...update }
 }
 
-function keychainRoundTrip(): boolean {
-  return hasAuthCookies(loadCookies())
+function keychainRoundTrip(api = keychain()): boolean {
+  return hasAuthCookies(loadCookies(api))
 }
 
 function diagnosticNotes(status: AccountStatus) {
@@ -207,9 +219,9 @@ export function importCookiesFromText(value: string): AccountStatus {
   return getAccountStatus()
 }
 
-export function loadCookies(): StoredCookie[] {
+export function loadCookies(api = keychain()): StoredCookie[] {
   try {
-    const raw = keychain().get(COOKIE_KEY)
+    const raw = api.get(COOKIE_KEY)
     if (!raw) return []
     const parsed = JSON.parse(String(raw))
     return Array.isArray(parsed) ? sanitizeCookies(parsed) : []
@@ -218,10 +230,10 @@ export function loadCookies(): StoredCookie[] {
   }
 }
 
-function saveCookies(cookies: StoredCookie[]): void {
+function saveCookies(cookies: StoredCookie[], api = keychain()): void {
   const safeCookies = sanitizeCookies(cookies)
   if (!hasAuthCookies(safeCookies)) throw new Error("登录数据缺少 ipb_member_id 或 ipb_pass_hash。")
-  const ok = keychain().set(COOKIE_KEY, JSON.stringify(safeCookies), {
+  const ok = api.set(COOKIE_KEY, JSON.stringify(safeCookies), {
     accessibility: "first_unlock_this_device",
     synchronizable: false,
   })
@@ -241,38 +253,57 @@ function rootBasename(path: string): string {
   return path.split("/").filter(Boolean).pop() || ""
 }
 
-function safariBridgeRootEntries() {
+function safariBridgeRootEntries(manager = fileManager) {
   return [
-    { root: "safariBrowserStorageDirectory" as const, path: String(fileManager?.safariBrowserStorageDirectory || "").trim() },
-    { root: "safariBrowserDirectory" as const, path: String(fileManager?.safariBrowserDirectory || "").trim() },
-    { root: "appGroupDocumentsDirectory" as const, path: String(fileManager?.appGroupDocumentsDirectory || "").trim() },
-    { root: "documentsDirectory" as const, path: String(fileManager?.documentsDirectory || "").trim() },
+    { root: "safariBrowserStorageDirectory" as const, path: String(manager?.safariBrowserStorageDirectory || "").trim() },
+    { root: "safariBrowserDirectory" as const, path: String(manager?.safariBrowserDirectory || "").trim() },
+    { root: "appGroupDocumentsDirectory" as const, path: String(manager?.appGroupDocumentsDirectory || "").trim() },
+    { root: "documentsDirectory" as const, path: String(manager?.documentsDirectory || "").trim() },
   ]
 }
 
-function safariBridgeRoots(): string[] {
-  const roots = [...new Set(safariBridgeRootEntries().map(entry => entry.path).filter(Boolean))]
+function safariBridgeRoots(manager = fileManager): string[] {
+  const roots = [...new Set(safariBridgeRootEntries(manager).map(entry => entry.path).filter(Boolean))]
   if (!roots.length) throw new Error("当前 Scripting 运行时未提供 Safari Browser 共享目录。")
   return roots
 }
 
-function safariBridgePaths(file: string): string[] {
-  return safariBridgeRoots().map(root => `${root}/${SAFARI_BRIDGE_DIRECTORY}/${file}`)
+function safariBridgePaths(file: string, manager = fileManager): string[] {
+  return safariBridgeRoots(manager).map(root => `${root}/${SAFARI_BRIDGE_DIRECTORY}/${file}`)
 }
 
-async function fileExists(path: string): Promise<boolean> {
+function safariCredentialPaths(manager: any): string[] {
+  return [...new Set(safariBridgeRootEntries(manager).map(entry => entry.path).filter(Boolean).map(root => `${root}/${SAFARI_BRIDGE_DIRECTORY}/${SAFARI_LOGIN_FILE}`))]
+}
+
+async function fileExists(path: string, manager = fileManager): Promise<boolean> {
   try {
-    return Boolean(await fileManager.exists(path))
+    return Boolean(await manager.exists(path))
   } catch {
     return false
   }
 }
 
-async function findSafariBridgeFile(file: string): Promise<string | null> {
-  for (const path of safariBridgePaths(file)) {
-    if (await fileExists(path)) return path
+async function findSafariBridgeFile(file: string, manager = fileManager): Promise<string | null> {
+  for (const path of safariBridgePaths(file, manager)) {
+    if (await fileExists(path, manager)) return path
   }
   return null
+}
+
+export async function cleanupSafariLoginCredentials(manager = fileManager): Promise<void> {
+  const failures: number[] = []
+  const paths = safariCredentialPaths(manager)
+  for (let index = 0; index < paths.length; index += 1) {
+    const path = paths[index]
+    try {
+      if (await manager.exists(path)) await manager.remove(path)
+      if (await manager.exists(path)) failures.push(index)
+    } catch {
+      failures.push(index)
+    }
+  }
+  if (failures.length) throw new Error(`Safari 临时登录凭据清理失败（候选 ${failures.map(index => index + 1).join(",")}）。`)
 }
 
 async function readSafariBridgeStatus(): Promise<SafariBridgeStatus | null> {
@@ -362,65 +393,78 @@ export async function openSafariLogin(): Promise<void> {
   if (!opened) throw new Error("无法打开系统浏览器。请手动用 Safari 打开 E-Hentai 登录页。")
 }
 
-export async function importSafariLogin(): Promise<AccountStatus> {
-  const searchedPaths = safariBridgeRootEntries().filter(entry => entry.path).map(entry => `${entry.root}/login.json`)
+export async function importSafariLogin(dependencies = credentialDependencies()): Promise<AccountStatus> {
+  const manager = dependencies.fileManager
+  const api = dependencies.keychain
+  const searchedPaths = safariBridgeRootEntries(manager).filter(entry => entry.path).map(entry => `${entry.root}/login.json`)
   updateDiagnostic({
     stage: "safari-import", searchedPaths, loginPath: "", loginExists: false,
     jsonParsed: false, hasMemberId: false, hasPassHash: false,
     keychainSet: false, keychainRoundTrip: false, notes: "开始导入 Safari 登录桥数据（不记录 Cookie 值）",
   })
-  const loginPath = await findSafariBridgeFile(SAFARI_LOGIN_FILE)
+  const loginPath = await findSafariBridgeFile(SAFARI_LOGIN_FILE, manager)
   if (!loginPath) {
     updateDiagnostic({ notes: "未在候选共享目录中找到 login.json" })
     throw new Error(bridgeMissingMessage(await readSafariBridgeStatus()))
   }
-  updateDiagnostic({ loginPath: safariBridgeRootEntries().find(entry => loginPath.startsWith(entry.path))?.root || "unknown-root", loginExists: true })
+  updateDiagnostic({ loginPath: safariBridgeRootEntries(manager).find(entry => loginPath.startsWith(entry.path))?.root || "unknown-root", loginExists: true })
 
-  let payload: SafariLoginPayload
+  let result: AccountStatus | null = null
+  let operationError: unknown = null
   try {
-    const raw = await fileManager.readAsString(loginPath)
-    payload = JSON.parse(String(raw || "{}"))
-    updateDiagnostic({ jsonParsed: true })
+    let payload: SafariLoginPayload
+    try {
+      const raw = await manager.readAsString(loginPath)
+      payload = JSON.parse(String(raw || "{}"))
+      if (!payload || typeof payload !== "object" || Array.isArray(payload) || !Array.isArray(payload.cookies)) throw new Error("invalid-payload")
+      updateDiagnostic({ jsonParsed: true })
+    } catch {
+      updateDiagnostic({ notes: "login.json 读取、解析或结构校验失败" })
+      throw new Error("Safari 登录桥数据读取失败，请重新在 Safari 捕获登录状态。")
+    }
+
+    const capturedAt = Date.parse(String(payload.time || ""))
+    const age = dependencies.now() - capturedAt
+    if (!Number.isFinite(capturedAt) || age >= SAFARI_CAPTURE_MAX_AGE_MS || age < -SAFARI_CAPTURE_FUTURE_SKEW_MS) {
+      throw new Error("Safari 登录桥数据无有效时间或已过期，请重新在 Safari 打开 E-Hentai 页面后再导入。")
+    }
+
+    const cookies = sanitizeCookies(payload.cookies).filter(cookie => AUTH_COOKIE_NAMES.has(cookie.name))
+    const names = new Set(cookies.map(cookie => cookie.name))
+    updateDiagnostic({ hasMemberId: names.has("ipb_member_id"), hasPassHash: names.has("ipb_pass_hash") })
+    if (!hasAuthCookies(cookies)) {
+      updateDiagnostic({ notes: `JSON 已解析，但核心 Cookie 不完整；names=${[...names].join(",") || "none"}` })
+      throw new Error("Safari 已回传数据，但没有检测到完整 E-Hentai 登录 Cookie。请在 Safari 保持登录状态并刷新 e-hentai.org 后重试。")
+    }
+
+    try {
+      saveCookies(cookies, api)
+      updateDiagnostic({ keychainSet: true })
+    } catch {
+      updateDiagnostic({ notes: "Keychain.set 失败" })
+      throw new Error("登录 Cookie 写入 Keychain 失败，请重新捕获后再试。")
+    }
+    const roundTrip = keychainRoundTrip(api)
+    updateDiagnostic({ keychainRoundTrip: roundTrip })
+    if (!roundTrip) {
+      updateDiagnostic({ notes: "Keychain 写入后校验失败" })
+      throw new Error("Keychain 写入后校验失败，请重新捕获后再试。")
+    }
+    setActiveSite("e", api)
+    result = getAccountStatus(api)
+    updateDiagnostic({ stage: "safari-import-complete", loggedIn: result.loggedIn, eHentaiReachable: result.eHentaiReachable, exAvailable: result.exAvailable, notes: `导入成功；Cookie names=${[...names].join(",")}` })
   } catch (error) {
-    updateDiagnostic({ notes: `login.json 读取或解析失败：${String((error as Error)?.message || error)}` })
-    throw new Error(`Safari 登录桥数据读取失败：${String((error as Error)?.message || error)}`)
-  }
-
-  const cookies = sanitizeCookies(payload.cookies || []).filter(cookie => AUTH_COOKIE_NAMES.has(cookie.name))
-  const names = new Set(cookies.map(cookie => cookie.name))
-  updateDiagnostic({ hasMemberId: names.has("ipb_member_id"), hasPassHash: names.has("ipb_pass_hash") })
-  if (!hasAuthCookies(cookies)) {
-    updateDiagnostic({ notes: `JSON 已解析，但核心 Cookie 不完整；names=${[...names].join(",") || "none"}` })
-    throw new Error("Safari 已回传数据，但没有检测到完整 E-Hentai 登录 Cookie。请在 Safari 保持登录状态并刷新 e-hentai.org 后重试。")
-  }
-
-  if (payload.time) {
-    const age = Date.now() - Date.parse(payload.time)
-    if (Number.isFinite(age) && age > 2 * 60 * 60 * 1000) throw new Error("Safari 登录桥数据已超过 2 小时，请重新在 Safari 打开 E-Hentai 页面后再导入。")
+    operationError = error
   }
 
   try {
-    saveCookies(cookies)
-    updateDiagnostic({ keychainSet: true })
-  } catch (error) {
-    updateDiagnostic({ notes: `Keychain.set 失败：${String((error as Error)?.message || error)}` })
-    throw error
+    await cleanupSafariLoginCredentials(manager)
+  } catch {
+    if (operationError) throw new Error("Safari 登录导入失败，且临时明文凭据未能完全清理。请在系统文件中删除登录桥 login.json。")
+    throw new Error("登录已保存，但 Safari 临时明文凭据未能完全清理。请在系统文件中删除登录桥 login.json。")
   }
-  const roundTrip = keychainRoundTrip()
-  updateDiagnostic({ keychainRoundTrip: roundTrip })
-  if (!roundTrip) {
-    updateDiagnostic({ notes: "Keychain.set 返回成功，但立即重新读取未发现完整核心 Cookie；保留 login.json 供重试。" })
-    throw new Error("Keychain 写入后校验失败；已保留 Safari login.json，请重试。")
-  }
-  setActiveSite("e")
-
-  // 仅在 Keychain 写入并立即回读确认成功后删除临时明文文件。
-  for (const path of safariBridgePaths(SAFARI_LOGIN_FILE)) {
-    try { if (await fileExists(path)) await fileManager.remove(path) } catch { /* 已持久化，不影响登录 */ }
-  }
-  const status = getAccountStatus()
-  updateDiagnostic({ stage: "safari-import-complete", loggedIn: status.loggedIn, eHentaiReachable: status.eHentaiReachable, exAvailable: status.exAvailable, notes: `导入成功；Cookie names=${[...names].join(",")}` })
-  return status
+  if (operationError) throw operationError
+  return result as AccountStatus
 }
 
 // 兼容现有首页“网页登录”按钮：第一次打开真实 Safari；
@@ -437,16 +481,16 @@ export async function signInWithWebView(): Promise<AccountStatus> {
   throw new Error("已打开 Safari。完成论坛登录后，登录桥会自动跳到 e-hentai.org 同步 Cookie；看到绿色“✓ Scripting 已捕获登录状态”后返回本脚本，再点一次“网页登录”完成导入。")
 }
 
-export function getActiveSite(): GallerySite {
+export function getActiveSite(api = keychain()): GallerySite {
   try {
-    return keychain().get(SITE_KEY) === "ex" ? "ex" : "e"
+    return api.get(SITE_KEY) === "ex" ? "ex" : "e"
   } catch {
     return "e"
   }
 }
 
-export function setActiveSite(site: GallerySite): void {
-  const ok = keychain().set(SITE_KEY, site, {
+export function setActiveSite(site: GallerySite, api = keychain()): void {
+  const ok = api.set(SITE_KEY, site, {
     accessibility: "first_unlock_this_device",
     synchronizable: false,
   })
@@ -495,8 +539,8 @@ export function getCookieHeader(url: string): string {
   return [...pairs.entries()].map(([name, value]) => `${name}=${value}`).join("; ")
 }
 
-export function getAccountStatus(): AccountStatus {
-  const cookies = loadCookies()
+export function getAccountStatus(api = keychain()): AccountStatus {
+  const cookies = loadCookies(api)
   const names = new Set(cookies.map(cookie => cookie.name))
   const memberIdPresent = names.has("ipb_member_id")
   const passHashPresent = names.has("ipb_pass_hash")
@@ -505,7 +549,7 @@ export function getAccountStatus(): AccountStatus {
     memberIdPresent,
     passHashPresent,
     igneousPresent: names.has("igneous"),
-    site: getActiveSite(),
+    site: getActiveSite(api),
     eHentaiReachable: null,
     exAvailable: null,
   }
@@ -552,7 +596,20 @@ export async function refreshAccountStatus(): Promise<AccountStatus> {
   return status
 }
 
-export function signOut(): void {
-  keychain().remove(COOKIE_KEY)
-  keychain().remove(SITE_KEY)
+export async function signOut(dependencies = credentialDependencies()): Promise<void> {
+  const failures: string[] = []
+  for (const key of [COOKIE_KEY, SITE_KEY]) {
+    try {
+      const result = dependencies.keychain.remove(key)
+      if (result === false) failures.push("keychain")
+    } catch {
+      failures.push("keychain")
+    }
+  }
+  try {
+    await cleanupSafariLoginCredentials(dependencies.fileManager)
+  } catch {
+    failures.push("bridge")
+  }
+  if (failures.length) throw new Error("退出登录时部分凭据未能清理，请重试并检查 Safari 登录桥临时文件。")
 }
