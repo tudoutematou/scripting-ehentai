@@ -56,14 +56,13 @@ function findAnchorHrefById(html: string, id: string, baseUrl: string): string {
 }
 
 function findBlock(html: string, anchorIndex: number): string {
-  const rowStart = html.lastIndexOf("<tr", anchorIndex)
-  const rowEnd = html.indexOf("</tr>", anchorIndex)
-  if (rowStart >= 0 && rowEnd > anchorIndex && anchorIndex - rowStart < 30000) {
-    return html.slice(rowStart, rowEnd + 5)
-  }
-  const start = Math.max(0, anchorIndex - 4500)
-  const end = Math.min(html.length, anchorIndex + 6500)
-  return html.slice(start, end)
+  const rows = [...html.matchAll(/<tr\b[^>]*>[\s\S]*?<\/tr\s*>/gi)]
+  const row = rows.find(match => (match.index || 0) <= anchorIndex && anchorIndex < (match.index || 0) + match[0].length)
+  if (row) return row[0]
+  const markers = [...html.matchAll(/<div\b(?=[^>]*\bclass\s*=\s*(["'])[^"']*\bgl(?:1[et]|3[cm]|ft|name|ink)\b[^"']*\1)[^>]*>/gi)]
+  const markerIndex = markers.findIndex((match, index) => (match.index || 0) <= anchorIndex && (index + 1 === markers.length || (markers[index + 1].index || html.length) > anchorIndex))
+  if (markerIndex >= 0) { const start = markers[markerIndex].index || 0; const end = markerIndex + 1 < markers.length ? markers[markerIndex + 1].index || html.length : html.length; return html.slice(start, end) }
+  return ""
 }
 
 function findThumb(block: string, baseUrl: string): string {
@@ -102,24 +101,24 @@ function parseResultCount(html: string): string {
 export function parseSearchHtml(html: string, baseUrl: string): SearchExtractData {
   const items: GallerySummary[] = []
   const seen = new Set<string>()
-  const anchorPattern = /<a\b[^>]*\bhref\s*=\s*(["'])([^"']*\/g\/(\d+)\/([a-f0-9]+)\/?[^"']*)\1[^>]*>([\s\S]*?)<\/a>/gi
+  const anchorPattern = /<a\b[^>]*\bhref\s*=\s*(?:(["'])([^"']*\/g\/(\d+)\/([a-f0-9]+)\/?[^"']*)\1|([^\s>]*\/g\/(\d+)\/([a-f0-9]+)\/?[^\s>]*))[^>]*>([\s\S]*?)<\/a>/gi
 
   for (const match of html.matchAll(anchorPattern)) {
-    const gid = match[3]
-    const token = match[4]
+    const gid = match[3] || match[6]
+    const token = match[4] || match[7]
     const id = `${gid}:${token}`
     if (seen.has(id)) continue
 
     const anchorIndex = match.index || 0
     const block = findBlock(html, anchorIndex)
-    let title = cleanText(match[5])
+    let title = cleanText(match[8])
     if (!title) title = findClassText(block, "glname") || findClassText(block, "glink")
     if (!title) continue
 
     const rowText = cleanText(block)
     const pagesMatch = rowText.match(/(\d[\d,]*)\s+pages?/i)
     const category = findClassText(block, "cn") || findClassText(block, "cs")
-    const url = absoluteUrl(match[2], baseUrl)
+    const url = absoluteUrl(match[2] || match[5], baseUrl)
 
     items.push({
       id,
