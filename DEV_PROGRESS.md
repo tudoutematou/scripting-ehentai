@@ -5,63 +5,32 @@ Branch: `feat/0.9-stabilization`
 
 ## Current phase
 
-Batch 0 / S0 is complete. The audit triage correction is recorded in `STABILIZATION_AUDIT.md`; A-01 and A-02 are fixed, and no S1/S2 work was started.
+S1 stabilization batches are complete on the current release-candidate source head. A-01 through A-08 are fixed; S2/S3 findings remain deferred for their explicitly scoped follow-up phase.
 
-- Batch 0 baseline: `455d1da49ccf39c5d06762aa3cd5dcb23126fdeb`
 - Effective audit result: **S0 2 / S1 6 / S2 20 / S3 2**
-- Fixed in this batch: **A-01, A-02**
-- Remaining findings: all A-03 and later findings remain `open`.
+- Fixed in 0.9 batches: **A-01–A-08**
+- DEV runtime target: isolated `E-Hentai 浏览器 DEV`, manifest `0.9.0-rc-dev`. Stable local `E-Hentai 浏览器` remains untouched.
 
-## Batch 0 fixes
+## S1 completion
 
-- **A-01 diagnostics privacy:** removed the full current-tree `runtime/` directory (134 event files plus `latest.json`), added root `/runtime/` ignore, and added the dependency-free deterministic `tools/scan_sensitive_artifacts.py` gate. The current tree reports 0 findings for materialized gallery/page URLs, signed parameters, Cookie values, search-query URLs, private iOS paths and runtime artifacts.
-- **History boundary:** deleting the current tree does not remove sensitive diagnostics from previously pushed Git history. Batch 0 did not rewrite history; release handling must assess it separately.
-- **A-02 Safari bridge credentials:** added one all-candidate plaintext `login.json` cleanup in `src/account.ts`; malformed, expired, incomplete, Keychain write/round-trip failures and success all consume the capture. `signOut()` is async, independently removes both Keychain items and every candidate login file, and the UI awaits it before refreshing account state. No recoverable plaintext failure is retained.
+- **A-03:** download manifest writer no longer truncates; creation rejects the 31st task.
+- **A-04:** active delete awaits the worker and recovers interrupted `.deleting` transaction states.
+- **A-05:** Reader/offline creation waits for complete preview inventory; failures/truncation are preserved and retryable.
+- **A-06:** supported list layouts use per-item parser boundaries.
+- **A-07:** image requests are individually time-bounded and verify image payload signatures before atomic commit.
+- **A-08:** site/session and favorite changes invalidate account-sensitive detail/preview caches.
 
-## Batch 0 verification
+## Consolidated verification
 
-- TypeScript diagnostics using `src/tsconfig.test.json`: 0 diagnostics.
-- `src/runSelfTests.ts`: **33/33 passed**, including 4 new bridge lifecycle checks.
+- TypeScript diagnostics using `src/tsconfig.test.json`: **0 diagnostics**.
+- `src/runSelfTests.ts`: **39/39 passed**, including six focused S1 regression checks.
 - `src/runActionSmoke.ts`: passed.
 - `src/runAssistantToolSmoke.ts`: passed.
-- Sensitive-artifact current-tree scan: **0 findings**.
-- Synthetic scanner regression: complete gallery URL fixture was rejected deterministically.
-- Tests use in-memory FileManager/Keychain fixtures only; no real credentials or cloud writes.
+- `src/runNetworkSelfTest.ts`: **40/40 passed**, including live Search -> Detail Core -> Image Page.
+- DEV launch invoked for `E-Hentai 浏览器 DEV`; it remained active for the CLI observation window without startup exception output.
 
-## Next consolidated fix batches
+## Remaining / frozen scope
 
-1. **S1 data integrity**
-   - stop silent download-manifest truncation;
-   - make active-delete and `.deleting` recovery quiescent/recoverable.
-2. **S1 Reader/download/parser/account reliability**
-   - preserve complete preview inventory before Reader/download completion;
-   - validate/time-bound image downloads;
-   - isolate all supported list layouts;
-   - invalidate account-sensitive caches on session/favorite changes.
-3. **S2 state, storage and product consistency**
-   - account/site and request-generation consistency;
-   - Watched/Toplists and relation identity;
-   - Reader/offline progress and restart reconciliation;
-   - Quick Search/file backup recovery and user-safe error states.
-4. **Evidence-based UI pass**
-   - obtain narrow-iPhone/Dynamic Type and iPad screenshots for the specific groups listed in the audit;
-   - apply only bounded native-layout fixes supported by runtime evidence.
-
-## Required workflow remaining
-
-1. Consolidated root-cause fix passes by severity.
-2. Full DEV regression + `0.9.0-rc-dev` runtime walkthrough.
-3. Fresh independent high-reasoning final review.
-4. Freeze 0.9 only when no open S0/S1 remains.
-
-## Starting baseline retained
-
-- 0.8 UI/UX A–H accepted.
-- Stable local `E-Hentai 浏览器` remains untouched.
-- Runtime target remains isolated `E-Hentai 浏览器 DEV`.
-
-## Accepted PLATFORM_GAP — do not reopen
-
-- Reverse image search upload/multipart path unverified.
-- Rating submission authenticated API/form path unverified.
-- Comment post/edit action + CSRF/edit-ownership path unverified.
+- S2 and S3 findings recorded in `STABILIZATION_AUDIT.md` are not started in this S1-only pass.
+- Accepted PLATFORM_GAP remains frozen: reverse image upload/multipart, rating submission, and comment post/edit authenticated paths.
+- Before 1.0 promotion, perform the mandated fresh independent final review and the full interactive DEV walkthrough; do not overwrite the stable script or merge without explicit instruction.
