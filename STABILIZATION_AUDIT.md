@@ -60,6 +60,8 @@ Date: 2026-08-24
 - **validation needed:** create 30 then 31 tasks and assert no record or directory is silently detached; inject manifest/directory failures for any chosen eviction policy.
 - **status:** open
 
+- **fix:** Removed generic manifest truncation and rejects the 31st new download before persistence; retained tasks are never silently detached.
+- **status:** fixed
 ## A-04 — Download deletion is not quiescent and interrupted `.deleting` state is not recoverable
 
 - **severity:** S1
@@ -70,6 +72,8 @@ Date: 2026-08-24
 - **validation needed:** barrier-controlled delete during write; manifest-save failure plus rollback failure; restart/retry from every directory/trash combination; final state must contain either a valid task directory and manifest or neither.
 - **status:** open
 
+- **fix:** Active downloads now track and await worker completion before delete; directory/trash recovery handles interrupted `.deleting` state explicitly.
+- **status:** fixed
 ## A-05 — Incomplete preview inventory can masquerade as a complete Reader/download
 
 - **severity:** S1
@@ -80,6 +84,8 @@ Date: 2026-08-24
 - **validation needed:** delayed second preview page, one failed middle page, index gaps/duplicates and `previewPages > 50`; Reader/download must not claim a partial set is final and retry must fill it deterministically.
 - **status:** open
 
+- **fix:** Detail inventory now retains preview failures, gates Reader/offline creation until complete, and offers a bounded retry path.
+- **status:** fixed
 ## A-06 — Alternate E-Hentai list modes can mix fields from neighboring galleries
 
 - **severity:** S1
@@ -90,6 +96,8 @@ Date: 2026-08-24
 - **validation needed:** Compact, Minimal, Minimal+, Extended and Thumbnail fixtures with sharply different adjacent values and missing optional fields.
 - **status:** open
 
+- **fix:** Search parsing now isolates actual table/div result containers for supported display layouts rather than using a neighboring-character window.
+- **status:** fixed
 ## A-07 — Download image requests can hang forever or save HTML as completed pages
 
 - **severity:** S1
@@ -100,6 +108,8 @@ Date: 2026-08-24
 - **validation needed:** never-settling fetch, user pause during timeout, 200 `text/html`, empty data and valid JPEG/PNG/WebP; only valid image data may become final/done.
 - **status:** open
 
+- **fix:** Each image request has an independent timeout; only nonempty JPEG/PNG/WebP payloads with image content type are atomically committed.
+- **status:** fixed
 ## A-08 — Account changes do not invalidate account-sensitive detail/preview caches
 
 - **severity:** S1
@@ -112,6 +122,8 @@ Date: 2026-08-24
 
 # S2
 
+- **fix:** Shared gallery caches are invalidated on site/session lifecycle changes and successful favorite mutations.
+- **status:** fixed
 ## A-09 — Expired/revoked Cookies remain locally “logged in”
 
 - **severity:** S2
