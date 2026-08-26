@@ -1,28 +1,35 @@
-# DEV_PROGRESS — 0.9 Stabilization RC
+# DEV_PROGRESS — 1.0 Release Prep
 
-Branch: `feat/0.9-stabilization`  
-DEV target: isolated `E-Hentai 浏览器 DEV` (`0.9.0-rc-dev`)
+Branch: `release/1.0`  
+Base: accepted/frozen 0.9 RC head `765fe97d52d3f9f9ce709685d862048d28188351`
 
-## RC status — 2026-08-26
+## Current phase
 
-- **S0:** A-01, A-02 fixed.
-- **S1:** A-03 through A-08 fixed. Independent final review also fixed image-cache HTML/invalid-payload poisoning, unconfirmed Favorite mutation feedback, preview-thumbnail Reader gate bypass, and partial-inventory download creation. **No known open S0/S1.**
-- **S2:** practical code-backed consolidation complete: session/account lifecycle, stale requests, Watched paging, Toplists identity/rank, parser relations, monotonic reader/offline progress, download recovery/reconciliation plus complete-inventory enforcement, storage backup recovery, destructive confirmations, and safe UI errors.
-- **Deferred with explicit evidence requirement:** A-28 narrow/Dynamic-Type layout and A-30 iPad readable-width behavior. No unsupported layout rewrite was made.
-- **A-09 partial/deferred:** expired Cookies are filtered at the shared boundary; the remaining stored-credential versus server-validated-session presentation distinction requires product semantics/runtime evidence and is deferred post-1.0.
+1.0 Release Prep started. Feature scope and the 0.9 stabilization result remain frozen.
 
-## Final verification
+- Open S0: **0**
+- Open S1: **0**
+- Starting RC evidence inherited from 0.9:
+  - TypeScript diagnostics: 0;
+  - self-tests: all 55 executed checks passed;
+  - action/assistant/network smoke: passed;
+  - isolated DEV launch: no startup exception during observation window.
 
-- TypeScript diagnostics: **0 diagnostics**.
-- `src/runSelfTests.ts`: **all 55 executed checks passed** (including final-review inventory-gate and monotonic-reader-progress regressions).
-- `src/runActionSmoke.ts`: **passed**; live search -> Detail Core and invalid gallery-ref rejection behaved correctly.
-- `src/runAssistantToolSmoke.ts`: **passed**; live typed search returned 20 gallery summaries.
-- `src/runNetworkSelfTest.ts`: **passed** after final-review fixes; live Search -> Detail Core -> Image Page completed, with all deterministic checks green.
-- Live Toplists structural probe: HTTP 200, 40 Gallery links; `tdo` list containers and `pso` rank cells verified. Dedicated parser now retains per-list identity/time range (for example All-Time/Past-* labels) and rank.
-- DEV launch: isolated `E-Hentai 浏览器 DEV` remained active through the 25-second CLI observation window with no startup exception output; CLI timeout is expected for its persistent interactive UI session.
+## Release Prep work remaining
 
-## Freeze boundary
+1. Release-facing metadata/version cleanup in isolated DEV only.
+2. Verified concise README + `RELEASE_NOTES_1.0.md`.
+3. One final release verification cycle and sensitive-artifact scan.
+4. Historical `runtime/events` exposure assessment and recommendation only — no history rewrite/force-push without explicit instruction.
+5. Freeze exact 1.0 release-candidate head and stop before merge/promotion.
 
-- Stable local `E-Hentai 浏览器` remains untouched.
-- This branch is a DEV RC only: do not merge/promote or overwrite the stable script without explicit 1.0 release instruction.
-- Temporary inspection/repair scripts were deleted and are not part of the sync.
+## Preserve
+
+- Stable local `E-Hentai 浏览器` remains untouched during Release Prep.
+- A-28/A-30 remain post-1.0 evidence items.
+- Remaining A-09 presentation semantics remain post-1.0 unless a concrete release blocker is reproduced.
+- Accepted PLATFORM_GAP remains unchanged: reverse image upload, rating write, comment write.
+
+## Promotion boundary
+
+Release Prep completion does not authorize PR merge, Git history rewrite, tag/release publication, or stable-local-script overwrite. Those require the user's explicit final promotion instruction.
