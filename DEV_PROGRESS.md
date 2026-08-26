@@ -2,9 +2,19 @@
 
 Branch: `release/1.0`
 
+## Sync-chain correction — 2026-08-26
+
+此前“DEV 已同步”的结论无效：根目录 `bootstrapFromRemote.ts` 与 `readRemoteTask.ts` 实际仍指向 `feat/0.9-stabilization`，且远端 `src/script.json` 仍为 `0.9.0-rc-dev`。本轮暂停功能与实机验收，仅修正部署链路：
+
+- 两个工具均改为 `release/1.0`。
+- `bootstrapFromRemote.ts` 在写入前解析一次远端 branch head，并用该不可变 SHA 读取全量 `src/`；写完后保存本地 `sync-manifest.json`（version、branch、commit、时间、文件数）。
+- 隔离 DEV 的远端 manifest 改为 `1.0.0-rc`，名称继续为 `E-Hentai 浏览器 DEV`，描述明确为 1.0 Release Candidate。
+- “账号与设置”底部显示只读构建标记；实机测试前必须与同步清单/远端 head 一致。
+- 修复后重新同步并逐项验证 `script.json`、`GalleryFlow.tsx`、`browser.tsx`、`libraryStore.ts` marker；未验证前不得把功能测试结果归因于 release/1.0。
+
+
 ## Real-device Hotfix Pass — 2026-08-26
 
-真实 iPad 横屏录像确认了 Release Prep 后仍存在 Safari Bridge、下载即时状态、详情宽度和提示语义问题。本轮仅修复这些复现的 release blockers；未开始新功能或全项目审计。
 
 - **Safari Login Bridge：**不再强制 `safariBrowserStorageDirectory`。候选共享 root 逐个进行目录创建、写入、存在性与读回 probe；单个 `pathDenied` 会被记录并继续探测。通过的 root 才用于 login/status 写入。
 - **显式捕获：**Bridge 只在“在 Safari 登录”生成的 `scripting_eh_capture=1` 短期 URL 中启用；普通 Home 的“论坛”外部入口不会显示 badge、自动跳转 E-Hentai 或写入捕获。捕获成功、错误或过期后会关闭。
