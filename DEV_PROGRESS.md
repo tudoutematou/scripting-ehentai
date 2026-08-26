@@ -2,6 +2,15 @@
 
 Branch: `release/1.0`
 
+## Reference Alignment Pass — 2026-08-27
+
+用户已提供真实 iPad 运行证据：A-30 不再是 evidence-deferred；Detail 的 760pt 限宽、metadata 纵向 label/value 与 adaptive `LazyVGrid` 标签布局是保留约束。本阶段获准以 Zerolost/SEhViewer 为只读参考，实施 Safari 显式 Cookie 获取和最小 Glass 视觉层。
+
+- 允许改造 `browser.tsx`、`account.ts`、`GalleryFlow.tsx`、`LibraryScene.tsx` 和最小公共 `GlassUI.tsx`。
+- 登录改为：Safari 显式点击获取 Cookie → App 只导入草稿 → 用户点击“保存并验证”后才进入现有 sanitize、Keychain、session invalidation 与 E/Ex 真实验证。
+- 禁止替换或移植现有 `ehentai` 网络层、parser、`libraryStore`、下载/Reader 核心、GitHub sync、Config 或 TabView 架构。
+- 实现结束必须固定最终 head 同步 DEV；`script.json` 按共享字段语义比较并忽略 Scripting 自动投影字段，其余源码逐文件一致；Account/Settings build marker 必须显示最终短 SHA。
+
 ## Sync-chain correction — 2026-08-26
 
 此前“DEV 已同步”的结论无效：根目录 `bootstrapFromRemote.ts` 与 `readRemoteTask.ts` 实际仍指向 `feat/0.9-stabilization`，且远端 `src/script.json` 仍为 `0.9.0-rc-dev`。本轮暂停功能与实机验收，仅修正部署链路：
@@ -12,10 +21,6 @@ Branch: `release/1.0`
 - “账号与设置”底部显示只读构建标记；实机测试前必须与同步清单/远端 head 一致。
 - 修复后重新同步并逐项验证 `script.json`、`GalleryFlow.tsx`、`browser.tsx`、`libraryStore.ts` marker；未验证前不得把功能测试结果归因于 release/1.0。
 
-
-## Sync-chain correction — 2026-08-26
-
-此前“DEV 已同步”的结论无效：根目录 `bootstrapFromRemote.ts` 与 `readRemoteTask.ts` 实际仍指向 `feat/0.9-stabilization`，且远端 `src/script.json` 仍为 `0.9.0-rc-dev`。本轮暂停功能与实机验收，仅修正部署链路：两个工具均改为 `release/1.0`；bootstrap 在写入前解析一次远端 branch head，并用该不可变 SHA 读取全量 `src/`；写完后保存本地 `sync-manifest.json`（version、branch、commit、时间、文件数）；隔离 DEV manifest 改为 `1.0.0-rc`；“账号与设置”底部显示只读构建标记。修复后必须逐项验证 marker，再做实机验收。
 
 ## Real-device Hotfix Pass — 2026-08-26
 
@@ -43,4 +48,4 @@ DEV 已同步本轮代码，仍需在同一 iPad 上依次确认：普通论坛�
 
 - Stable local `E-Hentai 浏览器` remains untouched.
 - No merge, main update, history rewrite, tag/release publication or stable-script overwrite.
-- A-28 and A-09 remain post-1.0; A-30 is now code-fixed from the supplied iPad landscape evidence.
+- A-28 remains post-1.0; A-30 is code-fixed from supplied iPad landscape evidence and is no longer evidence-deferred.
