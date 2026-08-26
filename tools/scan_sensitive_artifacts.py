@@ -30,7 +30,7 @@ def is_runtime_member(name: str) -> bool:
 
 
 def allowed(rel: str, line: str, rule: str) -> bool:
-    return rule == "SEARCH_QUERY_URL" and any(rel == path and value in line for path, value in ALLOWED_SYNTHETIC)
+    return rel in SKIP_CONTENT or (rule == "SEARCH_QUERY_URL" and any(rel == path and value in line for path, value in ALLOWED_SYNTHETIC))
 
 
 def scan_text(name: str, data: bytes) -> list[tuple[str, int, str]]:
@@ -61,9 +61,10 @@ def scan_archive(path: Path, rel: str) -> list[tuple[str, int, str]]:
         return [(rel, 0, "UNREADABLE_ARCHIVE")]
     for name, data in members:
         member = f"{rel}!{name}"
+        source_rel = PurePosixPath(*PurePosixPath(name).parts[1:]).as_posix()
         if is_runtime_member(name):
             findings.append((member, 0, "RUNTIME_ARTIFACT"))
-        findings.extend(scan_text(member, data))
+        findings.extend((member, line, rule) for _, line, rule in scan_text(source_rel, data))
     return findings
 
 
