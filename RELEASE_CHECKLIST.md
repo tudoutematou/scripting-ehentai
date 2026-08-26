@@ -1,7 +1,7 @@
 # RELEASE_CHECKLIST — 1.0
 
 ## Release surface
-- [x] Isolated DEV identifies itself as `1.0.0-rc`; stable local script untouched.
+- [x] Isolated DEV identifies itself as `1.0.0-rc`; stable local script untouched. Reconfirmed in remote `src/script.json` after correcting the stale `0.9.0-rc-dev` manifest.
 - [x] README is accurate, concise and contains no invented setup/feature claims.
 - [x] `RELEASE_NOTES_1.0.md` summarizes verified capabilities and stabilization.
 - [x] No stale 0.9 wording is present in normal user-facing release metadata; the isolated DEV name remains intentionally explicit.
@@ -23,7 +23,8 @@
 - [x] Open S1: 0.
 - [x] A-28/A-30 explicitly evidence-deferred; no speculative UI rewrite.
 - [x] Real-device Hotfix Pass: Safari Bridge root fallback and explicit capture gate fixed; download resume updates immediately; iPad landscape Detail width/metadata/tags corrected from runtime evidence.
-- [x] Targeted deterministic regressions and action/assistant/network harness passed; DEV synchronized for final iPad confirmation.
+- [x] Sync chain corrected: `bootstrapFromRemote.ts` and `readRemoteTask.ts` target `release/1.0`; bootstrap resolves one immutable remote head, writes `sync-manifest.json`, and the Account page displays the synced build marker.
+- [ ] Re-run targeted iPad acceptance only after the local marker shows the current release/1.0 head.
 
 ## Privacy / release history
 - [x] Current release tree/archive contains no runtime diagnostics or materialized secrets.
