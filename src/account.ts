@@ -393,8 +393,14 @@ function bridgeMissingMessage(status: SafariBridgeStatus | null): string {
   return `Safari 登录桥状态：${status.phase || "unknown"}。请刷新 Safari 已登录页面后再返回重试。`
 }
 
+export function safariLoginCaptureUrl() {
+  const url = new URL(LOGIN_URL)
+  url.searchParams.set("scripting_eh_capture", "1")
+  return url.toString()
+}
+
 export async function openSafariLogin(): Promise<void> {
-  const opened = await Safari.openURL(LOGIN_URL)
+  const opened = await Safari.openURL(safariLoginCaptureUrl())
   if (!opened) throw new Error("无法打开系统浏览器。请手动用 Safari 打开 E-Hentai 登录页。")
 }
 
