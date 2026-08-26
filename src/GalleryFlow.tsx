@@ -145,8 +145,9 @@ export function HomeScene() {
   const [items, setItems] = useState<GallerySummary[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
-  const loadHome = async () => { setLoading(true); setError(""); try { setItems((await searchGalleries("", getBaseUrl())).items) } catch (caught) { setError(caught instanceof Error ? caught.message : String(caught)) } finally { setLoading(false) } }
-  useEffect(() => { void loadHome(); void ensureTagTranslations() }, [])
+  const requestEpoch = useRef(0)
+  const loadHome = async () => { const epoch = ++requestEpoch.current; setLoading(true); setError(""); try { const page = await searchGalleries("", getBaseUrl()); if (epoch === requestEpoch.current) setItems(page.items) } catch (caught) { if (epoch === requestEpoch.current) setError(caught instanceof Error ? caught.message : String(caught)) } finally { if (epoch === requestEpoch.current) setLoading(false) } }
+  useEffect(() => { void loadHome(); void ensureTagTranslations(); return () => { requestEpoch.current += 1 } }, [])
   const searchState = createHomeSearchState(keyword)
   return <List navigationTitle={account.site === "ex" ? "ExHentai" : "E-Hentai"} navigationBarTitleDisplayMode="inline" refreshable={loadHome} toolbar={{ cancellationAction: <Button title="关闭" action={dismiss} /> }} overlay={loading && !items.length ? <ProgressView title="正在加载画廊…" progressViewStyle="circular" /> : undefined}>
     <Section header={<Text textCase={null}>搜索与浏览</Text>}><VStack alignment="leading" spacing={10}><TextField title="搜索画廊" value={keyword} onChanged={setKeyword} prompt="标题、作者、标签…" submitLabel="search" /><HStack spacing={10}><NavigationLink destination={<ResultsView initial={searchState}/>}><HStack spacing={5}><Image systemName="magnifyingglass"/><Text>搜索</Text></HStack></NavigationLink><NavigationLink destination={<HomeFilterEntry initial={searchState}/>}><Text>高级筛选</Text></NavigationLink></HStack></VStack></Section>
