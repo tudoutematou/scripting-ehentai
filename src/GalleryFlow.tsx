@@ -84,7 +84,7 @@ function ResultsView({ initial }: { initial: GallerySearchState }) {
       await reportSafe({ stage: "gallery-search-filter", ok: true, request: { url: page.url }, notes: `items=${page.items.length}; category=${nextState.category}; tagPresent=${nextState.mode === "tag"}` })
     } catch (caught) {
       if (epoch !== requestEpoch.current) return
-      setError(caught instanceof Error ? caught.message : String(caught)); setItems([])
+      setError(caught instanceof Error ? caught.message : String(caught)); setItems([]);setResultCount("");setPrev("");setNext("")
     } finally {
       if (epoch === requestEpoch.current) setLoading(false)
     }
