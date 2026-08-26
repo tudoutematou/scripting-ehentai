@@ -1,7 +1,7 @@
 # RELEASE_CHECKLIST — 1.0
 
 ## Release surface
-- [x] Isolated DEV identifies itself as `1.0.0-rc`; stable local script untouched. Reconfirmed in remote `src/script.json` after correcting the stale `0.9.0-rc-dev` manifest.
+- [x] Isolated DEV identifies itself as `1.0.0-rc`; stable local script untouched. Reconfirmed after correcting the stale `0.9.0-rc-dev` manifest. Reconfirmed in remote `src/script.json` after correcting the stale `0.9.0-rc-dev` manifest.
 - [x] README is accurate, concise and contains no invented setup/feature claims.
 - [x] `RELEASE_NOTES_1.0.md` summarizes verified capabilities and stabilization.
 - [x] No stale 0.9 wording is present in normal user-facing release metadata; the isolated DEV name remains intentionally explicit.
