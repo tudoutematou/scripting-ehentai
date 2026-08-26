@@ -1,268 +1,239 @@
-# CURRENT_TASK — 0.8 UI/UX Consolidation
+# CURRENT_TASK — 0.9 Stabilization / Release Candidate Hardening
 
-Branch: `feat/0.8-ui-ux-consolidation`
-Base: accepted 0.7 head `74660b5138458b09d89947254108bd8121b60701`
-Reference: current project behavior first; EhViewer may be used only for information hierarchy / workflow inspiration, not pixel-perfect Android copying.
+Branch: `feat/0.9-stabilization`
+Base: accepted 0.8 head `61e826e3cff9dc87bc81d4d037c8390303a8a2ad`
+Target after acceptance: 1.0 release candidate preparation.
 
-Read `AGENTS.md` first. 0.8 is a **UI/UX consolidation package**, not a feature-expansion package and not the broad stabilization pass.
+Read `AGENTS.md` first. This is the **single consolidated stabilization phase** promised by the previous roadmap. Feature scope and the 0.8 information architecture are frozen.
 
-## Core goal
-Turn the current feature-complete DEV build from a developer-oriented collection of buttons/scenes into a coherent Scripting/iOS/iPadOS app experience while preserving all accepted 0.7 behavior.
+## Goal
+Find real defects across the complete daily-use product, fix them by root cause in consolidated passes, perform only evidence-based UI polish, then leave one clean DEV release candidate for 1.0.
 
-Do not add broad new capabilities. Do not rewrite the network/parser/store/core architecture just to make the UI cleaner.
+This is not another feature milestone. Do not reopen accepted PLATFORM_GAP items or invent replacement functionality.
 
-Use the current native Scripting UI stack first (`NavigationStack`, `List`, `Section`, `VStack`, `HStack`, `NavigationLink`, native buttons/forms). Inspect current typings before using any new container such as tabs/sidebar; if a clean native primitive is not verified, keep the existing NavigationStack architecture.
+## Model strategy
+Use model capability where it has leverage rather than for every edit:
 
-## Runtime / session rules
-- Never overwrite the stable local `E-Hentai 浏览器`.
-- Continue using the isolated `E-Hentai 浏览器 DEV` and mark it clearly as 0.8 DEV.
-- Keep repository source authoritative.
-- Before automatic context compression becomes likely: finish active tool calls, commit/push completed work, update `DEV_PROGRESS.md`, stop the conversation, then resume in a fresh Agent session.
-- Do not depend on compressed tool-call history.
+1. **Audit pass:** prefer the strongest reasoning/code-review model available. It should trace cross-file state, persistence, async/race/error paths, security/privacy boundaries and end-to-end UI wiring before proposing fixes.
+2. **Fix pass:** routine, well-scoped fixes may be implemented by the normal coding model. Keep each fix root-cause based and tested.
+3. **Final independent review:** use the strongest reasoning model again, preferably in a fresh conversation, to review the post-fix branch rather than merely validating its own earlier assumptions.
+4. **UI polish:** a stronger multimodal/reasoning model is useful for screenshots/recordings, hierarchy, narrow/iPad layouts and inconsistent states. Do not use it to redesign already-good screens without concrete evidence.
 
-## Preserve exactly
-Do not intentionally regress or remove:
-- Home / Search / Filter / Results / Detail / Reader / Account;
-- E-Hentai + ExHentai routing;
-- Popular / Watched / Toplists / My Tags / external destinations;
-- cloud Favorites + notes;
+Repository state, tests and real DEV runtime behavior remain authoritative regardless of model.
+
+## Runtime / context rules
+- Never overwrite stable local `E-Hentai 浏览器` during 0.9.
+- Continue with isolated `E-Hentai 浏览器 DEV`, marked as `0.9.0-rc-dev` only when the stabilization work is near completion.
+- Use Scripting native GitHub API / built-in integration. Never request PAT, SSH key or local-git authentication.
+- If the conversation becomes large: finish current tool calls and logical fix batch, run focused checks, commit/push, update `DEV_PROGRESS.md`, then stop and resume from GitHub in a fresh session. Do not rely on automatic context compression.
+
+## Preserve
+Do not intentionally remove or weaken accepted behavior from 0.8:
+- Home/Search/Filter/Results/Detail/Reader/Account;
+- E-Hentai and ExHentai routing/account state;
+- Popular/Watched/Toplists/My Tags/external destinations;
+- cloud Favorites + note;
 - local Bookmarks;
 - History / Continue Reading / Quick Search;
-- foreground resumable Downloads + offline Reader;
-- single + bounded continuous Reader + current-image retry;
-- uploader / parent / version / tag/category navigation;
-- advanced search parameters;
-- safe storage / manifest recovery / bounded network/image work;
-- opaque `galleryRef` AI boundary and sanitized diagnostics.
+- foreground resumable Downloads + true offline Reader;
+- single + bounded continuous Reader + retry/original behavior;
+- uploader/parent/version/tag/category navigation;
+- advanced search;
+- safe local storage and manifest recovery;
+- bounded image/network work;
+- sanitized diagnostics;
+- opaque short-lived `galleryRef` AI boundary.
 
-Accepted PLATFORM_GAP remains accepted. Do not reopen reverse image search, rating submission, or comment writes in 0.8.
+Accepted PLATFORM_GAP stays frozen:
+- reverse image search upload/multipart path unverified;
+- rating submission authenticated API/form path unverified;
+- comment post/edit action + CSRF/edit-ownership path unverified.
 
-# UI rules
+# Phase 1 — One broad audit, no piecemeal review loop
 
-## 1. Native before custom
-Prefer existing native Scripting controls. No custom design-system framework, CSS-like abstraction layer, icon library, animation engine, custom gesture system, or new dependency.
+Perform one deliberate whole-product audit before large-scale fixing. Inspect the current branch, current tests and real runtime paths. Create/update a compact `STABILIZATION_AUDIT.md` containing only actionable findings.
 
-A tiny shared UI helper/component is allowed only when the same visual pattern is genuinely repeated across several screens. Reuse current `GalleryRow`, `StateView`, image cache components, and existing scene functions before creating anything new.
+For every finding record:
+- severity: `S0`, `S1`, `S2`, or `S3`;
+- user-visible symptom/risk;
+- root cause / shared path;
+- affected feature families;
+- smallest correct fix location;
+- validation needed.
 
-## 2. Information hierarchy before decoration
-Fix hierarchy, grouping, labels, spacing, and primary/secondary actions first. Do not spend significant time on ornamental visuals.
+Severity:
+- `S0`: privacy/security/data loss/destructive wrong write/startup corruption. Fix immediately.
+- `S1`: core daily-use path broken, major state corruption, repeatable crash/hang, offline/download/reader/favorite/account function fundamentally unreliable. Must fix before 1.0.
+- `S2`: meaningful usability/reliability issue with a reasonable root-cause fix. Fix in consolidated 0.9 passes when practical.
+- `S3`: cosmetic/niche/low-risk edge case. Fix only if nearly free; otherwise record for post-1.0.
 
-Use SF Symbols/system images already supported by Scripting when they improve recognition, but text labels must remain clear.
+Do not stop after discovering the first few bugs. Complete the broad audit first unless an S0 is found.
 
-## 3. iPhone + iPad friendly
-Avoid hard-coded screen widths for page-level layout. Existing fixed thumbnail dimensions are fine. Lists/forms/actions must remain usable on iPhone and iPad.
+## Audit areas
 
-## 4. Consistent Chinese product language
-User-facing UI should use concise, consistent Chinese. Remove developer-facing wording, internal implementation terms, confusing English leftovers, and inconsistent verbs where practical.
+### A. Startup / navigation / state lifecycle
+- launch/exit behavior;
+- stale async results after navigation/state changes;
+- duplicate requests/races;
+- empty/error/retry state transitions;
+- Home -> Results -> Detail -> Reader and back navigation;
+- repeated opening/closing of scenes.
 
-Examples of consistent concepts:
-- 收藏 = cloud Favorites;
-- 本地书签 = local bookmark;
-- 历史记录;
-- 下载 / 离线阅读;
-- 继续阅读;
-- 设置;
-- 登录状态;
+### B. Account / E vs Ex / authentication
+- site switching and account refresh;
+- Cookie/keychain boundaries;
+- Ex availability versus logged-in state;
+- logout/relogin state invalidation;
+- account overview failure handling;
+- ensure no sensitive diagnostic leakage.
 
-Do not rename two different concepts to the same visible label.
+### C. Search / list / parsing
+- Home/Popular/Watched/Toplists/Favorites search/list paging;
+- category, quick filters and advanced parameters;
+- uploader/tag/category navigation;
+- empty pages and malformed/missing optional fields;
+- parser assumptions that can break normal galleries.
 
-# 0.8 work packages
+Do not broadly rewrite parsers. Fix demonstrated/shared assumptions only.
 
-## Package A — App navigation and Home
-Inspect the current `HomeScene` and reorganize entry points by user intent.
+### D. Detail / Favorites / Bookmarks
+- Core-first detail load and background preview completion;
+- favorite category/note read/edit/remove state;
+- local bookmark identity across E/Ex;
+- parent/version/resource buttons only when valid;
+- repeated mutation/reload state consistency;
+- confirmations preserved.
 
-Target structure should make these immediately understandable without a wall of equal-weight buttons:
-- primary search/discovery;
-- quick discovery: Popular / Watched / Toplists;
-- Library;
-- Account / Settings;
-- low-frequency external destinations grouped separately.
+### E. Reader
+- saved progress bounds;
+- single and continuous layouts;
+- page jump / previous / next;
+- retry failures without unintended progress changes;
+- original image preference;
+- preload/cache limits;
+- network reader versus offline reader parity;
+- galleries with incomplete preview/page-link knowledge.
 
-Keep existing navigation mechanics unless a verified native Scripting tab/sidebar primitive clearly reduces complexity. Do not build a custom tab bar.
+### F. Downloads / offline / filesystem safety
+High priority.
+- restart recovery;
+- concurrent queue state and manifest serialization;
+- pause/continue/retry/stop/delete;
+- partial/failed/completed state accuracy;
+- atomic `.tmp -> final` behavior;
+- deletion rollback if manifest/storage write fails;
+- filename/path validation and traversal resistance;
+- true offline opening without hidden network dependency;
+- cache clear must never delete unrelated/offline user files.
 
-Home should expose the most common actions first and push maintenance/external links lower in hierarchy.
+### G. History / Quick Search / local persistence
+- malformed/old version storage;
+- duplicate identity and ordering;
+- delete/clear confirmations;
+- reading progress/history consistency;
+- corrupted JSON or partial write recovery where current architecture supports it.
 
-## Package B — Gallery lists and search
-Unify the visual/list behavior of gallery results wherever the same `GallerySummary` data is used.
+### H. Typed AI / diagnostics privacy
+- `galleryRef` remains opaque/short-lived;
+- AI tools cannot expose gid/token/full URL/private local path/Cookie/api credentials;
+- no destructive/cloud write surface added through AI;
+- diagnostics remain sanitized in both success and failure paths.
 
-- reuse one `GalleryRow` presentation for Home/Results/Popular/Watched/Toplists/Favorites/Bookmarks where structurally possible;
-- keep title, category, uploader/pages/date readable and not visually equal-weight;
-- loading, empty, error, retry, pagination controls should look and read consistently;
-- Previous/Next pagination actions should be obvious but not dominate the list;
-- preserve thumbnail priority/cache behavior.
+### I. UI/UX release polish
+0.8 hierarchy is the baseline; optimize, do not redesign.
 
-### Search / Filter
-Restructure the existing Filter UI into compact native sections:
-- category;
-- language/common quick filters;
-- advanced options;
-- one obvious Apply action.
+Look for actual problems such as:
+- important actions clipped or crowded on narrow iPhone width;
+- wasteful or awkward layout on iPad;
+- confusing primary/secondary/destructive hierarchy;
+- inconsistent Chinese terminology;
+- repeated buttons/sections created by state conditions;
+- unreadable progress/status/error copy;
+- tap targets or controls that become unusable with long titles/metadata;
+- offline and online Reader presenting contradictory controls;
+- stale DEV/developer wording visible to normal users.
 
-Do not add new search parameters in 0.8. Improve clarity of the parameters already implemented.
+Prefer small native-layout edits. No new theme/design system, custom TabBar/sidebar, gesture/animation engine or dependency.
 
-## Package C — Gallery Detail
-This is the highest-priority UI consolidation area.
+# Phase 2 — Consolidated root-cause fix passes
 
-Reorganize the existing Detail into a clear top-to-bottom hierarchy:
-1. identity: thumbnail/title/category/core metadata;
-2. primary actions: Read / Continue Reading where applicable;
-3. ownership/library actions: cloud Favorite, local Bookmark, Download;
-4. relationship/discovery actions: uploader, parent/version, tags/category;
-5. resource/external actions: Torrent / Archive / Safari only when available;
-6. metadata/tags/previews/comments/content.
+After the audit, fix findings in severity/order groups rather than reopening review after each individual bug:
 
-Avoid a long undifferentiated block of buttons.
+1. S0/S1 safety + core reliability;
+2. download/offline/reader/storage correctness;
+3. account/network/parser shared reliability;
+4. S2 UI/UX and state-consistency fixes;
+5. nearly-free S3 cleanup only if it does not increase risk.
 
-Use grouped rows/sections or compact horizontal button groups only where they remain readable on narrow screens.
+Rules:
+- trace all callers before editing a shared function;
+- fix once at the common boundary where possible;
+- no speculative refactor;
+- no architecture migration merely because code is untidy;
+- delete dead/duplicate code only when its deadness is proven and removal reduces risk;
+- each non-trivial root-cause fix needs the smallest deterministic regression check that would fail before the fix;
+- do not create a giant new testing framework.
 
-Destructive actions must remain visually and semantically distinct and keep their existing confirmation behavior.
+Commit by logical fix batch and keep `STABILIZATION_AUDIT.md` status current (`open` / `fixed` / `deferred-post-1.0`).
 
-Do not change favorite/download/bookmark business logic unless required to keep the same action working after UI reorganization.
+# Phase 3 — Real DEV regression
 
-## Package D — Library
-Turn `LibraryScene` into one understandable personal-content hub.
+After fixes:
+- sync current branch to `E-Hentai 浏览器 DEV`;
+- mark manifest/version clearly as `0.9.0-rc-dev`;
+- run TypeScript diagnostics;
+- run the full existing harness:
+  - `src/runSelfTests.ts`;
+  - `src/runActionSmoke.ts`;
+  - `src/runAssistantToolSmoke.ts`;
+  - `src/runNetworkSelfTest.ts`;
+- run any focused regression checks added for 0.9.
 
-Group existing capabilities by meaning, for example:
-- Cloud: Favorites;
-- Local: Bookmarks / History / Continue Reading;
-- Offline: Downloads;
-- Discovery/account tools: Quick Search / My Tags as appropriate.
+Perform one concentrated real-runtime walkthrough:
+1. launch -> Home -> search/filter -> Results -> Detail -> Reader;
+2. Popular/Watched/Toplists/My Tags;
+3. Favorite category/note + local Bookmark;
+4. Download -> stop/pause -> continue/retry -> complete -> offline Reader -> confirmed delete;
+5. History / Continue Reading / Quick Search;
+6. E/Ex/account state and My Home overview;
+7. settings/cache/data maintenance;
+8. narrow-width and iPad-width UI sanity where practical.
 
-Do not duplicate content just to fill sections. Keep navigation shallow.
+Do not perform unsafe account/economic/admin actions.
 
-For list screens inside Library:
-- one consistent row style;
-- obvious empty state;
-- destructive clear/delete actions separated from normal navigation;
-- preserve confirmation and safe storage behavior.
+# Phase 4 — Independent final review
 
-## Package E — Downloads / offline
-Improve presentation only; keep foreground-resumable model unchanged.
+After the fix branch is green, start a **fresh high-reasoning review session** against the final remote head.
 
-Each download should communicate state clearly:
-- downloading / paused(stopped but resumable) / failed / completed;
-- progress if known;
-- primary next action (continue/open/retry) should be obvious;
-- delete must stay secondary/destructive and confirmed.
+The reviewer should:
+- read `STABILIZATION_AUDIT.md` and inspect the final code paths changed by 0.9;
+- look specifically for missed S0/S1 regressions, incorrect root-cause fixes and privacy/storage mistakes;
+- sample untouched high-risk paths (downloads/offline/account/reader) rather than re-reviewing every cosmetic line;
+- verify tests actually cover the bug classes they claim;
+- perform a final UI consistency sanity check from runtime evidence/screenshots if available.
 
-Do not invent background-download claims, notifications, or queue features.
+This is one final review, not an endless review/fix cycle. Any new S0/S1 must be fixed. New S2 should be fixed only when clearly high-impact and bounded. New S3 is deferred post-1.0.
 
-Offline Reader should visually feel like the normal Reader where the underlying capabilities overlap.
+# Non-goals
+- no 0.10 feature scope;
+- no new feature family;
+- no reopening accepted PLATFORM_GAP;
+- no broad parser/network/store rewrite;
+- no new dependency for cleanup;
+- no speculative performance optimization without observed issue;
+- no pixel-perfect EhViewer Android clone;
+- no large UI redesign after accepted 0.8 hierarchy;
+- do not touch stable local `E-Hentai 浏览器` until explicit release/promotion instruction.
 
-## Package F — Reader
-Do not redesign the rendering engine.
+# Completion / 1.0 gate
+0.9 is complete only when:
+1. one broad audit is recorded;
+2. all S0 and S1 findings are fixed;
+3. practical high-impact S2 findings are resolved or explicitly justified/deferred;
+4. full harness + 0.9 regression checks are green;
+5. real DEV walkthrough passes;
+6. independent final review has no open S0/S1;
+7. no privacy/data-loss/destructive-write/startup blocker is known;
+8. `DEV_PROGRESS.md` records the release-candidate head and remaining post-1.0 S2/S3 items.
 
-Polish only the existing controls:
-- clear page position;
-- previous / next / jump;
-- retry current image/page;
-- original-image behavior;
-- continuous-mode load-next-batch control;
-- Continue/reset progress where already exposed;
-- reader settings entry if it already exists.
-
-Controls should not obscure the image unnecessarily. Avoid adding custom gestures or animations.
-
-Single-page and continuous mode should use consistent terminology and error states.
-
-## Package G — Account / Settings / maintenance
-Group the existing screen into user-understandable sections:
-- account/site/login state;
-- reader preferences;
-- downloads/offline/cache;
-- history/data maintenance;
-- external/help destinations if appropriate;
-- development diagnostics only if still useful in DEV and clearly separated.
-
-Do not expose internal technical settings or controls that do nothing.
-
-My Home read-only overview should be presented as account information, not as a raw webpage dump.
-
-## Package H — State, copy, and consistency sweep
-After A–G, do one focused UI consistency sweep only:
-- navigation titles;
-- button verbs;
-- section names;
-- empty states;
-- error/retry copy;
-- loading labels;
-- spacing/grouping inconsistencies;
-- SF Symbol usage where already easy/native.
-
-Use existing `StateView` rather than creating competing error/empty frameworks.
-
-This is not the 0.9 bug sweep: do not go hunting parser/network/storage bugs unrelated to the visible UI unless the UI package directly exposes a blocker.
-
-# Explicit non-goals for 0.8
-- no new major feature family;
-- no reverse image search retry;
-- no rating/comment write work;
-- no new background download model;
-- no database/storage rewrite;
-- no network/parser rewrite;
-- no AI capability expansion unless a renamed UI breaks an existing smoke test;
-- no custom theme engine;
-- no custom tab bar/sidebar unless Scripting already provides a verified native primitive and using it is clearly less code;
-- no animation/gesture framework;
-- no pixel-perfect EhViewer Android clone.
-
-# Visual acceptance criteria
-A user opening the DEV build should be able to answer quickly:
-- Where do I search/browse?
-- Where is my library?
-- How do I read/download/bookmark/favorite this gallery?
-- Where are my downloads/history/settings?
-- What is the primary action on each screen?
-
-The app should no longer feel like every implemented capability has equal visual priority.
-
-# Verification
-For each package:
-- TypeScript diagnostics;
-- relevant existing smoke/self-test only if touched;
-- real `E-Hentai 浏览器 DEV` launch and navigate through the changed screen;
-- do not write new parser/store tests for purely visual rearrangement.
-
-At 0.8 completion run the existing full harness once:
-- `src/runSelfTests.ts`;
-- `src/runActionSmoke.ts`;
-- `src/runAssistantToolSmoke.ts`;
-- `src/runNetworkSelfTest.ts`.
-
-Then perform one concentrated DEV runtime walkthrough:
-1. Home -> search/results -> Detail -> Reader;
-2. Detail -> Favorite / local Bookmark / Download entry visibility;
-3. Library -> Favorites / Bookmarks / History / Downloads;
-4. Discovery -> Popular / Watched / Toplists / My Tags;
-5. Account / Settings;
-6. iPad-width and narrower-width sanity check where practical.
-
-Do not require exhaustive manual retesting of every underlying network mutation in 0.8 if the action wiring did not change.
-
-# Context checkpoint rule
-If the Agent session becomes large before all packages finish:
-- finish the current package;
-- run its focused checks;
-- commit/push;
-- update `DEV_PROGRESS.md` with current head, packages completed, next package, known UI-only deferred issues;
-- stop the session and resume from GitHub in a fresh conversation.
-
-# Completion
-0.8 is complete when:
-1. packages A–H are attempted;
-2. all major existing feature families are reachable through a coherent hierarchy;
-3. Detail, Library, Search/Results, Downloads, Reader, Account/Settings have consistent primary/secondary actions and state language;
-4. DEV launches and the concentrated walkthrough succeeds;
-5. full existing harness is green;
-6. no new privacy/data-loss/destructive-write/startup blocker exists.
-
-At completion freeze 0.8 and report:
-- UI areas consolidated;
-- intentionally unchanged architecture;
-- DEV runtime walkthrough result;
-- tests;
-- final head SHA;
-- any UI-only issues deferred to 0.9;
-- at most 3–5 visual acceptance items.
-
-Do not start 0.9 automatically. 0.9 is the separate consolidated stabilization/bug-fix phase after 0.8 acceptance.
+Then freeze 0.9 and report. Do **not** promote/overwrite the stable local script or merge PRs until the user explicitly starts the 1.0 release step.

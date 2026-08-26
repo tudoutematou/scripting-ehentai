@@ -9,19 +9,22 @@ import { getBaseUrl, getCookieHeader } from "./account"
 
 export type { GalleryPageLink, GallerySummary }
 export type SearchPage = SearchExtractData & { url: string }
-export type GalleryDetail = Omit<ReturnType<typeof parseDetailHtml>, "pageLinks"> & { pageLinks: GalleryPageLink[]; sourceUrl: string; truncatedPreviewPages: boolean }
+export type GalleryDetail = Omit<ReturnType<typeof parseDetailHtml>, "pageLinks"> & { pageLinks: GalleryPageLink[]; sourceUrl: string; truncatedPreviewPages: boolean; failedPreviewPages: number[] }
 export type PreviewLoadResult = { pageLinks: GalleryPageLink[]; failedPreviewPages: number[]; elapsedMs: number }
 export type ResolvedImagePage = PageExtractData & { pageUrl: string }
 
 const MAX_PREVIEW_LIST_PAGES = 50
 const detailCoreCache = new Map<string, GalleryDetail>()
 const previewPageCache = new Map<string, GalleryPageLink[]>()
+export function invalidateGalleryCaches(){detailCoreCache.clear();previewPageCache.clear()}
+;(globalThis as any).__ehentaiInvalidateGalleryCaches=invalidateGalleryCaches
 
 function httpError(message: string, response: any, url: string): Error {
   const error = new Error(message) as Error & { status?: number; statusText?: string; url?: string }
   error.status = Number(response?.status || 0); error.statusText = String(response?.statusText || ""); error.url = String(response?.url || url); return error
 }
-function stageError(stage: string, error: unknown): Error { const value = error as any; const wrapped = new Error(`[${stage}] ${String(value?.message || error || "未知错误")}`); wrapped.name = String(value?.name || "Error"); if (value?.stack) wrapped.stack = `${wrapped.name}: ${wrapped.message}\nCaused by:\n${String(value.stack)}`; return wrapped }
+export function userSafeError(error:unknown,fallback="操作未完成，请稍后重试。"){const message=String((error as any)?.message||error||"");return /https?:|cookie|ipb_|\/var\/|\/private\/|token/i.test(message)?fallback:message||fallback}
+function stageError(stage: string, error: unknown): Error { const value = error as any; const wrapped = new Error(`[${stage}] ${userSafeError(value?.message || error)}`); wrapped.name = String(value?.name || "Error"); return wrapped }
 async function reportSafely(input: Parameters<typeof reportDiagnostic>[0]) { try { await reportDiagnostic(input) } catch {} }
 const HTML_REQUEST_TIMEOUT_MS = 20_000
 
@@ -64,7 +67,7 @@ export async function loadGalleryDetailCore(url: string): Promise<GalleryDetail>
     const { html, finalUrl, response } = await fetchHtml(url, "detail-core")
     let parsed: ReturnType<typeof parseDetailHtml>; try { parsed = parseDetailHtml(html, finalUrl) } catch (error) { throw stageError("detail.parseDetailHtml", error) }
     if (parsed.error) { const error = httpError(parsed.error, response, finalUrl); (error as any).responseLength = html.length; throw error }
-    const detail: GalleryDetail = { ...parsed, pageLinks: dedupeAndSortPageLinks(normalizePageLinks(parsed.pageLinks || [], 0)), sourceUrl: finalUrl, truncatedPreviewPages: Number(parsed.previewPages || 1) > MAX_PREVIEW_LIST_PAGES }
+    const detail: GalleryDetail = { ...parsed, pageLinks: dedupeAndSortPageLinks(normalizePageLinks(parsed.pageLinks || [], 0)), sourceUrl: finalUrl, truncatedPreviewPages: Number(parsed.previewPages || 1) > MAX_PREVIEW_LIST_PAGES, failedPreviewPages: [] }
     detailCoreCache.set(url, detail); detailCoreCache.set(finalUrl, detail)
     await reportSafely({ stage: "gallery-detail-core", ok: true, request: { url: finalUrl, status: Number(response?.status || 0), statusText: String(response?.statusText || "") }, notes: `coreMs=${Date.now() - started}; previewPages=${detail.previewPages}; loadedImages=${detail.pageLinks.length}` })
     return detail
@@ -81,7 +84,10 @@ export async function loadRemainingPreviewPages(detail: GalleryDetail, onProgres
   return result
 }
 
-export async function loadGalleryDetail(url: string): Promise<GalleryDetail> { const core = await loadGalleryDetailCore(url); const previews = await loadRemainingPreviewPages(core); return { ...core, pageLinks: previews.pageLinks } }
+export function applyPreviewLoadResult(core: GalleryDetail, previews: PreviewLoadResult): GalleryDetail { return { ...core, pageLinks: previews.pageLinks, failedPreviewPages: previews.failedPreviewPages } }
+export function hasCompletePreviewInventory(detail: Pick<GalleryDetail, "pageLinks" | "failedPreviewPages" | "truncatedPreviewPages">): boolean { return detail.pageLinks.length > 0 && !detail.truncatedPreviewPages && detail.failedPreviewPages.length === 0 }
+export function assertCompletePreviewInventory(detail: Pick<GalleryDetail, "pageLinks" | "failedPreviewPages" | "truncatedPreviewPages">): void { if (!hasCompletePreviewInventory(detail)) throw new Error("页面库存不完整，请重试预览加载后再下载。") }
+export async function loadGalleryDetail(url: string): Promise<GalleryDetail> { const core = await loadGalleryDetailCore(url); return applyPreviewLoadResult(core, await loadRemainingPreviewPages(core)) }
 
 export async function resolveImagePage(pageUrl: string): Promise<ResolvedImagePage> {
   try { const { html, finalUrl, response } = await fetchHtml(pageUrl, "image-page"); let parsed: PageExtractData; try { parsed = parseImagePageHtml(html, finalUrl) } catch (error) { throw stageError("image-page.parse", error) }; if (parsed.error) throw httpError(parsed.error, response, finalUrl); const resolved = { ...parsed, pageUrl: finalUrl }; await reportSafely({ stage: "gallery-image-page", ok: true, request: { url: finalUrl, status: Number(response?.status || 0), statusText: String(response?.statusText || "") }, notes: `imageUrl=${resolved.imageUrl ? "yes" : "no"}; originalUrl=${resolved.originalUrl ? "yes" : "no"}` }); return resolved } catch (error) { const value = error as any; await reportSafely({ stage: "gallery-image-page", ok: false, error, request: { url: String(value?.url || pageUrl), status: Number(value?.status || 0), statusText: String(value?.statusText || "") } }); throw error }

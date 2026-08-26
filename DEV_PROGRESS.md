@@ -1,47 +1,28 @@
-# DEV_PROGRESS — 0.8 UI/UX Consolidation
+# DEV_PROGRESS — 0.9 Stabilization RC
 
-Start base: accepted 0.7 head `74660b5138458b09d89947254108bd8121b60701`
-Task commit: `a263d5bc5c19f50e505ec5b7f4bf58fc7a1e16ad`
-Branch: `feat/0.8-ui-ux-consolidation`
+Branch: `feat/0.9-stabilization`  
+DEV target: isolated `E-Hentai 浏览器 DEV` (`0.9.0-rc-dev`)
 
-## Current phase
-0.8 UI/UX consolidation complete and frozen pending review.
+## RC status — 2026-08-26
 
-## Completed
-- **A / Home**: hierarchy for search/browse, discovery, personal content and external destinations.
-- **B / Lists + Search**: shared GalleryRow for Home/results/Library summaries; clearer Filter and pagination hierarchy.
-- **C / Detail**: identity, reading, ownership/offline, relationships and resources are grouped in order.
-- **D / Library**: cloud, local, offline, discovery and maintenance hub grouping.
-- **E / Downloads**: Chinese state/progress labels and an obvious primary next action, while keeping foreground resumable behavior and confirmed deletion.
-- **F / Reader**: consistent retry/current-page/original/continuous-control language and presentation.
-- **G / Account + Settings**: account/site/login state, read-only account overview, reader preferences, downloads/cache and data maintenance are grouped into user-understandable sections.
-- **H / Consistency**: DEV manifest clearly identifies the isolated 0.8 DEV build; account headings and labels were made consistent with the rest of the app.
-- Native Scripting controls and existing components only. No new feature family, dependency, custom navigation framework, network/parser/store/core rewrite.
+- **S0:** A-01, A-02 fixed.
+- **S1:** A-03 through A-08 fixed. Independent final review also fixed image-cache HTML/invalid-payload poisoning, unconfirmed Favorite mutation feedback, preview-thumbnail Reader gate bypass, and partial-inventory download creation. **No known open S0/S1.**
+- **S2:** practical code-backed consolidation complete: session/account lifecycle, stale requests, Watched paging, Toplists identity/rank, parser relations, monotonic reader/offline progress, download recovery/reconciliation plus complete-inventory enforcement, storage backup recovery, destructive confirmations, and safe UI errors.
+- **Deferred with explicit evidence requirement:** A-28 narrow/Dynamic-Type layout and A-30 iPad readable-width behavior. No unsupported layout rewrite was made.
+- **A-09 partial/deferred:** expired Cookies are filtered at the shared boundary; the remaining stored-credential versus server-validated-session presentation distinction requires product semantics/runtime evidence and is deferred post-1.0.
 
 ## Final verification
-- `src/runSelfTests.ts`: passed (29 items).
-- `src/runActionSmoke.ts`: passed; gallery detail action and typed opaque `galleryRef` boundary pass.
-- `src/runAssistantToolSmoke.ts`: passed.
-- `src/runNetworkSelfTest.ts`: passed search → detail → reader image page. Diagnostics stayed URL/token/Cookie redacted.
-- Final `E-Hentai 浏览器 DEV` launch invoked: the interactive Navigation session stayed active through the 45-second CLI window without startup exception output.
 
-## DEV walkthrough coverage
-- Home navigation exposes search/results, Popular, Discovery, Library and Account/Settings in ordered sections.
-- Detail presents Read/Continue, Favorite/local Bookmark/Download, relationship and Safari/resource actions in visible sections.
-- Library exposes Favorites, Bookmarks, History/Continue Reading and Downloads.
-- Discovery exposes Watched/Toplists/My Tags routes.
-- Account/Settings exposes login state, read-only My Home information, reader preferences, downloads/cache and history maintenance.
-- Native List/Section layout avoids page-level fixed widths; no custom tab/sidebar added.
+- TypeScript diagnostics: **0 diagnostics**.
+- `src/runSelfTests.ts`: **all 55 executed checks passed** (including final-review inventory-gate and monotonic-reader-progress regressions).
+- `src/runActionSmoke.ts`: **passed**; live search -> Detail Core and invalid gallery-ref rejection behaved correctly.
+- `src/runAssistantToolSmoke.ts`: **passed**; live typed search returned 20 gallery summaries.
+- `src/runNetworkSelfTest.ts`: **passed** after final-review fixes; live Search -> Detail Core -> Image Page completed, with all deterministic checks green.
+- Live Toplists structural probe: HTTP 200, 40 Gallery links; `tdo` list containers and `pso` rank cells verified. Dedicated parser now retains per-list identity/time range (for example All-Time/Past-* labels) and rank.
+- DEV launch: isolated `E-Hentai 浏览器 DEV` remained active through the 25-second CLI observation window with no startup exception output; CLI timeout is expected for its persistent interactive UI session.
 
-## Preserve
+## Freeze boundary
+
 - Stable local `E-Hentai 浏览器` remains untouched.
-- Runtime target is isolated `E-Hentai 浏览器 DEV` version `0.8.0-dev`.
-- All accepted 0.7 feature families and safe storage/network/privacy behavior remain.
-
-## Accepted PLATFORM_GAP — intentionally unchanged
-- Reverse image search upload path/multipart behavior unverified.
-- Rating submission authenticated API/form path unverified.
-- Comment post/edit action + CSRF/edit-ownership path unverified.
-
-## UI-only deferred
-- No known UI-only blocker. Further broad parser/network/storage bug hunting is deferred to the separate 0.9 stabilization phase.
+- This branch is a DEV RC only: do not merge/promote or overwrite the stable script without explicit 1.0 release instruction.
+- Temporary inspection/repair scripts were deleted and are not part of the sync.

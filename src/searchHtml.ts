@@ -56,14 +56,13 @@ function findAnchorHrefById(html: string, id: string, baseUrl: string): string {
 }
 
 function findBlock(html: string, anchorIndex: number): string {
-  const rowStart = html.lastIndexOf("<tr", anchorIndex)
-  const rowEnd = html.indexOf("</tr>", anchorIndex)
-  if (rowStart >= 0 && rowEnd > anchorIndex && anchorIndex - rowStart < 30000) {
-    return html.slice(rowStart, rowEnd + 5)
-  }
-  const start = Math.max(0, anchorIndex - 4500)
-  const end = Math.min(html.length, anchorIndex + 6500)
-  return html.slice(start, end)
+  const rows = [...html.matchAll(/<tr\b[^>]*>[\s\S]*?<\/tr\s*>/gi)]
+  const row = rows.find(match => (match.index || 0) <= anchorIndex && anchorIndex < (match.index || 0) + match[0].length)
+  if (row) return row[0]
+  const markers = [...html.matchAll(/<div\b(?=[^>]*\bclass\s*=\s*(["'])[^"']*\bgl(?:1[et]|3[cm]|ft|name|ink)\b[^"']*\1)[^>]*>/gi)]
+  const markerIndex = markers.findIndex((match, index) => (match.index || 0) <= anchorIndex && (index + 1 === markers.length || (markers[index + 1].index || html.length) > anchorIndex))
+  if (markerIndex >= 0) { const start = markers[markerIndex].index || 0; const end = markerIndex + 1 < markers.length ? markers[markerIndex + 1].index || html.length : html.length; return html.slice(start, end) }
+  return ""
 }
 
 function findThumb(block: string, baseUrl: string): string {
@@ -99,27 +98,45 @@ function parseResultCount(html: string): string {
   return match ? match[1].trim() : ""
 }
 
+export type ToplistEntry = GallerySummary & { rank: number; listTitle: string }
+export type ToplistData = { title: string; entries: ToplistEntry[] }
+
+export function parseToplistHtml(html: string, baseUrl: string): ToplistData {
+  const title = cleanText(html.match(/<h2\b[^>]*>([\s\S]*?)<\/h2>/i)?.[1] || "") || "Gallery Toplists"
+  const entries: ToplistEntry[] = []
+  const lists = html.match(/<div\b[^>]*\bclass\s*=\s*(["'])[^"']*\btdo\b[^"']*\1[^>]*>[\s\S]*?<\/table>\s*<\/div>/gi) || []
+  for (const list of lists) {
+    const listTitle = cleanText(list.match(/<p\b[^>]*>[\s\S]*?<a\b[^>]*style\s*=\s*(["'])[^"']*font-weight\s*:\s*bold[^"']*\1[^>]*>([\s\S]*?)<\/a>/i)?.[2] || "") || "Gallery Toplists"
+    for (const row of list.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi) || []) {
+      const rank = Number(cleanText(row.match(/<td\b[^>]*\bclass\s*=\s*(["'])[^"']*\bpso\b[^"']*\1[^>]*>([\s\S]*?)<\/td>/i)?.[2] || "").replace(/[^\d]/g, ""))
+      const link = row.match(/<a\b[^>]*\bhref\s*=\s*(["'])([^"']*\/g\/(\d+)\/([a-f0-9]+)\/?[^"']*)\1[^>]*>([\s\S]*?)<\/a>/i)
+      if (!rank || !link) continue
+      entries.push({ id: `${listTitle}:${link[3]}:${link[4]}`, gid: link[3], token: link[4], title: cleanText(link[5]), category: "", thumb: "", posted: "", uploader: "", pages: 0, url: absoluteUrl(link[2], baseUrl), rank, listTitle })
+    }
+  }
+  return { title, entries }
+}
+
 export function parseSearchHtml(html: string, baseUrl: string): SearchExtractData {
   const items: GallerySummary[] = []
   const seen = new Set<string>()
-  const anchorPattern = /<a\b[^>]*\bhref\s*=\s*(["'])([^"']*\/g\/(\d+)\/([a-f0-9]+)\/?[^"']*)\1[^>]*>([\s\S]*?)<\/a>/gi
+  const anchorPattern = /<a\b[^>]*\bhref\s*=\s*(?:(["'])([^"']*\/g\/(\d+)\/([a-f0-9]+)\/?[^"']*)\1|([^\s>]*\/g\/(\d+)\/([a-f0-9]+)\/?[^\s>]*))[^>]*>([\s\S]*?)<\/a>/gi
 
   for (const match of html.matchAll(anchorPattern)) {
-    const gid = match[3]
-    const token = match[4]
+    const gid = match[3] || match[6]
+    const token = match[4] || match[7]
     const id = `${gid}:${token}`
     if (seen.has(id)) continue
 
     const anchorIndex = match.index || 0
     const block = findBlock(html, anchorIndex)
-    let title = cleanText(match[5])
-    if (!title) title = findClassText(block, "glname") || findClassText(block, "glink")
+    let title = findClassText(block, "glink") || findClassText(block, "glname") || cleanText(match[8])
     if (!title) continue
 
     const rowText = cleanText(block)
     const pagesMatch = rowText.match(/(\d[\d,]*)\s+pages?/i)
     const category = findClassText(block, "cn") || findClassText(block, "cs")
-    const url = absoluteUrl(match[2], baseUrl)
+    const url = absoluteUrl(match[2] || match[5], baseUrl)
 
     items.push({
       id,

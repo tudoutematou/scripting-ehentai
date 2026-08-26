@@ -108,10 +108,10 @@ async function putTextContent(branch: string, path: string, message: string, con
 export async function ensureGitHubPermissions() {
   if (!GitHub.isAvailable()) throw new Error("GitHub API 不可用。")
   const required = ["read_contents", "write_contents"] as const
-  const allowed = await GitHub.requestPermissions([...required])
-  const missing = required.filter(permission => !allowed.includes(permission))
-  if (missing.length) throw new Error(`GitHub API 权限未授予：${missing.join(", ")}`)
-  return allowed
+  const states = await Promise.all(required.map(permission => GitHub.getPermissionStatus({ permission })))
+  const missing = required.filter((_, index) => states[index] !== "allowed")
+  if (missing.length) throw new Error(`GitHub Contents API 权限不可用：${missing.join(", ")}`)
+  return [...required]
 }
 
 export async function readSetupRules(branch: string) {
