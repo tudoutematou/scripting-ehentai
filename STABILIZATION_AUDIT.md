@@ -9,7 +9,7 @@ Audit opened: 2026-08-24 · status consolidated: 2026-08-26
 The detailed findings below are retained as the original root-cause record. This section is authoritative for their current status; it replaces the stale inline `open` markers from the first audit.
 
 - **S0:** A-01, A-02 — **fixed**.
-- **S1:** A-03 through A-08 — **fixed**. Final independent review additionally fixed online image-cache payload poisoning and unconfirmed Favorite mutations. **No known open S0/S1 remains.**
+- **S1:** A-03 through A-08 — **fixed**. Final independent review additionally fixed online image-cache payload poisoning, unconfirmed Favorite mutations, and preview-inventory gate bypasses. **No known open S0/S1 remains.**
 - **S2 fixed:** A-10 through A-27, except A-28; A-09 is partially resolved as noted below.
 - **S3 fixed:** A-29.
 - **Evidence-deferred:** A-28 and A-30 — `deferred-post-1.0`; no speculative layout rewrite was made without required device evidence.
@@ -22,7 +22,7 @@ The detailed findings below are retained as the original root-cause record. This
 | A-02 | fixed | Shared Safari bridge credential cleanup covers terminal import failures and logout. |
 | A-03 | fixed | Download capacity rejects the 31st task; manifest no longer silently detaches data. |
 | A-04 | fixed | Delete waits for active workers and recovers transactional `.deleting` state. |
-| A-05 | fixed | Reader/download require a complete preview inventory; incomplete inventory is retryable. |
+| A-05 | fixed | Reader/download require a complete preview inventory; incomplete inventory is retryable, and every preview-thumbnail Reader entrance is disabled until this invariant holds. |
 | A-06 | fixed | Search entries use real row/container boundaries. |
 | A-07 | fixed | Per-image timeout plus Content-Type and JPEG/PNG/WebP payload validation. |
 | A-08 | fixed | Account lifecycle and server-confirmed Favorite mutation invalidate gallery caches. |
@@ -38,6 +38,7 @@ The detailed findings below are retained as the original root-cause record. This
 | A-18 | fixed | Relation summaries reconstruct gid/token from the relation URL. |
 | A-19 | fixed | Online Reader writes progress only from successful cached-image callbacks; continuous Reader commits successful individual pages. |
 | A-20 | fixed | Persisted orphan `downloading` state normalizes to resumable state on load. |
+| Final review — download creation | fixed | `createDownload()` enforces complete preview inventory at the storage boundary and rejects a partial second detail load. |
 | A-21 | fixed | Offline open reconciles the manifest with final files and returns to resume flow when incomplete. |
 | A-22 | fixed | Offline Reader shares reading-progress updates only for a present local file. |
 | A-23 | fixed | Saved-search mutations use the existing small serialized write queue. |
@@ -51,12 +52,12 @@ The detailed findings below are retained as the original root-cause record. This
 
 ## Regression coverage
 
-The deterministic suite covers each parser/store/security boundary amenable to fixture testing, including expired cookies, session-bound gallery references, title isolation, relation identity, Toplist list/rank preservation, image payload validation, Favorite confirmation, preview inventory, download capacity/delete/restart/reconciliation, serialized saved searches, backup recovery, and safe error mapping. UI lifecycle changes retain focused code-path verification plus the full runtime smoke chain.
+The deterministic suite covers each parser/store/security boundary amenable to fixture testing, including expired cookies, session-bound gallery references, title isolation, relation identity, Toplist list/rank preservation, image payload validation, Favorite confirmation, complete-preview inventory gates, monotonic Reader progress, download capacity/delete/restart/reconciliation, serialized saved searches, backup recovery, and safe error mapping. UI lifecycle changes retain focused code-path verification plus the full runtime smoke chain.
 
 ## Final independent S1 review
 
 - **Result:** no remaining known open S0/S1.
-- **Additional fixes:** cache rejects non-image/empty/invalid-signature HTTP 200 responses; Reader retry replaces the old cached response; Favorite UI success follows popup-state confirmation.
+- **Additional fixes:** cache rejects non-image/empty/invalid-signature HTTP 200 responses; Reader retry replaces the old cached response; Favorite UI success follows popup-state confirmation; complete preview inventory is now enforced by both every Reader entrance and download creation; concurrent Reader completions cannot regress saved progress.
 
 ## UI evidence boundary
 
