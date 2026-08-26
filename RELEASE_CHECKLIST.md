@@ -22,7 +22,8 @@
 - [x] Open S0: 0.
 - [x] Open S1: 0.
 - [x] A-28/A-30 explicitly evidence-deferred; no speculative UI rewrite.
-- [x] Accepted PLATFORM_GAP remains frozen.
+- [x] Real-device Hotfix Pass: Safari Bridge root fallback and explicit capture gate fixed; download resume updates immediately; iPad landscape Detail width/metadata/tags corrected from runtime evidence.
+- [x] Targeted deterministic regressions and action/assistant/network harness passed; DEV synchronized for final iPad confirmation.
 
 ## Privacy / release history
 - [x] Current release tree/archive contains no runtime diagnostics or materialized secrets.
