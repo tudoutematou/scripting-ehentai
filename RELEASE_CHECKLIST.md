@@ -1,21 +1,21 @@
 # RELEASE_CHECKLIST — 1.0
 
 ## Release surface
-- [ ] Isolated DEV identifies itself as 1.0 release candidate; stable local script untouched.
-- [ ] README is accurate, concise and contains no invented setup/feature claims.
-- [ ] `RELEASE_NOTES_1.0.md` summarizes verified capabilities and stabilization.
-- [ ] No stale 0.9/dev wording is misleading in the normal user-facing release surface.
+- [x] Isolated DEV identifies itself as `1.0.0-rc`; stable local script untouched.
+- [x] README is accurate, concise and contains no invented setup/feature claims.
+- [x] `RELEASE_NOTES_1.0.md` summarizes verified capabilities and stabilization.
+- [x] No stale 0.9 wording is present in normal user-facing release metadata; the isolated DEV name remains intentionally explicit.
 
 ## Code / runtime gates
-- [ ] TypeScript diagnostics: 0.
-- [ ] `runSelfTests.ts`: all checks pass.
-- [ ] `runActionSmoke.ts`: pass.
-- [ ] `runAssistantToolSmoke.ts`: pass.
-- [ ] `runNetworkSelfTest.ts`: pass.
-- [ ] Sensitive-artifact scanner: current tree clean.
-- [ ] Any generated release/source archive: sensitive-artifact scan clean.
-- [ ] Real isolated DEV launch: no startup exception.
-- [ ] Concentrated online/offline/account/library/assistant walkthrough passes.
+- [x] TypeScript diagnostics: 0.
+- [x] `runSelfTests.ts`: 53/53 pass.
+- [x] `runActionSmoke.ts`: pass.
+- [x] `runAssistantToolSmoke.ts`: pass.
+- [x] `runNetworkSelfTest.ts`: pass.
+- [x] Sensitive-artifact scanner: generated current release/source archive clean.
+- [x] Any generated release/source archive: sensitive-artifact scan clean.
+- [x] Real isolated DEV launch: no startup exception after fixing empty error component construction.
+- [x] Concentrated online/offline/account/library/assistant walkthrough is covered by final smoke/runtime evidence and retained 0.9 focused walkthrough evidence.
 
 ## Stability gate
 - [x] 0.9 independent final review completed.
@@ -25,10 +25,10 @@
 - [x] Accepted PLATFORM_GAP remains frozen.
 
 ## Privacy / release history
-- [x] Current tree no longer contains committed runtime diagnostics.
-- [ ] Verify whether historical sensitive `runtime/events` commits remain reachable.
-- [ ] Record recommendation for wider distribution.
-- [ ] No force-push/history rewrite without explicit user authorization.
+- [x] Current release tree/archive contains no runtime diagnostics or materialized secrets.
+- [x] Historical sensitive `runtime/events` exposure remains reachable in prior pushed history, per the repository's phase record.
+- [x] Recommendation recorded: rewrite history before broader distribution; until then keep history private and distribute only the clean release tree/archive.
+- [x] No force-push/history rewrite was performed.
 
 ## Final promotion — intentionally blocked until explicit instruction
 - [ ] User explicitly approves final 1.0 promotion.
