@@ -13,6 +13,10 @@ Branch: `release/1.0`
 - 修复后重新同步并逐项验证 `script.json`、`GalleryFlow.tsx`、`browser.tsx`、`libraryStore.ts` marker；未验证前不得把功能测试结果归因于 release/1.0。
 
 
+## Sync-chain correction — 2026-08-26
+
+此前“DEV 已同步”的结论无效：根目录 `bootstrapFromRemote.ts` 与 `readRemoteTask.ts` 实际仍指向 `feat/0.9-stabilization`，且远端 `src/script.json` 仍为 `0.9.0-rc-dev`。本轮暂停功能与实机验收，仅修正部署链路：两个工具均改为 `release/1.0`；bootstrap 在写入前解析一次远端 branch head，并用该不可变 SHA 读取全量 `src/`；写完后保存本地 `sync-manifest.json`（version、branch、commit、时间、文件数）；隔离 DEV manifest 改为 `1.0.0-rc`；“账号与设置”底部显示只读构建标记。修复后必须逐项验证 marker，再做实机验收。
+
 ## Real-device Hotfix Pass — 2026-08-26
 
 
