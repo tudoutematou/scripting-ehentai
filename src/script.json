@@ -1,25 +1,14 @@
 {
-  "contributors" : [
-
-  ],
-  "runInApp" : true,
-  "author" : null,
-  "intentInputTypes" : [
-
-  ],
-  "localizedDescriptions" : {
-    "zh-Hans" : "1.0 Release Candidate 开发版：用于最终实机验收的 E-Hentai \/ ExHentai 浏览器。"
+  "name": "ehentai-browser-dev",
+  "icon": "books.vertical.fill",
+  "color": "#8B5CF6",
+  "version": "1.0.0-rc",
+  "description": "1.0 Release Candidate development build of the E-Hentai / ExHentai gallery browser.",
+  "localizedNames": {
+    "zh-Hans": "E-Hentai 浏览器 DEV"
   },
-  "version" : "1.0.0-rc",
-  "description" : "1.0 Release Candidate development build of the E-Hentai \/ ExHentai gallery browser.",
-  "permissions" : null,
-  "icon" : "books.vertical.fill",
-  "localizedNames" : {
-    "zh-Hans" : "E-Hentai 浏览器 DEV"
+  "localizedDescriptions": {
+    "zh-Hans": "1.0 Release Candidate 开发版：用于最终实机验收的 E-Hentai / ExHentai 浏览器。"
   },
-  "color" : "#8B5CF6",
-  "entry" : "index.tsx",
-  "iconImage" : null,
-  "name" : "E-Hentai 浏览器 DEV",
-  "remoteResource" : null
+  "runInApp": true
 }
