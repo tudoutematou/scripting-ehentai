@@ -86,6 +86,7 @@ export async function loadRemainingPreviewPages(detail: GalleryDetail, onProgres
 
 export function applyPreviewLoadResult(core: GalleryDetail, previews: PreviewLoadResult): GalleryDetail { return { ...core, pageLinks: previews.pageLinks, failedPreviewPages: previews.failedPreviewPages } }
 export function hasCompletePreviewInventory(detail: Pick<GalleryDetail, "pageLinks" | "failedPreviewPages" | "truncatedPreviewPages">): boolean { return detail.pageLinks.length > 0 && !detail.truncatedPreviewPages && detail.failedPreviewPages.length === 0 }
+export function assertCompletePreviewInventory(detail: Pick<GalleryDetail, "pageLinks" | "failedPreviewPages" | "truncatedPreviewPages">): void { if (!hasCompletePreviewInventory(detail)) throw new Error("页面库存不完整，请重试预览加载后再下载。") }
 export async function loadGalleryDetail(url: string): Promise<GalleryDetail> { const core = await loadGalleryDetailCore(url); return applyPreviewLoadResult(core, await loadRemainingPreviewPages(core)) }
 
 export async function resolveImagePage(pageUrl: string): Promise<ResolvedImagePage> {
