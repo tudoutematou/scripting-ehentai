@@ -2,7 +2,7 @@ import { Script } from "scripting"
 
 const owner = "tudoutematou"
 const repo = "scripting-ehentai"
-const ref = "feat/0.9-stabilization"
+const ref = "release/1.0"
 
 async function main() {
   const files = await Promise.all(
