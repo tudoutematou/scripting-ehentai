@@ -98,6 +98,10 @@ function parseResultCount(html: string): string {
   return match ? match[1].trim() : ""
 }
 
+export type ToplistEntry=GallerySummary&{rank:number}
+export type ToplistData={title:string;entries:ToplistEntry[]}
+export function parseToplistHtml(html:string,baseUrl:string):ToplistData{const title=cleanText(html.match(/<div\b[^>]*\bclass\s*=\s*(["'])[^"']*\btdo\b[^"']*\1[\s\S]*?<p\b[^>]*>[\s\S]*?<a\b[^>]*style\s*=\s*(["'])[^"']*font-weight\s*:\s*bold[^"']*\2[^>]*>([\s\S]*?)<\/a>/i)?.[3]||"")||"Gallery Toplists",entries:ToplistEntry[]=[];for(const row of html.match(/<tr\b[^>]*>[\s\S]*?<\/tr>/gi)||[]){const rank=Number(cleanText(row.match(/<td\b[^>]*\bclass\s*=\s*(["'])[^"']*\bpso\b[^"']*\1[^>]*>([\s\S]*?)<\/td>/i)?.[2]||"").replace(/[^\d]/g,""));const link=row.match(/<a\b[^>]*\bhref\s*=\s*(["'])([^"']*\/g\/(\d+)\/([a-f0-9]+)\/?[^"']*)\1[^>]*>([\s\S]*?)<\/a>/i);if(!rank||!link)continue;entries.push({id:`${link[3]}:${link[4]}`,gid:link[3],token:link[4],title:cleanText(link[5]),category:"",thumb:"",posted:"",uploader:"",pages:0,url:absoluteUrl(link[2],baseUrl),rank})}return{title,entries}}
+
 export function parseSearchHtml(html: string, baseUrl: string): SearchExtractData {
   const items: GallerySummary[] = []
   const seen = new Set<string>()
