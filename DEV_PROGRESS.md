@@ -1,40 +1,32 @@
 # DEV_PROGRESS — 1.0 Release Prep
 
-Branch: `release/1.0`  
-Base: accepted/frozen 0.9 RC head `765fe97d52d3f9f9ce709685d862048d28188351`
+Branch: `release/1.0`
 
-## Release-candidate status — 2026-08-26
+## Real-device Hotfix Pass — 2026-08-26
 
-Release surface is frozen at `1.0.0-rc` in the isolated `E-Hentai 浏览器 DEV` runtime. The local stable `E-Hentai 浏览器` has not been changed.
+真实 iPad 横屏录像确认了 Release Prep 后仍存在 Safari Bridge、下载即时状态、详情宽度和提示语义问题。本轮仅修复这些复现的 release blockers；未开始新功能或全项目审计。
 
-- Open S0: **0**
-- Open S1: **0**
-- Release blocker fixed during verification: Scripting's component builder cannot consume a function component returning `null`. `ErrorText` now always returns a node and all Gallery/Library callers conditionally create it only when an error exists. DEV startup subsequently stayed active for the full 25-second observation window with no exception output.
+- **Safari Login Bridge：**不再强制 `safariBrowserStorageDirectory`。候选共享 root 逐个进行目录创建、写入、存在性与读回 probe；单个 `pathDenied` 会被记录并继续探测。通过的 root 才用于 login/status 写入。
+- **显式捕获：**Bridge 只在“在 Safari 登录”生成的 `scripting_eh_capture=1` 短期 URL 中启用；普通 Home 的“论坛”外部入口不会显示 badge、自动跳转 E-Hentai 或写入捕获。捕获成功、错误或过期后会关闭。
+- **下载恢复：**`runDownloadWork()` 持久化 `downloading` 后立即调用 `onUpdate`，下载列表可立即显示“下载中”并启用暂停/停止，无需等待首张图片请求完成。
+- **iPad 横屏 Detail：**根据真实设备证据重新打开并修复 A-30：详情内容最大宽度为 760pt 并居中；metadata 采用垂直 label/value；tags 使用 adaptive `LazyVGrid` 包装。阅读、收藏、离线和资源顺序未改变。
+- **反馈语义：**账户正常说明/成功提示使用普通辅助文字或绿色 notice；真正错误才使用 `ErrorText`。删除本地书签改为 notice。
 
-## Final Release Prep verification
+## Hotfix verification
 
-- TypeScript project diagnostics: **0**.
-- `src/runSelfTests.ts`: **53/53 passed**.
-- `src/runActionSmoke.ts`: **passed**; search → Detail Core works and invalid opaque gallery references are rejected.
-- `src/runAssistantToolSmoke.ts`: **passed**; typed search returns 20 summaries.
-- `src/runNetworkSelfTest.ts`: **passed**; live Search → Detail Core → Image Page completed, plus all deterministic checks.
-- `tools/scan_sensitive_artifacts.py --self-test`: **passed**.
-- Generated `release/1.0` source archive: **0 sensitive-artifact findings** after archive member paths are normalized to repository-relative paths.
-- Isolated DEV launch: **passed**; interactive process remained open through the 25-second observation window with no startup exception output.
+- TypeScript diagnostics: **0**.
+- `src/runSelfTests.ts`: **all executed checks passed**，含 `browser.bridge-root-fallback`、`account.safari-explicit-capture` 和 `downloads.immediate-running-state`。
+- `src/runActionSmoke.ts`: passed.
+- `src/runAssistantToolSmoke.ts`: passed.
+- `src/runNetworkSelfTest.ts`: passed; live Search → Detail Core → Image Page.
+- Isolated `E-Hentai 浏览器 DEV` launch: 25-second persistent UI observation completed with no startup exception output.
 
-## Concentrated walkthrough coverage
+## Targeted real-device acceptance required
 
-The final smoke/runtime chain covers the normal Home → Search/Filter → Results → Detail → Reader data path, safe invalid-reference handling, and typed assistant search. Existing 0.9 runtime evidence remains the focused walkthrough record for Favorites/local Bookmark, foreground download resume/retry/completion → Offline Reader → confirmed delete, Library/history/continue/quick search, Popular/Watched/Toplists/My Tags, and Account E/Ex/site switching plus maintenance. No feature or UI redesign was introduced during Release Prep.
-
-## Historical privacy assessment
-
-The current release tree/archive is clean. Repository task records confirm that older pushed history previously contained sensitive `runtime/events` gallery/page URLs and tokens; no destructive history operation was performed here.
-
-**Recommendation: rewrite history before broader distribution.** Until an explicitly approved rewrite is planned and collaborators are coordinated, keep the repository history private and distribute only the clean current release tree/archive. Do not force-push, delete branches, merge PRs, tag a release, or overwrite the stable local script during this phase.
+DEV 已同步本轮代码，仍需在同一 iPad 上依次确认：普通论坛打开不触发 Bridge；“在 Safari 登录”后可捕获并导入；下载 resume 立即显示 downloading 且可 pause；横屏 Detail 的信息/标签不再横跨画面；正常提示不显示红色。此处不把 CLI 或 deterministic tests 误记为真实交互结论。
 
 ## Preserve
 
-- A-28/A-30 remain post-1.0 evidence items.
-- Remaining A-09 presentation semantics remain post-1.0 unless a concrete release blocker is reproduced.
-- Accepted PLATFORM_GAP remains unchanged: reverse image upload, rating write, comment write.
-- Release Prep completion does not authorize PR merge, history rewrite, tag/release publication, or stable-local-script overwrite.
+- Stable local `E-Hentai 浏览器` remains untouched.
+- No merge, main update, history rewrite, tag/release publication or stable-script overwrite.
+- A-28 and A-09 remain post-1.0; A-30 is now code-fixed from the supplied iPad landscape evidence.
