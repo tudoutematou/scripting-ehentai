@@ -6,7 +6,7 @@ import { getAccountSessionGeneration, getAccountStatus, getBaseUrl, importSafari
 import { applyPreviewLoadResult, loadGalleryDetailCore, externalDestinationUrl, parseAccountOverviewHtml, parseMyTagsHtml, resolveImagePage, searchGalleries, userSafeError } from "./ehentai"
 import { parseDetailHtml, parsePreviewPageHtml } from "./detailHtml"
 import { parseImagePageHtml } from "./pageHtml"
-import { parseSearchHtml } from "./searchHtml"
+import { parseSearchHtml, parseToplistHtml } from "./searchHtml"
 import { sanitizeDiagnostic } from "./githubBridge"
 import { buildGallerySearchUrl, createHomeSearchState, createPopularSearchState, createTagSearchState, createUploaderSearchState } from "./tourist"
 
@@ -92,6 +92,7 @@ export async function runSelfTests(options: SelfTestOptions = {}): Promise<SelfT
     { name: "search.tag-state", run: () => { const state = createTagSearchState("https://e-hentai.org/?f_search=female%3Atest", "female", "test", "测试"); assert(state.mode === "tag" && state.rawQuery === "female:test" && state.displayQuery === "测试", "标签搜索状态错误") } },
     { name: "parser.search", run: () => { const page = parseSearchHtml('<div class="searchtext">Found 1 results</div><table><tr><td class="glname"><a href="/g/123/abcdef/">Sample &amp; Title</a></td><td class="cn">Manga</td><td>12 pages</td><td id="posted_123">today</td><img src="/thumb.jpg"></tr></table>', BASE); assert(page.items.length === 1 && page.items[0].title === "Sample & Title" && page.items[0].pages === 12, "搜索解析错误") } },
     { name: "search.uploader-state", run: () => { const url=new URL(buildGallerySearchUrl(BASE,createUploaderSearchState("tester name")));assert(url.pathname==="/uploader/tester%20name/","上传者 URL 构建错误") } },
+    { name: "parser.toplist-rank", run: () => { const top=parseToplistHtml('<div class="tdo"><p><a style="font-weight:bold">Galleries All-Time</a></p><table><tr><td class="pso">#1</td><td><a href="/g/11/abcdef12/">Top One</a></td></tr><tr><td class="pso">#2</td><td><a href="/g/12/bcdef123/">Top Two</a></td></tr></table></div>',BASE);assert(top.title==="Galleries All-Time"&&top.entries.length===2&&top.entries[0].rank===1&&top.entries[1].rank===2,"Toplists 未保留榜单身份或排名") } },
     { name: "parser.search-title-isolation", run: () => { const page=parseSearchHtml('<table><tr><td class="glname"><a href="/g/77/abcdef12/"><span class="glink">Only title</span><span> nested-tag</span></a></td></tr></table>',BASE);assert(page.items[0]?.title==="Only title","列表标题吸收了嵌套标签文本") } },
     { name: "detail.relation-row-and-identity", run: () => { const detail=parseDetailHtml('<table id="gdd"><tr><td>Parent:</td><td><a href="/g/88/bcdef123/">plain title</a></td></tr></table>',BASE);assert(detail.relations[0]?.label==="父画廊","外层关系标签未解析");const summary:any=relationSummary({id:"x",gid:"1",token:"abcdef12",title:"old",category:"",thumb:"",posted:"",uploader:"",pages:0,url:"https://e-hentai.org/g/1/abcdef12/"},detail.relations[0]);assert(summary.gid==="88"&&summary.token==="bcdef123","关系导航摘要丢失画廊身份") } },
     { name: "parser.detail-relationships", run: () => { const detail=parseDetailHtml('<div id="gn">x</div><a title="Parent Gallery" href="/g/12/abcdef12/">parent</a><a class="newer-version" href="/g/13/bcdef123/">newer</a>',BASE);assert(detail.relations.length===2&&detail.relations[0].label==="父画廊"&&detail.relations[1].label==="较新版本","详情关系解析错误") } },
