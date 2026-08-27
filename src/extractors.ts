@@ -130,12 +130,12 @@ for (let i = 0; i < anchors.length; i++) {
   const img = a.querySelector("img")
   const alt = (img && img.getAttribute("alt")) || ""
   const m = (title + " " + alt).match(/(?:Page\s+)?(\d+)/i)
-  const styleNode = a.querySelector('[style*="url("]')
+  const styleNode = a.querySelector('[style*="url("]') || (a.closest && a.closest('.gdtm, .gdts, .gdtl') && a.closest('.gdtm, .gdts, .gdtl').querySelector('[style*="url("]'))
   const style = (styleNode && styleNode.getAttribute("style")) || ""
-  const thumb = abs(img && (img.getAttribute("data-src") || img.getAttribute("src"))) || cssUrl(style)
+  const thumb = cssUrl(style) || abs(img && (img.getAttribute("data-src") || img.getAttribute("src")))
   const widthMatch = style.match(/(?:^|;)\s*width\s*:\s*(\d+)px/i)
   const heightMatch = style.match(/(?:^|;)\s*height\s*:\s*(\d+)px/i)
-  const posMatch = style.match(/background(?:-position)?\s*:[^;]*?(-?\d+)px\s+(-?\d+)px/i) || style.match(/\)\s*(-?\d+)px\s+(-?\d+)px/i)
+  const posMatch = style.match(/background(?:-position)?\s*:[^;]*?(-?\d+)(?:px)?\s+(-?\d+)(?:px)?/i) || style.match(/\)\s*(-?\d+)(?:px)?\s+(-?\d+)(?:px)?/i)
   pageLinks.push({ index: m ? Number(m[1].replace(/,/g, "")) : 0, pageUrl, thumb, thumbX: posMatch ? Math.abs(Number(posMatch[1])) : 0, thumbY: posMatch ? Math.abs(Number(posMatch[2])) : 0, thumbWidth: widthMatch ? Number(widthMatch[1]) : 0, thumbHeight: heightMatch ? Number(heightMatch[1]) : 0 })
 }
 `
