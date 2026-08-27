@@ -1,12 +1,14 @@
 // ==UserScript==
 // @name E-Hentai Cookie 助手
 // @namespace scripting-ehentai
-// @version 1.0.1-final
+// @version 1.0.3-injection
 // @description 在 E-Hentai / ExHentai 页面显式获取登录 Cookie，供 E-Hentai 浏览器 DEV 导入。
 // @match https://e-hentai.org/*
 // @match https://*.e-hentai.org/*
 // @match https://exhentai.org/*
 // @match https://*.exhentai.org/*
+// @connect e-hentai.org
+// @connect exhentai.org
 // @grant GM.cookie
 // @grant GM.log
 // @grant GM.registerMenuCommand
@@ -16,7 +18,7 @@
 // @noframes
 // ==/UserScript==
 
-export const COOKIE_HELPER_VERSION="1.0.2-stability"
+export const COOKIE_HELPER_VERSION="1.0.3-injection"
 export const COOKIE_HELPER_MODE="explicit-acquisition"
 export const COOKIE_HELPER_LOGIN_URL="https://e-hentai.org/bounce_login.php?b=d&bt=1-1"
 const REQUIRED = new Set(["ipb_member_id", "ipb_pass_hash"])
