@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name E-Hentai Cookie 助手
 // @namespace scripting-ehentai
-// @version 1.0.0
+// @version 1.0.1-final
 // @description 在 E-Hentai / ExHentai 页面显式获取登录 Cookie，供 E-Hentai 浏览器 DEV 导入。
 // @match https://e-hentai.org/*
 // @match https://*.e-hentai.org/*
@@ -16,6 +16,9 @@
 // @noframes
 // ==/UserScript==
 
+export const COOKIE_HELPER_VERSION="1.0.1-final"
+export const COOKIE_HELPER_MODE="explicit-acquisition"
+export const COOKIE_HELPER_LOGIN_URL="https://e-hentai.org/bounce_login.php?b=d&bt=1-1"
 const REQUIRED = new Set(["ipb_member_id", "ipb_pass_hash"])
 const WANTED = new Set(["ipb_member_id", "ipb_pass_hash", "ipb_session_id", "igneous"])
 const URLS = ["https://e-hentai.org/", "https://exhentai.org/"]
@@ -32,6 +35,6 @@ async function writeCookies(cookies:any[]){const payload=JSON.stringify({time:ne
 let button:any
 function setButton(text:string,color:string){if(!button)return;button.textContent=text;button.style.background=color}
 async function refresh(){const cookies=await readCookies();setButton(valid(cookies)?"🍪 已登录 · 获取 Cookie":"🍪 未登录 · 前往登录","#242426");return cookies}
-async function acquire(){const cookies=await refresh();if(!valid(cookies)){location.href="https://e-hentai.org/bounce_login.php?b=d&bt=1-1";return}setButton("🍪 正在写入…","#6b4e9b");try{const written=await writeCookies(cookies);setButton(`✓ 已写入 ${written.length} 个路径 · 返回 App 导入`,"#1e7d32")}catch{setButton("✕ 写入失败 · 检查扩展权限","#b3261e")}}
+async function acquire(){const cookies=await refresh();if(!valid(cookies)){location.href=COOKIE_HELPER_LOGIN_URL;return}setButton("🍪 正在写入…","#6b4e9b");try{const written=await writeCookies(cookies);setButton(`✓ 已写入 ${written.length} 个路径 · 返回 App 导入`,"#1e7d32")}catch{setButton("✕ 写入失败 · 检查扩展权限","#b3261e")}}
 function mount(){if(button||!document.body)return;button=document.createElement("button");Object.assign(button,{id:"scripting-eh-cookie-button",type:"button",textContent:"🍪 正在检测…"});Object.assign(button.style,{position:"fixed",left:"max(12px, env(safe-area-inset-left))",bottom:"max(12px, env(safe-area-inset-bottom))",zIndex:"2147483647",border:"0",borderRadius:"12px",padding:"10px 16px",color:"#fff",fontSize:"14px",fontWeight:"600",fontFamily:"-apple-system, BlinkMacSystemFont, sans-serif",boxShadow:"0 4px 16px rgba(0,0,0,.35)"});button.onclick=()=>void acquire();document.body.appendChild(button);void refresh()}
 if(typeof window!=="undefined"){if(document.body)mount();else document.addEventListener("DOMContentLoaded",mount,{once:true});GM.registerMenuCommand?.("🍪 获取 E-Hentai Cookie",acquire)}
