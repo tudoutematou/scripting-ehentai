@@ -38,7 +38,7 @@ function safeRequestUrl(value?: string) {
 function safeText(value?: unknown) {
   return String(value || "")
     .replace(/https?:\/\/[^\s"')]+/gi, "[redacted-url]")
-    .replace(/\b(?:ipb_member_id|ipb_pass_hash|igneous|Cookie)\s*[=:]\s*[^;\s,]+/gi, "$1=[redacted]")
+    .replace(/\b(?:ipb_member_id|ipb_pass_hash|igneous|Cookie|apiuid|apikey)\s*[=:]\s*[^;\s,]+/gi, "$1=[redacted]")
     .slice(0, 500)
 }
 
