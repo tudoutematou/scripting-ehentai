@@ -1,9 +1,9 @@
-import { probeWritableCookieRoots } from "./browser"
+import { COOKIE_HELPER_LOGIN_URL, COOKIE_HELPER_VERSION, probeWritableCookieRoots } from "./browser"
 import { mapGalleryActionItem, runEhAction, isGalleryRefSessionCurrent } from "./ehAction"
 import { GalleryRow, relationSummary, validCachedImagePayload } from "./GalleryFlow"
 import { buildFavoritesUrl, favoriteLoginError, parseFavoriteCategories, parseFavoritePopupHtml, verifyFavoriteMutation } from "./favorites"
-import { addLocalBookmark, assertDownloadCapacity, deleteHistory, deleteOfflineDirectoryTransaction, deleteSavedSearch, historySummary, isImagePayload, loadHistory, loadLocalBookmarks, loadPreferences, loadSavedSearches, localBookmarkSummary, markDownloadRunning, parseDownloads, reconcileOfflineDownloadState, recordHistory, removeLocalBookmark, resumeIndex, savePreferences, saveSearch, updateReadingProgress, writeOfflinePageAtomically, type HistoryStore } from "./libraryStore"
-import { browserCookiePaths, getAccountSessionGeneration, getAccountStatus, getBaseUrl, importBrowserCookieDraft, setActiveSite, signOut } from "./account"
+import { addLocalBookmark, assertDownloadCapacity, deleteHistory, deleteOfflineDirectoryTransaction, deleteSavedSearch, historySummary, isImagePayload, loadDownloads, loadHistory, loadLocalBookmarks, loadPreferences, loadSavedSearches, localBookmarkSummary, markDownloadRunning, parseDownloads, pauseDownload, reconcileOfflineDownloadState, recoverInterruptedDownloads, recordHistory, removeLocalBookmark, resumeIndex, runDownload, savePreferences, saveSearch, updateReadingProgress, writeOfflinePageAtomically, type HistoryStore } from "./libraryStore"
+import { browserCookiePaths, getAccountSessionGeneration, getAccountStatus, getBaseUrl, importBrowserCookieDraft, SAFARI_LOGIN_URL, setActiveSite, signOut } from "./account"
 import { applyPreviewLoadResult, assertCompletePreviewInventory, hasCompletePreviewInventory, loadGalleryDetailCore, externalDestinationUrl, parseAccountOverviewHtml, parseMyTagsHtml, resolveImagePage, searchGalleries, userSafeError } from "./ehentai"
 import { parseDetailHtml, parsePreviewPageHtml } from "./detailHtml"
 import { parseImagePageHtml } from "./pageHtml"
@@ -21,44 +21,6 @@ function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message)
 }
 
-const BRIDGE_NOW = Date.parse("2030-01-01T12:00:00.000Z")
-const BRIDGE_ROOTS = ["/fixture/storage", "/fixture/browser", "/fixture/group", "/fixture/documents"]
-const bridgePath = (root: string) => `${root}/ehentai-login-bridge/login.json`
-
-function bridgeDependencies(payloads: string[], options: { keychainSet?: "ok" | "false" | "throw"; keychainRoundTrip?: "ok" | "missing"; removeFailureAt?: number } = {}) {
-  const files = new Map(BRIDGE_ROOTS.map((root, index) => [bridgePath(root), payloads[index] ?? payloads[0]]))
-  const values = new Map<string, string>()
-  const removed: string[] = []
-  const manager = {
-    safariBrowserStorageDirectory: BRIDGE_ROOTS[0], safariBrowserDirectory: BRIDGE_ROOTS[1], appGroupDocumentsDirectory: BRIDGE_ROOTS[2], documentsDirectory: BRIDGE_ROOTS[3],
-    exists: async (path: string) => files.has(path),
-    readAsString: async (path: string) => { if (!files.has(path)) throw new Error("missing"); return files.get(path) as string },
-    remove: async (path: string) => { removed.push(path); if (options.removeFailureAt === removed.length - 1) throw new Error("fixture-remove-failure"); files.delete(path) },
-  }
-  const keychain = {
-    get: (key: string) => options.keychainRoundTrip === "missing" && key === "ehentai.account.cookies.v1" ? null : values.get(key) ?? null,
-    set: (key: string, value: string) => { if (options.keychainSet === "throw") throw new Error("fixture-keychain-failure"); if (options.keychainSet === "false") return false; values.set(key, value); return true },
-    remove: (key: string) => { values.delete(key); return true },
-  }
-  const dependencies: AccountCredentialDependencies = { fileManager: manager, keychain, now: () => BRIDGE_NOW }
-  return { dependencies, files, values, removed }
-}
-
-function freshBridgePayload(cookies: Array<Record<string, unknown>> = [
-  { name: "ipb_member_id", value: "fixture-member", domain: "e-hentai.org", path: "/" },
-  { name: "ipb_pass_hash", value: "fixture-pass-hash", domain: "e-hentai.org", path: "/" },
-]) {
-  return JSON.stringify({ time: new Date(BRIDGE_NOW - 60_000).toISOString(), cookies })
-}
-
-async function expectBridgeImportFailure(payload: string, options: { keychainSet?: "ok" | "false" | "throw"; keychainRoundTrip?: "ok" | "missing" } = {}) {
-  const fixture = bridgeDependencies([payload], options)
-  let failed = false
-  try { await importSafariLogin(fixture.dependencies) } catch { failed = true }
-  assert(failed, "终止失败数据不应导入成功")
-  assert(BRIDGE_ROOTS.every(root => !fixture.files.has(bridgePath(root))), "终止失败后仍残留候选 login.json")
-}
-
 export function safeSelfTestFailureDetail(stage: string, error: unknown): string {
   const value = error as { name?: unknown; code?: unknown }
   const rawName = String(value?.name || "Error")
@@ -73,6 +35,7 @@ export type SelfTestOptions = { network?: boolean }
 export async function runSelfTests(options: SelfTestOptions = {}): Promise<SelfTestResult[]> {
   const checks: Check[] = [
     { name: "browser.cookie-root-fallback", run: async () => { const files=new Set<string>(); const manager={createDirectory:async()=>{},writeAsString:async(path:string)=>{if(path.startsWith("/denied"))throw new Error("pathDenied");files.add(path)},exists:async(path:string)=>files.has(path),readAsString:async(path:string)=>files.has(path)?"ok":Promise.reject(new Error("missing")),remove:async(path:string)=>{files.delete(path)}}; const roots=await probeWritableCookieRoots(manager,[{type:"safariBrowserDirectory",path:"/denied"},{type:"documentsDirectory",path:"/usable"}] as any); assert(roots.length===1&&roots[0].path==="/usable","单个 pathDenied 阻断了可用 Cookie 共享路径") } },
+    { name: "browser.login-entry-and-helper-marker", run: () => { const app=new URL(SAFARI_LOGIN_URL),helper=new URL(COOKIE_HELPER_LOGIN_URL);assert(app.hostname==="e-hentai.org"&&app.pathname==="/bounce_login.php"&&app.href===helper.href,"Safari 登录入口未落到 Cookie helper 匹配的 E-Hentai 链路");assert(COOKIE_HELPER_VERSION==="1.0.1-final","Safari Cookie helper 版本 marker 错误") } },
     { name: "account.browser-draft-no-keychain-write", run: async () => { const files=new Map<string,string>();const path="/usable/ehentai-cookie-import/cookies.json";files.set(path,JSON.stringify({cookies:[{name:"ipb_member_id",value:"m",domain:"e-hentai.org",path:"/"},{name:"ipb_pass_hash",value:"p",domain:"e-hentai.org",path:"/"}]}));const manager={safariBrowserDirectory:"/denied",documentsDirectory:"/usable",exists:async(value:string)=>files.has(value),readAsString:async(value:string)=>files.get(value)||""};const draft=await importBrowserCookieDraft(manager);assert(draft.includes("ipb_member_id"),"导入草稿未读取 fallback 路径");assert(browserCookiePaths(manager)[1]===path,"候选路径顺序错误") } },
     { name: "search.url-builder", run: () => { const url = new URL(buildGallerySearchUrl(BASE, createHomeSearchState("test", "manga", "chinese"))); assert(url.searchParams.get("f_search") === "test language:chinese", "搜索词或语言筛选错误"); assert(url.searchParams.get("f_cats") === "1019", "分类筛选错误") } },
     { name: "search.advanced-url-builder", run: () => { const state=createHomeSearchState("test");state.advanced={...state.advanced,enabled:true,minimumRating:"4",pageFrom:"12",pageTo:"34",searchTorrents:true,showExpunged:true};const url=new URL(buildGallerySearchUrl(BASE,state));assert(url.searchParams.get("f_srdd")==="4"&&url.searchParams.get("f_spf")==="12"&&url.searchParams.get("f_spt")==="34"&&url.searchParams.get("f_sto")==="on"&&url.searchParams.get("f_sh")==="on","高级搜索 URL 构建错误") } },
@@ -115,7 +78,10 @@ export async function runSelfTests(options: SelfTestOptions = {}): Promise<SelfT
     { name: "downloads.atomic-recovery", run: async () => { const files=new Set<string>(["/offline/page.img.tmp"]);const ops={exists:async(path:string)=>files.has(path),remove:async(path:string)=>{files.delete(path)},rename:async(from:string,to:string)=>{if(!files.has(from))throw new Error("missing");files.delete(from);files.add(to)},writeAsData:async(path:string)=>{files.add(path)},createDirectory:async()=>{}};await writeOfflinePageAtomically(ops,"/offline","/offline/page.img","data");assert(files.has("/offline/page.img")&&!files.has("/offline/page.img.tmp"),"原子页面写入未完成替换");files.clear();files.add("/offline/gallery");let failed=false;try{await deleteOfflineDirectoryTransaction(ops,"/offline/gallery","/offline/.gallery.deleting",async()=>{throw new Error("manifest failed")})}catch{failed=true};assert(failed&&files.has("/offline/gallery")&&!files.has("/offline/.gallery.deleting"),"清单失败时未恢复离线目录") } },
     { name: "downloads.file-reconciliation", run: () => { const item:any={id:"g-1-abcdef12",title:"Offline",summary:{id:"1:abcdef12"},pages:[{index:0,pageUrl:"https://e-hentai.org/s/x/1-1"},{index:1,pageUrl:"https://e-hentai.org/s/x/1-2"}],done:[0,1],failed:[],status:"completed",updatedAt:1};const next=reconcileOfflineDownloadState(item,new Set([0]));assert(next.done.length===1&&next.failed[0]===1&&next.status==="failed","缺失离线文件未降级为可恢复下载状态") } },
     { name: "saved-search.serial-updates", run: async () => { let raw:string|null=null;const store={read:async()=>raw,write:async(value:string)=>{await new Promise(resolve=>setTimeout(resolve,2));raw=value}};await Promise.all([saveSearch("first","first",store),saveSearch("second","second",store)]);const items=await loadSavedSearches(store);assert(items.length===2&&items.some(item=>item.query==="first")&&items.some(item=>item.query==="second"),"并发快速搜索保存丢失记录") } },
-    { name: "downloads.restart-status-recovery", run: () => { const raw=JSON.stringify({schemaVersion:1,items:[{id:"g-1-abcdef12",title:"Offline",summary:{id:"1:abcdef12"},pages:[{index:0,pageUrl:"https://e-hentai.org/s/x/1-1"}],done:[],failed:[],status:"downloading",updatedAt:1}]});assert(parseDownloads(raw)[0]?.status==="paused","重启后的孤儿 downloading 未归为可继续状态") } },
+    { name: "downloads.parse-preserves-live-status", run: () => { const raw=JSON.stringify({schemaVersion:1,items:[{id:"g-1-abcdef12",title:"Offline",summary:{id:"1:abcdef12"},pages:[{index:0,pageUrl:"https://e-hentai.org/s/x/1-1"}],done:[],failed:[],status:"downloading",updatedAt:1}]});assert(parseDownloads(raw)[0]?.status==="downloading","普通解析错误地将 live downloading 降级") } },
+    { name: "downloads.startup-recovery-persists-interrupted-status", run: async () => { let raw=JSON.stringify({schemaVersion:1,items:[{id:"g-1-abcdef12",title:"Offline",summary:{id:"1:abcdef12"},pages:[{index:0,pageUrl:"https://e-hentai.org/s/x/1-1"}],done:[],failed:[],status:"downloading",updatedAt:1}]});const store={read:async()=>raw,write:async(value:string)=>{raw=value}};const recovered=await recoverInterruptedDownloads(store);assert(recovered[0]?.status==="paused"&&parseDownloads(raw)[0]?.status==="paused","启动恢复未持久化遗留 downloading") } },
+    { name: "downloads.run-update-reload-preserves-status", run: async () => { let raw=JSON.stringify({schemaVersion:1,items:[{id:"g-1-abcdef12",title:"Offline",summary:{id:"1:abcdef12"},pages:[],done:[],failed:[],status:"paused",updatedAt:1}]});const store={read:async()=>raw,write:async(value:string)=>{raw=value}};let observed="";await runDownload("g-1-abcdef12",2,store,item=>{if(item.status==="downloading")void loadDownloads(store).then(items=>{observed=items[0]?.status||""})});await Promise.resolve();assert(observed==="downloading","runDownload onUpdate 后 reload 未保留 downloading") } },
+    { name: "downloads.pause-persists-status", run: async () => { let raw=JSON.stringify({schemaVersion:1,items:[{id:"g-1-abcdef12",title:"Offline",summary:{id:"1:abcdef12"},pages:[{index:0,pageUrl:"https://e-hentai.org/s/x/1-1"}],done:[],failed:[],status:"downloading",updatedAt:1}]});const store={read:async()=>raw,write:async(value:string)=>{raw=value}};await pauseDownload("g-1-abcdef12",store);assert((await loadDownloads(store))[0]?.status==="paused","暂停后未持久化为 paused") } },
     { name: "downloads.manifest-store", run: () => { const valid=JSON.stringify({schemaVersion:1,items:[{id:"g-1-abcdef12",title:"Offline",summary:{id:"1:abcdef12"},pages:[{index:0,pageUrl:"https://e-hentai.org/s/x/1-1"}],done:[0],failed:[],status:"completed",updatedAt:1}]});assert(parseDownloads(valid)[0]?.done[0]===0,"离线清单解析无效");let rejected=false;try{parseDownloads(JSON.stringify({schemaVersion:1,items:[{id:"../unsafe",pages:[],done:[],failed:[],status:"paused",updatedAt:1}]}))}catch{rejected=true};assert(rejected,"损坏离线清单不应被接受") } },
     { name: "external.destination-allowlist", run: () => { const values=[externalDestinationUrl("news",BASE),externalDestinationUrl("forums",BASE),externalDestinationUrl("wiki",BASE),externalDestinationUrl("torrents",BASE)];assert(values.every(value=>new URL(value).protocol==="https:")&&new URL(values[2]).hostname==="ehwiki.org","安全外部入口 URL 错误") } },
     { name: "parser.my-tags", run: () => { const tags=parseMyTagsHtml('<div id="usertags_outer"><div></div><div id="usertag1"><span id="tagpreview1" title="female:test"></span></div><div id="usertag2"><span id="tagpreview2" title="artist:a&amp;b"></span><span id="tagpreview3" title="female:test"></span></div></div>',BASE);assert(tags.length===2&&tags[0].name==="female:test"&&tags[1].name==="artist:a&b"&&new URL(tags[0].searchUrl).searchParams.get("f_search")==="female:test","My Tags 真实结构解析错误") } },
