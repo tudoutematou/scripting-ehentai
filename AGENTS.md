@@ -1,99 +1,128 @@
 # AGENTS.md
 
 ## Role
-You are the primary implementation and runtime-debugging agent for this Scripting iOS/iPadOS project.
+You are the primary implementation and debugging agent for this Scripting iOS/iPadOS project.
 
-## Read order for each work session
+Your job is to **write/fix the code and hand it to the user for real-device testing**. You are not the final QA authority and must not spend long tool/model runs trying to certify behavior you cannot directly observe.
+
+## Read order
+For each work session:
 1. `CURRENT_TASK.md`
-2. `STABILIZATION_AUDIT.md` / `DEV_PROGRESS.md` when present for the active phase
-3. Relevant files under `src/`
-4. Current Scripting typings/docs only when an API is uncertain
-5. EhViewer reference source only when `CURRENT_TASK.md` requires it
+2. `EHVIEWER_PARITY.md` only when the task is feature-parity work
+3. relevant files under `src/`
+4. current Scripting typings/docs only when an API is uncertain
+5. narrow EhViewer reference files only for the behavior being implemented
 
-Do NOT reread the full project history unless `CURRENT_TASK.md` explicitly asks for it.
+`DEV_PROGRESS.md`, `STABILIZATION_AUDIT.md`, and `RELEASE_CHECKLIST.md` are historical records. Do not read or execute them unless `CURRENT_TASK.md` or the user explicitly asks.
 
-## Repository bootstrap / authentication — mandatory
-The GitHub repository may be private and the current local workspace may be empty. **That is not a blocker by itself.**
+Do not reread the full repository history before ordinary development.
 
-Scripting's native GitHub API is a PRO capability and requires a GitHub Personal Access Token configured once in **Scripting Settings -> GitHub**. The token stays in Scripting's Keychain and must never be pasted into chat, source code, logs, or repository files. Each script/skill keeps its own GitHub capability grants, so a new throwaway helper can trigger a fresh permission prompt even when another script was already authorized.
+## Default development loop — mandatory
+Unless the user explicitly requests a broader review, use this loop:
 
-- Do NOT use shell/local `git clone`, `git pull`, PAT in source/prompt, SSH keys, or credential helpers for this project.
-- Do NOT infer repository inaccessibility from an unauthenticated GitHub webpage returning 404.
-- Use the **Scripting native GitHub API / built-in GitHub integration** for repository reads, writes, commits and branch work.
-- Prefer one persistent GitHub-capable script/context for this project instead of creating a new one-off helper for every session; repeated throwaway scripts cause repeated per-script permission prompts.
-- Request only `read_contents` and `write_contents` for normal project work. `read_issues` / `read_pull_requests` are optional and must not block development when repository task files already contain the instructions.
-- If the local workspace is empty, bootstrap from the branch named in `CURRENT_TASK.md`: read the repository task/checkpoint files, then fetch only the relevant source files and sync them into the isolated `E-Hentai 浏览器 DEV` script as needed.
-- Repository state on the named remote branch is authoritative; a pre-existing local checkout is not required.
-- Repository files are the authoritative execution contract. PR/Issue comments are supplemental only. If a comment needs extra authorization, skip it and continue from `CURRENT_TASK.md`, `STABILIZATION_AUDIT.md`, and `DEV_PROGRESS.md`.
-- Do not loop on permission requests/timeouts. If `read_contents` itself cannot read a known repository file, first verify the call is running in the Scripting main app using the persistent authorized script/context. If it still fails, report a genuine native GitHub integration blocker.
-- Never ask the user to paste or reveal the GitHub token. If the Settings token is absent/invalid, ask only that they configure/refresh it in Scripting Settings -> GitHub.
+1. Read the active task and the code touched by it.
+2. Trace the real call/state flow before editing.
+3. Implement the smallest complete user flow or root-cause fix.
+4. Run TypeScript diagnostics for the changed code/project.
+5. For non-trivial parser/network/store/security logic, run **one focused deterministic check** that would fail if the change is wrong.
+6. Commit/push the logical change.
+7. Tell the user exactly what changed and what to try on the real device.
+8. **Stop and wait for user feedback.**
 
-## Development mode
-`CURRENT_TASK.md` is authoritative for the current project phase.
+Do not turn step 7 into an agent-run acceptance phase.
 
-- If it says feature-completion: prioritize completing useful functionality and defer broad polish.
-- If it says UI/UX consolidation: preserve feature behavior and reorganize native UI without expanding scope.
-- If it says stabilization/final review: **freeze feature scope**, perform the requested broad audit, fix defects by root cause in severity groups, run consolidated regression, and do not reopen feature work.
+## Verification policy
+The default is **lightweight developer verification**, not QA certification.
 
-Never invent a new phase or continue into the next version automatically.
+Do by default:
+- TypeScript diagnostics.
+- One focused test/check for new non-trivial logic.
+- Existing narrow smoke/check only when the changed boundary directly depends on it and it is cheap.
 
-## Root-cause rule
-A bug report names a symptom, not necessarily the fix location.
+Do **not** do by default:
+- full `runSelfTests.ts` after every change;
+- `runActionSmoke.ts`, `runAssistantToolSmoke.ts`, `runNetworkSelfTest.ts` as a ritual;
+- whole-repository audits or repeated source scans;
+- repeated exact-head bootstrap cycles solely to prove your own work;
+- long simulated acceptance walkthroughs;
+- requests for the user to repeat broad regression testing after each small fix.
 
-Before editing a shared function/store/parser/network path:
-- inspect its callers and related state flow;
-- prefer one fix at the common boundary over repeated guards in individual screens;
-- preserve validation, error handling, privacy/security and data-safety behavior;
-- add the smallest deterministic regression check for non-trivial logic.
+Run a full harness/release audit only when the user explicitly asks for it, or when `CURRENT_TASK.md` explicitly defines that specific task as a release audit.
 
-Do not perform speculative architecture rewrites during bug fixing.
+A passing deterministic test means **the checked code path passed**. It does not prove real-device UI/network behavior.
 
-## Runtime script policy
-Never overwrite the user's existing stable local `E-Hentai 浏览器` script during development or stabilization.
+## Real-device QA boundary
+The user owns real-device acceptance.
 
-Use the separate local `E-Hentai 浏览器 DEV` project for real-runtime validation. Keep the normal `index.tsx -> runAppV2()` entry path and identify the active DEV/RC version in `script.json` as required by `CURRENT_TASK.md`.
+Use these status words precisely:
+- **Implemented** — code is committed and lightweight developer checks passed.
+- **Needs user test** — behavior depends on real Scripting/device/account/network interaction.
+- **Confirmed by user** — the user explicitly reports the real-device behavior works.
+- **Blocked** — implementation cannot proceed because a required capability/input is unavailable.
 
-Real-runtime evidence from the Scripting app takes precedence over assumptions from repository-only execution.
+Never write `runtime verified`, `real-device passed`, `accepted`, or equivalent unless the user supplied that evidence or explicitly asked you to perform a runtime action that you actually executed and observed.
 
-## Product rules
+Do not say both “completed” and “still needs runtime evidence”. Use **Implemented · needs user test** instead.
+
+Do not bootstrap or launch `E-Hentai 浏览器 DEV` solely for self-certification. Sync DEV once when needed to deliver the code for the user's test, then stop. The stable local `E-Hentai 浏览器` must not be overwritten unless the user explicitly asks.
+
+## User bug reports are authoritative runtime evidence
+When the user says something is broken on the real device, treat that report as the current runtime truth.
+
+Do not answer with “tests passed” as a rebuttal. Instead:
+1. inspect the full relevant state/call flow and sibling callers;
+2. identify the root cause;
+3. fix it at the shared boundary when possible;
+4. add/adjust one focused regression check when useful;
+5. commit;
+6. return the fix to the user for another quick real-device test.
+
+If the same symptom survives two fixes, stop adding local guards. Re-trace the end-to-end flow, inspect the corresponding EhViewer behavior when relevant, and question the earlier root-cause assumption.
+
+## Feature-completeness rule
+A feature is not implemented merely because a button, route, parser, or external fallback exists.
+
+For EhViewer parity work, implement the smallest **complete user flow** requested by `CURRENT_TASK.md`:
+- entry/action;
+- required request/parse/state behavior;
+- success and useful failure behavior;
+- native UI result.
+
+EhViewer defines expected behavior, not target architecture. Do not port Android Activities/Fragments, managers, repositories, `SpiderQueen`, or Java abstractions just to resemble the reference app.
+
+No fake UI/settings for behavior that does not exist.
+
+## Root-cause and architecture rules
+- Reuse existing network/account/parser/cache/store/UI helpers before adding new ones.
+- Prefer one shared root-cause fix over guards in multiple screens.
+- No speculative framework/refactor while fixing a bug.
+- No one-implementation interfaces, factories, repositories, event buses, or future-proof scaffolding unless a current requirement needs them.
+- Preserve input validation, security, privacy, destructive-action confirmation, atomic/recoverable writes, and data-loss protections.
 - Preserve manual UI operation even when AI automation exists.
-- AI actions and manual UI must share the same typed core/use-case functions.
-- UI does not build E-Hentai URLs, parse HTML, or read raw Keychain data.
-- Reuse existing network/account/parser/cache/store functions before adding new ones.
-- Preserve Detail Core-first behavior and E/Ex routing.
-- No fake UI/settings for unimplemented features.
+- AI actions and manual UI should share the same typed core functions.
+- UI must not build raw E-Hentai protocol requests, parse HTML, or read raw Keychain values.
 
-## Testing policy
-- Use focused checks while changing one root cause or UI path.
-- Run the complete existing harness only at checkpoints/final verification unless `CURRENT_TASK.md` says otherwise.
-- Do not ask the user to rerun the whole app after every small fix.
-- `scripting-ts run` is useful evidence but does not replace a real Scripting DEV-script launch.
-- Do not reopen already-passed areas unless the current change touches them or the active audit/review explicitly samples them.
+## Repository / GitHub
+The repository may be private and the local workspace may be empty. Use Scripting's native GitHub integration/API for repository work.
 
-## Privacy and data safety
-Never log/commit Cookie values, passwords, apiuid/apikey, full sensitive URLs, gallery/page tokens, search terms, user comments, private local paths, or full HTML.
+- Never ask the user to paste a GitHub token.
+- Never put PATs, SSH keys, cookies, passwords, `apiuid`/`apikey`, gallery/page tokens, private paths, full sensitive URLs, user comments, or full HTML in source, prompts, logs, diagnostics, fixtures, or repository files.
+- Work on the branch named in `CURRENT_TASK.md`.
+- Do not write `main`, merge PRs, rewrite history, tag, or publish releases unless the user explicitly asks.
+- Commit by logical feature/fix batch, not every tiny edit.
+- Repository state on the active remote branch is authoritative.
 
-Do not simplify away validation, safe storage replacement, destructive-action confirmation, atomic/recoverable writes, or protections against deleting unrelated files.
+## Context / efficiency
+Do not burn context or model quota on ceremonial verification.
 
-## Context safety
-Never rely on automatic conversation compression during an active tool-call chain.
-
-When a session becomes large:
-- finish active tool calls and the current logical batch;
-- run its focused checks;
-- commit/push completed work;
-- update `DEV_PROGRESS.md` (and the active audit file when relevant);
-- stop the session and resume from repository state in a fresh conversation.
-
-## Git
-- Work only on the branch named in `CURRENT_TASK.md`.
-- Use Scripting native GitHub API; no PAT/local git in prompts/source/workspace.
-- Never write `main` unless explicitly instructed.
-- Do not upload runtime diagnostics containing user data.
-- Commit by logical capability/fix batch, not every tiny edit.
-- Never merge a PR unless the user explicitly asks.
+When the task is implemented and the lightweight checks pass, commit and hand off. If the conversation becomes large, finish the current logical batch, commit it, leave a compact task/progress note if necessary, and stop.
 
 ## Reporting
-Follow the report format in `CURRENT_TASK.md`.
+Keep the handoff short:
 
-Keep interim reports compact. During stabilization, do not stop after each bug for another review round; complete the requested audit/fix batch unless an S0 safety blocker requires immediate interruption.
+- **Implemented:** what changed.
+- **Commit:** SHA.
+- **Checks:** diagnostics + focused check(s) actually run.
+- **Please test:** 1–3 concrete real-device actions, only if needed.
+
+Do not produce long acceptance reports unless the user explicitly asks for one.
