@@ -1,3 +1,5 @@
+import type { RatingCredentials } from "./detailHtml"
+
 export type GallerySummary = {
   id: string
   gid: string
@@ -47,6 +49,7 @@ export type DetailExtractData = {
   uploader: string
   rating: number | null
   ratingCount: number
+  ratingCredentials: RatingCredentials | null
   metadata: Record<string, string>
   tags: TagGroup[]
   previewPages: number
