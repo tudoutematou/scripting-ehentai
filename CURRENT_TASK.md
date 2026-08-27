@@ -1,280 +1,167 @@
-# CURRENT_TASK — 1.1.x Stability + UI Cleanup
+# CURRENT_TASK — 1.1.x User QA Fix Pass 2
 
 Branch: `feat/1.1-gallery-interaction`  
-Base: `main` at `f74c4578993e8ed4e7f7481393df998449ea0660`
+Current user-tested head: `8c0b40a742e49deb5c40ffff1d0a25a968cb5d37`
 
-## Goal
+## User runtime truth
 
-STOP adding new EhViewer feature families for this pass.
+The user has tested the previous Stability + UI pass on a real device.
 
-The user has confirmed three real-device problems/needs:
+### Confirmed fixed — do not touch
 
-1. **P0 — Gallery preview thumbnails:** many different pages display the same thumbnail.
-2. **P0 — Login / Cookie acquisition:** the Safari → Cookie helper → App import flow is still unreliable and too cumbersome.
-3. **P1 — UI layout:** the app now has many features, but several screens still look like early functional scaffolding with crowded horizontal actions and weak information hierarchy.
+- **Preview thumbnails are fixed.**
+- Shared sprite previews now render correctly on the user's device.
+- Do not reopen preview/parser/cache work unless a new preview bug is reported.
 
-Complete all three slices below in one development session unless genuinely blocked. Do not wait for user approval between slices. After A+B+C are implemented, commit/push and hand the build to the user for real-device testing.
+### Still broken
 
-## Working contract
+1. **P0 Safari Cookie helper is not appearing at all.**
+   - After opening the E-Hentai login page in Safari, the expected lower-left Cookie helper button does not appear.
+   - Because the UI never appears, do **not** start by changing cookie parsing, expiry, domain, Keychain, or validation again.
+   - First prove whether `browser.tsx` is actually being built/injected by Scripting Safari Browser Scripts.
 
-The Agent implements and debugs code. The user performs real-device QA.
+2. **P0 Navigation stack is wrong.**
+   - From the login/account screen, Back returns to **Library** first, then another Back returns to Home.
+   - Expected: Account/Login opened from Home must return directly to Home.
 
-For this pass:
-- inspect the full affected flow before editing;
-- use EhViewer only as a behavioral/parser reference;
-- fix root causes, not symptoms;
-- run TypeScript diagnostics after changes;
-- leave only the smallest focused deterministic check needed for non-trivial parser/login logic;
-- do **not** run full regression, release audit, repeated bootstrap, or simulated acceptance;
-- do **not** claim runtime verification;
-- report the final result as **Implemented · needs user test**.
+STOP adding new feature families. Fix only these two runtime bugs, then hand back to the user.
 
-User-reported runtime behavior is authoritative even if old self-tests pass.
+## Development contract
 
----
-
-# Slice A — P0 Preview thumbnail root cause
-
-## Runtime fact
-
-Different gallery pages frequently show the same preview image.
-
-E-Hentai commonly uses one sprite image for multiple page previews. Therefore multiple pages sharing the same `thumb` URL is normal. The bug is only fixed when each page renders the correct crop/preview.
-
-## Trace before editing
-
-Trace this exact flow end to end:
-
-`Gallery HTML`
-→ `parsePreviewPageHtml()` / preview style parsing
-→ `normalizePageLinks()`
-→ `GalleryPageLink.thumb / thumbX / thumbY / thumbWidth / thumbHeight`
-→ `PreviewThumbnail`
-→ `SpritePreview` Canvas source rectangle.
-
-Compare the relevant behavior with EhViewer `GalleryDetailParser` preview handling, including the actually needed variants among:
-- small preview;
-- normal preview;
-- newer normal preview;
-- label wrappers;
-- large/direct preview.
-
-Do not port the Java architecture or copy all parser variants blindly. Support the HTML forms the current site/reference parser actually expects.
-
-## Required result
-
-- Pages that share one sprite URL retain distinct correct crop coordinates.
-- Direct/large preview images continue to work.
-- Page index and page URL remain tied to the correct preview.
-- Multi-preview-page loading must not collapse distinct entries.
-- Existing image cache remains shared by URL.
-
-## Forbidden fake fixes
-
-Do NOT:
-- disable image caching;
-- append random query strings;
-- download the same sprite once per page;
-- use page index as an artificial image URL;
-- replace previews with full reader images merely to hide the parser bug.
-
-## Focused check
-
-Add/adjust one small parser/render-data check proving that at least two pages can share the same sprite URL while producing different page indexes and different crop coordinates. Also preserve a direct-image preview case if already covered.
-
-Commit this slice logically before moving on.
+- User runtime evidence overrides passing tests.
+- Trace the actual root cause before editing.
+- TypeScript diagnostics + one focused check only when useful.
+- No full regression, release audit, long acceptance, or repeated bootstrap ritual.
+- Commit/push and report **Implemented · needs user test**.
 
 ---
 
-# Slice B — P0 Login / Cookie flow
+# Fix A — P0 Safari Browser Script injection / permission
 
-## Current problem
+## Important distinction
 
-The current user journey is too long and still fails in real use:
+The failure occurs **before Cookie acquisition**: the Cookie helper UI is absent.
 
-`App → Safari login → userscript GM.cookie → shared cookies.json → return to App → import draft → save → validate`
+Therefore do not spend this pass tuning:
+- `sanitizeCookies()`;
+- expiry conversion;
+- domain/path matching;
+- draft selection;
+- Keychain validation.
 
-Trace the real code path before changing UI:
+Those paths cannot run successfully until the Safari browser script itself executes.
 
-`browser.tsx GM.cookie.list()`
-→ cookie normalization/domain/path
-→ writable shared roots
-→ `cookies.json`
-→ `importBrowserCookieDraft()`
-→ `sanitizeCookies()`
-→ Keychain save
-→ `getCookieHeader()`
-→ E-Hentai / ExHentai validation.
+## Official Scripting behavior to verify
 
-## Root-cause requirements
+Use the current official Scripting **Safari Browser Scripts** documentation as the source of truth.
 
-Inspect especially:
-- whether required auth cookies are collected from the correct E/Ex domains;
-- whether multiple shared-root cookie drafts can cause an older valid file to be imported before a newer one;
-- whether expiry/domain/path normalization can discard a valid login;
-- whether E and Ex validation is using the correct cookies without weakening credential checks.
+Relevant platform facts:
+- Safari Browser Scripts are a **PRO** feature.
+- a project-level `browser.tsx` is built to `browser.js`;
+- browser userscripts run through the Scripting Safari Web Extension;
+- the Scripting extension must be enabled/allowed for the current website;
+- `GM.cookie` and `Scripting.FileManager` require their declared grants;
+- installed/active browser scripts can be inspected from Scripting's Safari Browser Scripts development tooling / extension UI.
 
-If multiple valid shared drafts exist, prefer the newest valid payload using the payload timestamp instead of blindly accepting the first candidate path.
+Do not invent a custom browser injection mechanism before checking the platform contract.
 
-Do not weaken the requirement for `ipb_member_id` + `ipb_pass_hash`. Keep `igneous` handling appropriate for ExHentai without inventing alternate credentials.
+## Trace in this order
 
-## UX simplification
+1. Confirm DEV bootstrap places `src/browser.tsx` at the **root of the local Scripting project as `browser.tsx`**.
+2. Confirm the local DEV project build actually produces/activates the browser-script entry expected by Scripting.
+3. Confirm current userscript metadata still matches:
+   - `https://e-hentai.org/*`
+   - `https://*.e-hentai.org/*`
+   - `https://exhentai.org/*`
+   - `https://*.exhentai.org/*`
+4. Confirm required grants are valid for the current Scripting runtime.
+5. Check whether Safari extension/site access is the real blocker.
 
-Normal user flow should become at most:
+## If Safari permission/enablement is required
 
-1. **在 Safari 登录**
-2. **导入并验证登录状态**
+This is a platform permission and cannot be truthfully "fixed" by changing cookie parser code.
 
-The second action should combine browser-draft import + Keychain save + status validation. Do not expose a separate ordinary-user “导入草稿” then “保存并验证” ceremony.
+Make the Account login UX explain the prerequisite **before/when opening Safari**, in concise Chinese:
+- Scripting Safari extension must be enabled;
+- website access for E-Hentai/ExHentai must be allowed;
+- then reload/login and use the Cookie helper.
 
-Keep manual Cookie import only as an **advanced/fallback** action, not the primary login path.
+Do not claim the app can bypass Safari extension permission.
 
-After successful browser import, avoid leaving stale browser drafts able to override a later login. Use the smallest safe solution; do not build a credential-sync subsystem.
+If there is a supported Scripting API/official mechanism to surface or install/activate the project's browser script, use that. Otherwise keep the project-level `browser.tsx` approach and provide the minimum setup guidance.
 
-## Security
+## Browser helper robustness
 
-- Raw Cookie values remain local only.
-- Never log/report/store them in GitHub diagnostics.
-- No PAT/password/token prompts.
-- Do not make the GitHub repository public for this work.
+Only after injection is confirmed:
+- ensure the helper visibly mounts on matched pages;
+- preserve `GM.registerMenuCommand` as a secondary fallback entry;
+- add missing `@connect` rules only if official Scripting semantics require them for the actual cross-origin cookie calls used;
+- do not add unrelated credential fallbacks.
 
-## Focused check
+## Focused evidence
 
-Use one narrow deterministic check for cookie draft selection/normalization if that logic changes. No broad account acceptance suite.
-
-Commit this slice logically before moving on.
-
----
-
-# Slice C — P1 UI layout cleanup
-
-This is a layout/information-architecture pass, **not** a visual redesign.
-
-Preserve native Scripting/iOS components and existing `GlassUI`. No animation project, no new design system, no broad component framework.
-
-## Global layout rules
-
-- Avoid long rows of unrelated buttons.
-- Prefer `List` / `Section` / `VStack` for primary hierarchy.
-- Use `HStack` only for 2–3 closely related compact actions that fit on iPhone.
-- Use adaptive grids only where a compact category/action grid is genuinely useful.
-- Keep major content centered/capped on iPad instead of stretching excessively.
-- No horizontal overflow on iPhone.
-- Keep loading / empty / error / retry states visible and simple.
-- Preserve current native navigation behavior.
-
-## Home
-
-Target hierarchy:
-
-`Search`
-- search field as the primary control;
-- search + filter kept compact and obvious.
-
-`Discover`
-- Popular;
-- Image Search;
-- Watched / Toplist entry.
-
-`My Content`
-- Library;
-- Account / Login.
-
-`Categories`
-- compact, balanced category grid/list rather than manually packed rows that depend on width.
-
-`Latest Galleries`
-- preserve existing gallery cards/list.
-
-`External`
-- keep News / Forums / Wiki / Torrents visually secondary.
-
-## Account
-
-Target hierarchy:
-
-`Login status`
-- clear logged-in / guest state;
-- E/Ex availability readable without exposing implementation details.
-
-`Primary login`
-- Safari login;
-- import + validate login state.
-
-`Site`
-- E-Hentai / ExHentai selector only when appropriate.
-
-`Advanced account actions`
-- manual Cookie import;
-- refresh status;
-- logout.
-
-Then keep Account Overview, Reader Settings, Downloads/Cache, and Library/History as separate sections.
-
-Do not present six or seven technical actions as equal-weight buttons in two HStacks.
-
-## Gallery Detail
-
-Keep existing features, but group actions by meaning instead of adding more horizontal button rows:
-
-- Reading
-- Library / Favorite / Offline
-- Gallery interactions (rating/comments)
-- Related content
-- Resources (Torrent/Archive)
-- Metadata
-- Tags
-- Preview grid
-
-Do not remove working functionality. Do not redesign Reader in this pass.
-
-## Search / Filter
-
-Only fix obvious layout crowding/overflow. Do not redesign search behavior or add new filters.
-
-## UI completion rule
-
-The goal is that existing features have a clear place and normal iPhone/iPad layout. Do not create new functionality just to fill the new layout.
-
-No separate UI test framework is required. TypeScript diagnostics are enough for purely presentational edits.
-
-Commit this slice logically.
+Do not simulate Safari acceptance. A static/metadata check is enough if code changes are non-trivial. The user will verify whether the helper appears.
 
 ---
 
-# Preserve / out of scope
+# Fix B — P0 Navigation stack root cause
 
-Preserve:
-- current search/network/session core unless required by the Cookie root cause;
-- favorites/history/progress/download data behavior;
-- Reader behavior;
-- image cache architecture;
-- transient `apiuid` / `apikey` safety;
-- current feature set already implemented on this branch.
+## Runtime behavior
 
-Out of scope for this pass:
-- new EhViewer feature families;
-- Reader 1.2 parity expansion;
-- Download Manager redesign;
-- database/framework migration;
-- broad folder restructuring;
-- speculative refactor;
-- full automated acceptance campaign.
+Observed:
+
+`Home → Account/Login → Back → Library → Back → Home`
+
+Expected:
+
+`Home → Account/Login → Back → Home`
+
+## Likely root cause to inspect first
+
+Current Home UI groups multiple `NavigationLink`s inside the same `VStack` / List row, including the `我的内容` section containing both:
+- Library
+- Account/Login
+
+In native SwiftUI/Scripting list navigation, multiple navigation destinations embedded in one aggregate row can produce ambiguous/unintended navigation behavior.
+
+Do not patch the Back button. Fix the source navigation structure.
+
+## Required structure
+
+For ordinary navigation lists:
+- one semantic navigation destination per List row;
+- do not place multiple unrelated `NavigationLink`s inside one `VStack`, `HStack`, `GlassSurface`, or other single List row;
+- flatten Home `我的内容` so Library and Account/Login are independent rows;
+- inspect other recently grouped navigation sections (especially Home Discover and Library sections) for the same pattern and flatten only where the same ambiguity exists.
+
+Preserve the current visual hierarchy as much as possible. This is a navigation correctness fix, not another UI redesign.
+
+## Acceptance handed to user
+
+After the fix the user only needs to test:
+1. Home → Login/Account → Back returns directly to Home.
+2. Home → Library → Back returns directly to Home.
+
+---
+
+# Preserve
+
+- Preview fix at `8c0b40a...`.
+- Existing Cookie normalization / newest-draft / validate-before-overwrite behavior unless direct evidence shows a separate bug.
+- Existing Gallery/Reader/download/search features.
+- User-QA workflow.
+- Private repository and authenticated GitHub API workflow.
 
 # Final handoff
 
-After A+B+C:
+After A+B are implemented:
+- push to `feat/1.1-gallery-interaction`;
+- no new features;
+- no full regression campaign;
+- report only:
+  - **Fix:** Safari browser-script path/permission UX + navigation stack;
+  - **Commit:** SHA;
+  - **Checks:** diagnostics + any focused check;
+  - **Please test:** Cookie helper appears; Account Back goes directly Home.
 
-- push all commits to `feat/1.1-gallery-interaction`;
-- sync DEV once only if needed to deliver the code;
-- do not run a long final acceptance routine;
-- stop and report only:
-  - **Implemented:** Preview / Login / UI changes;
-  - **Commit(s):** SHA(s);
-  - **Checks:** diagnostics + focused checks actually run;
-  - **Please test:** no more than 3 device checks:
-    1. open a gallery with many previews and confirm thumbnails are distinct/correct;
-    2. perform Safari login → import/validate once;
-    3. quickly inspect Home / Account / Detail on iPad (and iPhone if available) for layout issues.
-
-Do not start the next feature milestone automatically.
+Stop after that and wait for user feedback.
