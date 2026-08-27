@@ -2,7 +2,7 @@ import { Script } from "scripting"
 
 const owner = "tudoutematou"
 const repo = "scripting-ehentai"
-const branch = "release/1.0"
+const branch = "feat/1.1-gallery-interaction"
 let sourceRef = branch
 const root = "src"
 const fileManager: any = (globalThis as any).FileManager
@@ -41,7 +41,7 @@ async function main() {
     if (parent) await fileManager.createDirectory(parent, true)
     await fileManager.writeAsString(destination, item.text)
   }
-  const manifest = { version: "1.0.0-rc", branch, commit, syncedAt: new Date().toISOString(), fileCount: snapshot.length }
+  const manifest = { version: "1.1.0-dev", branch, commit, syncedAt: new Date().toISOString(), fileCount: snapshot.length }
   await fileManager.writeAsString(join(scriptDirectory, "sync-manifest.json"), JSON.stringify(manifest, null, 2))
   console.log(JSON.stringify({ ...manifest, files: snapshot.map(item => item.relativePath) }, null, 2))
 }
