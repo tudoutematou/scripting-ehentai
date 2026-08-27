@@ -56,7 +56,7 @@ export type DetailExtractData = {
   pageLinks: PreviewPageLink[]
   isFavorited: boolean
   favoriteName: string
-  comments: Array<{ author: string; posted: string; text: string }>
+  comments: Array<{ id: number; author: string; posted: string; text: string; score: number; canEdit: boolean; canVoteUp: boolean; canVoteDown: boolean; voted: -1 | 0 | 1 }>
   torrentUrl: string
   archiveUrl: string
   relations: Array<{ label: string; url: string }>
