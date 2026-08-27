@@ -1,5 +1,6 @@
 import { Script } from "scripting"
 
+import "./dialogCompat"
 import { runAppV2 } from "./appV2"
 
 runAppV2()
