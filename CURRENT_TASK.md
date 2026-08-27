@@ -41,9 +41,13 @@ Implement the missing interaction layer in small vertical slices, in this order:
 - Normalize the download URL the same way EhViewer does by removing the private `?p=` suffix when present.
 - Keep “open externally” as a fallback; do not build a torrent client.
 
-### C. Rating feasibility
-- Investigate EhViewer `rategallery` behavior and document whether the current account model has the required `apiuid`/`apikey` material.
-- If credentials are not already available through a safe existing path, mark rating write as blocked/deferred rather than inventing credential storage or scraping secrets.
+### C. Gallery rating
+- Mirror EhViewer behavior at the existing network/parser boundary: parse `apiuid` / `apikey` from the current Gallery HTML and keep them only in transient in-memory Gallery detail state.
+- Never persist, print, report, sync, or include `apiuid` / `apikey` in fixtures, diagnostics, errors, or manifests.
+- Submit `rategallery` JSON to the active site's `/api.php` using the current E/Ex account/session path.
+- Accept only 0.5–5.0 ratings in 0.5 increments and encode the API rating as EhViewer does (`ceil(rating * 2)`).
+- Parse only `rating_avg` and `rating_cnt`; update the current Detail rating/count after success without forcing an unrelated full reload.
+- If the Gallery page reports an invalid/negative `apiuid` or missing `apikey`, treat rating as login-required and do not invent alternate credential storage.
 
 ## Preserve
 
@@ -59,7 +63,7 @@ Implement the missing interaction layer in small vertical slices, in this order:
 - Comments scene works from real Gallery Detail and does not duplicate network loading unnecessarily.
 - Torrent parser has one deterministic self-test fixture and invalid/empty input is safe.
 - Torrent scene loads through the existing authenticated `fetchHtml` path and external fallback remains available.
-- Rating feasibility is recorded in `DEV_PROGRESS.md` / parity map with concrete evidence.
+- Gallery rating parser/action has deterministic tests, does not persist/report API credentials, and updates rating/count from the API response.
 - Existing self tests and smoke checks stay green.
 
 ## Reporting
