@@ -18,9 +18,9 @@ Legend: ✅ usable | 🟡 partial | 🔴 missing | ⚪ platform/deferred | 🔵 
 | Detail | Core metadata | ✅ | Titles, cover, uploader, rating aggregate, metadata, tags | — |
 | Detail | Related galleries / uploader | ✅ | Native navigation | — |
 | Detail | Comments read | 🟡 | Parsed and rendered inline; no dedicated scene | 1 |
-| Detail | Comment post/edit | 🔴 | Not implemented | 2 |
-| Detail | Comment vote | 🔴 | Requires verified API credential path | 3 |
-| Detail | Gallery rating write | 🔴 | EhViewer uses `rategallery` API; credential feasibility not yet proven | 2 |
+| Detail | Comment post/edit | 🔴 | Cookie/form path exists in EhViewer reference but is not implemented here | 2 |
+| Detail | Comment vote | 🔴 | EhViewer uses gallery-page `apiuid` / `apikey`; implement only after rating path proves safe | 3 |
+| Detail | Gallery rating write | 🟡 | Feasible: EhViewer extracts `apiuid` / `apikey` from current Gallery HTML and calls site `/api.php`; Scripting parser does not yet expose them | 1 |
 | Detail | Torrent list | 🟡 | Popup URL only; no internal list | 1 |
 | Detail | Archive options | 🟡 | External archive URL only | 3 |
 | Favorites | Cloud favorites | ✅ | 0–9 categories, note, add/change/remove with verification | — |
@@ -47,12 +47,16 @@ Legend: ✅ usable | 🟡 partial | 🔴 missing | ⚪ platform/deferred | 🔵 
 
 ## Delivery order
 
-1. **1.1 Gallery Interaction** — dedicated comments scene, internal torrent list, rating credential feasibility.
+1. **1.1 Gallery Interaction** — dedicated comments scene, internal torrent list, gallery rating write with ephemeral Gallery credentials.
 2. **1.2 Reader Parity** — reading direction, tap zones, immersive controls, navigation/fallback/preload improvements.
 3. **1.3 Download Manager** — queue/state UX, progress visibility, retry/detail management, platform-background feasibility.
 4. **1.4 Library Integration** — expose favorite/history/progress/download state coherently around the same gallery.
 5. **1.5 Discovery & Tags** — polish existing Watched/Toplist/My Tags/saved-search flows rather than rebuild them.
 6. **1.6 Settings / Power User** — only controls backed by real implemented behavior.
+
+## Rating credential rule
+
+EhViewer's `GalleryDetailParser` reads `apiuid` and `apikey` from the current Gallery page JavaScript and uses them for `rategallery`. The Scripting implementation may mirror that behavior only as transient in-memory Gallery data. Never persist, print, report, or include either value in diagnostics, sync manifests, errors, or repository fixtures.
 
 ## Reference rule
 
