@@ -2,11 +2,11 @@ import { Script } from "scripting"
 
 const owner = "tudoutematou"
 const repo = "scripting-ehentai"
-const ref = "release/1.0"
+const ref = "feat/1.1-gallery-interaction"
 
 async function main() {
   const files = await Promise.all(
-    ["AGENTS.md", "CURRENT_TASK.md", "STABILIZATION_AUDIT.md", "DEV_PROGRESS.md"].map(path => GitHub.getTextContent({ owner, repo, path, ref })),
+    ["AGENTS.md", "CURRENT_TASK.md", "STABILIZATION_AUDIT.md", "DEV_PROGRESS.md", "EHVIEWER_PARITY.md"].map(path => GitHub.getTextContent({ owner, repo, path, ref })),
   )
   console.log(JSON.stringify({
     ref,
