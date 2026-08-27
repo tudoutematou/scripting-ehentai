@@ -5,71 +5,90 @@ Base: `main` at `f74c4578993e8ed4e7f7481393df998449ea0660`
 
 ## Repository role
 
-- `main` is now the authoritative long-term development baseline.
-- `release/1.0` is retained as the 1.0 release snapshot and must not receive new feature work.
-- New work branches from `main` and returns to `main` through focused PRs.
+- `main` is the authoritative long-term development baseline.
+- `release/1.0` is a historical 1.0 snapshot; do not develop on it.
+- Active work is on the branch above and returns to `main` only when the user explicitly approves integration.
+
+## Working contract
+
+The Agent implements code. The user performs real-device QA.
+
+For every feature/fix:
+1. inspect the current Scripting code and trace the affected flow;
+2. inspect only the narrow EhViewer behavior needed for parity when relevant;
+3. implement the smallest complete flow/root-cause fix;
+4. run TypeScript diagnostics;
+5. run one focused deterministic check for new non-trivial logic when useful;
+6. commit/push;
+7. give the user a short 1–3 step real-device test;
+8. stop and wait for the user's result.
+
+Do not run a broad acceptance campaign, full regression ritual, repeated bootstrap, or long simulated walkthrough unless the user explicitly asks.
+
+A feature that depends on real Scripting/device/account/network behavior is reported as **Implemented · needs user test**, not “accepted” or “runtime verified”.
+
+If the user reports a bug, that report overrides assumptions from passing tests. Fix the root cause, run only the focused check needed for the change, commit, and return it for another quick user test.
 
 ## Product direction
 
-Use `xiaojieonly/Ehviewer_CN_SXJ` as the primary behavioral reference for missing E-Hentai client capabilities.
+Use `xiaojieonly/Ehviewer_CN_SXJ` as the behavioral reference for missing E-Hentai client capabilities. Do not translate its Android architecture into Scripting.
 
-Do not translate Android/Java architecture into Scripting. For each capability:
-1. inspect the current Scripting implementation first;
-2. inspect the narrow EhViewer scene/engine/parser path that defines behavior;
-3. write the smallest behavior contract;
-4. reuse the existing account/network/parser/store/UI paths;
-5. add one focused deterministic regression check for non-trivial parser/action logic;
-6. verify in the isolated `E-Hentai 浏览器 DEV` script before declaring runtime acceptance.
+Reuse the existing account/network/parser/store/UI paths. Do not create speculative frameworks or duplicate working functionality.
 
-`EHVIEWER_PARITY.md` is the feature map and priority source. It is not permission to implement later milestones automatically.
+`EHVIEWER_PARITY.md` tracks product gaps and priorities. It does not authorize starting a later milestone automatically.
 
 ## 1.1 scope — Gallery Interaction
 
-The existing 1.0 Detail already reads comments, shows aggregate rating, exposes torrent/archive URLs, manages favorites/bookmarks, and starts downloads. Do not rebuild those paths.
+### A. Comments experience — Implemented
+- Dedicated native comments scene from Gallery Detail.
+- Detail keeps compact comment preview/entry instead of an unbounded full list.
+- Existing author/date/text sanitization is preserved.
 
-Implement the missing interaction layer in small vertical slices, in this order:
+### B. Torrent list — Implemented
+- Internal torrent list when `torrentUrl` exists.
+- Stable fields only: name, posted date, download URL.
+- Private `?p=` suffix removed as EhViewer does.
+- External opening remains fallback; no torrent client is built.
 
-### A. Comments experience
-- Give existing parsed comments a dedicated native comments scene reachable from Gallery Detail.
-- Keep a compact comment preview/count in Detail instead of rendering an unbounded full comment list there.
-- Preserve author/date/text and existing sanitization; do not log comment text.
-- Do not add comment posting/editing/voting in this slice unless the existing cookie/form path is verified end-to-end first.
+### C. Gallery rating — Implemented
+- `apiuid` / `apikey` are parsed from the current Gallery HTML into transient in-memory detail state only.
+- They must never be persisted, printed, reported, synced, added to fixtures, or exposed in errors.
+- `rategallery` is submitted to the active site's `/api.php` with the existing account/session path.
+- Rating input is 0.5–5.0 in 0.5 steps; API encoding is `Math.ceil(rating * 2)`.
+- Only `rating_avg` / `rating_cnt` are consumed and the current Detail state is updated locally.
+- Invalid/negative identity data is login-required; do not invent alternate credential storage.
 
-### B. Torrent list
-- Replace the current torrent-popup-only experience with an internal list when `torrentUrl` exists.
-- Parse only stable fields needed by the UI: torrent name, posted date, download URL.
-- Normalize the download URL the same way EhViewer does by removing the private `?p=` suffix when present.
-- Keep “open externally” as a fallback; do not build a torrent client.
+## Current status
 
-### C. Gallery rating
-- Mirror EhViewer behavior at the existing network/parser boundary: parse `apiuid` / `apikey` from the current Gallery HTML and keep them only in transient in-memory Gallery detail state.
-- Never persist, print, report, sync, or include `apiuid` / `apikey` in fixtures, diagnostics, errors, or manifests.
-- Submit `rategallery` JSON to the active site's `/api.php` using the current E/Ex account/session path.
-- Accept only 0.5–5.0 ratings in 0.5 increments and encode the API rating as EhViewer does (`ceil(rating * 2)`).
-- Parse only `rating_avg` and `rating_cnt`; update the current Detail rating/count after success without forcing an unrelated full reload.
-- If the Gallery page reports an invalid/negative `apiuid` or missing `apikey`, treat rating as login-required and do not invent alternate credential storage.
+All three 1.1 slices are **implemented in code**. Do not spend agent/model quota trying to certify real-device behavior.
+
+The user may now test whichever behavior matters to them. Any reported failure becomes the next bug-fix task on this same branch unless the user says otherwise.
+
+Do not enter 1.2 Reader Parity until the user explicitly authorizes it.
 
 ## Preserve
 
-- Detail Core-first loading and preview background loading.
+- Detail Core-first and background preview loading.
 - Existing E/Ex routing and Cookie/Keychain safety.
-- Current 760pt centered iPad landscape Detail width, vertical metadata label/value layout, and adaptive tag grid.
-- Existing Reader/download/library core behavior.
-- Stable local `E-Hentai 浏览器`; runtime work uses only `E-Hentai 浏览器 DEV`.
-- No broad parser/network/store rewrite and no speculative abstractions.
+- Current accepted iPad Detail width/layout behavior.
+- Existing Reader/download/library core behavior unless a user-reported bug requires touching it.
+- Stable local `E-Hentai 浏览器` unless the user explicitly asks to replace/update it.
+- No broad parser/network/store rewrite.
 
-## Acceptance for this branch
+## Default checks
 
-- Comments scene works from real Gallery Detail and does not duplicate network loading unnecessarily.
-- Torrent parser has one deterministic self-test fixture and invalid/empty input is safe.
-- Torrent scene loads through the existing authenticated `fetchHtml` path and external fallback remains available.
-- Gallery rating parser/action has deterministic tests, does not persist/report API credentials, and updates rating/count from the API response.
-- Existing self tests and smoke checks stay green.
+For a normal implementation or bug fix:
+- TypeScript diagnostics.
+- One focused check for newly changed non-trivial logic.
+
+Do not automatically run the whole self-test/smoke/network/release suite.
 
 ## Reporting
 
-Report only:
-1. completed vertical slice;
-2. focused verification result;
-3. runtime evidence still needed;
-4. next authorized slice.
+Return only:
+- **Implemented/Fix:** what changed.
+- **Commit:** SHA.
+- **Checks:** diagnostics + focused checks actually run.
+- **Please test:** at most 1–3 concrete device actions if runtime confirmation is needed.
+
+No long acceptance report unless the user asks.
