@@ -1,4 +1,4 @@
-import { UIImage } from "scripting"
+import { FormData, UIImage } from "scripting"
 import { GallerySummary, PageExtractData, SearchExtractData } from "./extractors"
 import { GalleryPageLink, buildSearchUrl, dedupeAndSortPageLinks, normalizePageLinks, withPreviewPage } from "./pure"
 import { parseSearchHtml } from "./searchHtml"
@@ -48,6 +48,8 @@ export async function postForm(url: string, fields: Record<string, string>, stag
   return { html, finalUrl, response }
 }
 
+export function imageSearchEndpoint(baseUrl=getBaseUrl()){const host=new URL(baseUrl).hostname;return host==="exhentai.org"?"https://upld.exhentai.org/upld/image_lookup.php":"https://upld.e-hentai.org/image_lookup.php"}
+export async function imageSearch(image:UIImage,options:{similar?:boolean;coversOnly?:boolean;showExpunged?:boolean}={}):Promise<SearchPage>{const data=Data.fromJPEG(image,.9);if(!data)throw new Error("无法读取所选图片。");const endpoint=imageSearchEndpoint(),form=new FormData();form.append("sfile",data,"image/jpeg","search.jpg");if(options.similar)form.append("fs_similar","on");if(options.coversOnly)form.append("fs_covers","on");if(options.showExpunged)form.append("fs_exp","on");form.append("f_sfile","File Search");const cookie=getCookieHeader(endpoint);let response:Response;try{response=await fetch(endpoint,{method:"POST",headers:{Referer:`${getBaseUrl().replace(/\/$/,"")}/`,Origin:new URL(getBaseUrl()).origin,...(cookie?{Cookie:cookie}:{})},body:form,signal:AbortSignal.timeout(HTML_REQUEST_TIMEOUT_MS)})}catch(error){throw stageError("image-search.fetch",error)}const html=await response.text(),finalUrl=String(response.url||endpoint);if(!response.ok)throw httpError(`图片搜索失败：HTTP ${response.status}`,response,finalUrl);const page=parseSearchHtml(html,finalUrl);if(page.error)throw new Error(page.error);return{...page,url:finalUrl}}
 export async function searchGalleries(keyword: string, directUrl?: string): Promise<SearchPage> {
   const url = directUrl || buildSearchUrl(keyword, getBaseUrl()); const { html, finalUrl, response } = await fetchHtml(url, "search")
   let page: SearchExtractData; try { page = parseSearchHtml(html, finalUrl) } catch (error) { throw stageError("search.parseSearchHtml", error) }
