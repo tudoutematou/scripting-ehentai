@@ -1,3 +1,7 @@
+# ARCHIVED — DO NOT EXECUTE AS CURRENT TASK
+
+This is a historical 1.0 release record. It is **not** part of the normal development read order and must not trigger acceptance, regression, bootstrap, or real-device verification work. Only read/use it when the user explicitly asks about the 1.0 release history.
+
 # RELEASE_CHECKLIST — 1.0
 
 ## Release surface
@@ -32,7 +36,7 @@
 - [x] Recommendation recorded: rewrite history before broader distribution; until then keep history private and distribute only the clean release tree/archive.
 - [x] No force-push/history rewrite was performed.
 
-## Final promotion — intentionally blocked until explicit instruction
+## Final promotion — historical
 - [ ] User explicitly approves final 1.0 promotion.
 - [ ] PR merge/integration strategy executed only after approval.
 - [ ] Stable local `E-Hentai 浏览器` updated only after approval.
