@@ -1,4 +1,5 @@
-const E_BASE="https://e-hentai.org/",EX_BASE="https://exhentai.org/",LOGIN_URL="https://forums.e-hentai.org/index.php?act=Login",COOKIE_KEY="ehentai.account.cookies.v1",SITE_KEY="ehentai.account.site.v1",IMPORT_DIRECTORY="ehentai-cookie-import",IMPORT_FILE="cookies.json"
+const E_BASE="https://e-hentai.org/",EX_BASE="https://exhentai.org/",LOGIN_URL="https://e-hentai.org/bounce_login.php?b=d&bt=1-1",COOKIE_KEY="ehentai.account.cookies.v1",SITE_KEY="ehentai.account.site.v1",IMPORT_DIRECTORY="ehentai-cookie-import",IMPORT_FILE="cookies.json"
+export const SAFARI_LOGIN_URL=LOGIN_URL
 const AUTH_COOKIE_NAMES=new Set(["ipb_member_id","ipb_pass_hash","ipb_session_id","igneous"])
 const fileManager:any=(globalThis as any).FileManager
 export type GallerySite="e"|"ex"
@@ -31,5 +32,5 @@ export function importCookiesFromText(value:string){const cookies=parseCookieTex
 export function browserCookiePaths(manager=fileManager){const roots=[manager?.safariBrowserDirectory,manager?.appGroupDocumentsDirectory,manager?.documentsDirectory,manager?.safariBrowserStorageDirectory].map(value=>String(value||"").trim()).filter(Boolean);return[...new Set(roots)].map(root=>`${root}/${IMPORT_DIRECTORY}/${IMPORT_FILE}`)}
 export async function importBrowserCookieDraft(manager=fileManager){for(const path of browserCookiePaths(manager)){try{if(!await manager.exists(path))continue;const payload=JSON.parse(String(await manager.readAsString(path)||"{}"));const cookies=sanitizeCookies(payload?.cookies||[]);if(hasAuth(cookies))return JSON.stringify(cookies)}catch{}}throw new Error("未找到有效浏览器 Cookie。请先在 Safari 登录后点击“🍪 已登录 · 获取 Cookie”。")}
 export async function saveAndValidateCookieDraft(draft:string,api=keychain()){const cookies=parseCookieText(draft);saveCookies(cookies,api);if(!hasAuth(loadCookies(api)))throw new Error("Keychain 写入后校验失败。");setActiveSite("e",api);return refreshAccountStatus()}
-export async function openSafariLogin(){const opened=await Safari.openURL(LOGIN_URL);if(!opened)throw new Error("无法打开系统浏览器。请手动用 Safari 打开 E-Hentai 登录页。")}
+export async function openSafariLogin(){const opened=await Safari.openURL(SAFARI_LOGIN_URL);if(!opened)throw new Error("无法打开系统浏览器。请手动用 Safari 打开 E-Hentai 登录页。")}
 export async function signOut(input=dependencies()){const failed:string[]=[];for(const key of[COOKIE_KEY,SITE_KEY])try{if(input.keychain.remove(key)===false)failed.push(key)}catch{failed.push(key)}if(failed.length)throw new Error("退出登录时部分 Keychain 凭据未能清理，请重试。");invalidate()}
