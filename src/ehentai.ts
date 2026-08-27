@@ -2,7 +2,7 @@ import { UIImage } from "scripting"
 import { GallerySummary, PageExtractData, SearchExtractData } from "./extractors"
 import { GalleryPageLink, buildSearchUrl, dedupeAndSortPageLinks, normalizePageLinks, withPreviewPage } from "./pure"
 import { parseSearchHtml } from "./searchHtml"
-import { parseDetailHtml, parsePreviewPageHtml, parseTorrentListHtml, buildGalleryRatingRequest, parseRatingResponse, type RatingResult } from "./detailHtml"
+import { parseDetailHtml, parsePreviewPageHtml, parseTorrentListHtml, buildGalleryRatingRequest, parseRatingResponse, type RatingResult, type TorrentItem } from "./detailHtml"
 import { parseImagePageHtml } from "./pageHtml"
 import { reportDiagnostic } from "./githubBridge"
 import { getBaseUrl, getCookieHeader } from "./account"
@@ -16,7 +16,8 @@ export type ResolvedImagePage = PageExtractData & { pageUrl: string }
 const MAX_PREVIEW_LIST_PAGES = 50
 const detailCoreCache = new Map<string, GalleryDetail>()
 const previewPageCache = new Map<string, GalleryPageLink[]>()
-export function invalidateGalleryCaches(){detailCoreCache.clear();previewPageCache.clear()}
+const imagePageCache = new Map<string, Promise<ResolvedImagePage>>()
+export function invalidateGalleryCaches(){detailCoreCache.clear();previewPageCache.clear();imagePageCache.clear()}
 ;(globalThis as any).__ehentaiInvalidateGalleryCaches=invalidateGalleryCaches
 
 function httpError(message: string, response: any, url: string): Error {
@@ -89,8 +90,10 @@ export function hasCompletePreviewInventory(detail: Pick<GalleryDetail, "pageLin
 export function assertCompletePreviewInventory(detail: Pick<GalleryDetail, "pageLinks" | "failedPreviewPages" | "truncatedPreviewPages">): void { if (!hasCompletePreviewInventory(detail)) throw new Error("页面库存不完整，请重试预览加载后再下载。") }
 export async function loadGalleryDetail(url: string): Promise<GalleryDetail> { const core = await loadGalleryDetailCore(url); return applyPreviewLoadResult(core, await loadRemainingPreviewPages(core)) }
 
-export async function resolveImagePage(pageUrl: string): Promise<ResolvedImagePage> {
-  try { const { html, finalUrl, response } = await fetchHtml(pageUrl, "image-page"); let parsed: PageExtractData; try { parsed = parseImagePageHtml(html, finalUrl) } catch (error) { throw stageError("image-page.parse", error) }; if (parsed.error) throw httpError(parsed.error, response, finalUrl); const resolved = { ...parsed, pageUrl: finalUrl }; await reportSafely({ stage: "gallery-image-page", ok: true, request: { url: finalUrl, status: Number(response?.status || 0), statusText: String(response?.statusText || "") }, notes: `imageUrl=${resolved.imageUrl ? "yes" : "no"}; originalUrl=${resolved.originalUrl ? "yes" : "no"}` }); return resolved } catch (error) { const value = error as any; await reportSafely({ stage: "gallery-image-page", ok: false, error, request: { url: String(value?.url || pageUrl), status: Number(value?.status || 0), statusText: String(value?.statusText || "") } }); throw error }
+async function resolveImagePageFresh(pageUrl:string):Promise<ResolvedImagePage>{try { const { html, finalUrl, response } = await fetchHtml(pageUrl, "image-page"); let parsed: PageExtractData; try { parsed = parseImagePageHtml(html, finalUrl) } catch (error) { throw stageError("image-page.parse", error) }; if (parsed.error) throw httpError(parsed.error, response, finalUrl); const resolved = { ...parsed, pageUrl: finalUrl }; await reportSafely({ stage: "gallery-image-page", ok: true, request: { url: finalUrl, status: Number(response?.status || 0), statusText: String(response?.statusText || "") }, notes: `imageUrl=${resolved.imageUrl ? "yes" : "no"}; originalUrl=${resolved.originalUrl ? "yes" : "no"}` }); return resolved } catch (error) { const value = error as any; await reportSafely({ stage: "gallery-image-page", ok: false, error, request: { url: String(value?.url || pageUrl), status: Number(value?.status || 0), statusText: String(value?.statusText || "") } }); throw error }}
+export function resolveImagePage(pageUrl: string, refresh=false): Promise<ResolvedImagePage> {
+  if(refresh)imagePageCache.delete(pageUrl);const existing=imagePageCache.get(pageUrl);if(existing)return existing
+  const task=resolveImagePageFresh(pageUrl).catch(error=>{imagePageCache.delete(pageUrl);throw error});imagePageCache.set(pageUrl,task);return task
 }
 
 export async function loadTorrentList(torrentUrl:string,sourceUrl:string):Promise<TorrentItem[]>{let target:URL;let source:URL;try{target=new URL(torrentUrl);source=new URL(sourceUrl)}catch{throw new Error("种子入口无效。")}if(target.protocol!=="https:"||target.hostname!==source.hostname||!/(?:^|\.)e-hentai\.org$|(?:^|\.)exhentai\.org$/i.test(target.hostname))throw new Error("种子入口无效。");const result=await fetchHtml(target.toString(),"torrent-list",source.toString());return parseTorrentListHtml(result.html,result.finalUrl)}
