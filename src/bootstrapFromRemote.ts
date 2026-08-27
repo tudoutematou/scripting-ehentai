@@ -33,7 +33,7 @@ async function main() {
   const files = await list()
   const snapshot = await Promise.all(files.map(async relativePath => ({
     relativePath,
-    text: String((await GitHub.getTextContent({ owner, repo, path: join(root, relativePath), ref: branch })).text || ""),
+    text: String((await GitHub.getTextContent({ owner, repo, path: join(root, relativePath), ref: sourceRef })).text || ""),
   })))
   for (const item of snapshot) {
     const destination = join(scriptDirectory, item.relativePath)
