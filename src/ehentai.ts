@@ -2,7 +2,7 @@ import { UIImage } from "scripting"
 import { GallerySummary, PageExtractData, SearchExtractData } from "./extractors"
 import { GalleryPageLink, buildSearchUrl, dedupeAndSortPageLinks, normalizePageLinks, withPreviewPage } from "./pure"
 import { parseSearchHtml } from "./searchHtml"
-import { parseDetailHtml, parsePreviewPageHtml, parseTorrentListHtml, type TorrentItem } from "./detailHtml"
+import { parseDetailHtml, parsePreviewPageHtml, parseTorrentListHtml, buildGalleryRatingRequest, parseRatingResponse, type RatingResult } from "./detailHtml"
 import { parseImagePageHtml } from "./pageHtml"
 import { reportDiagnostic } from "./githubBridge"
 import { getBaseUrl, getCookieHeader } from "./account"
@@ -23,7 +23,7 @@ function httpError(message: string, response: any, url: string): Error {
   const error = new Error(message) as Error & { status?: number; statusText?: string; url?: string }
   error.status = Number(response?.status || 0); error.statusText = String(response?.statusText || ""); error.url = String(response?.url || url); return error
 }
-export function userSafeError(error:unknown,fallback="操作未完成，请稍后重试。"){const message=String((error as any)?.message||error||"");return /https?:|cookie|ipb_|\/var\/|\/private\/|token/i.test(message)?fallback:message||fallback}
+export function userSafeError(error:unknown,fallback="操作未完成，请稍后重试。"){const message=String((error as any)?.message||error||"");return /https?:|cookie|ipb_|apiuid|apikey|\/var\/|\/private\/|token/i.test(message)?fallback:message||fallback}
 function stageError(stage: string, error: unknown): Error { const value = error as any; const wrapped = new Error(`[${stage}] ${userSafeError(value?.message || error)}`); wrapped.name = String(value?.name || "Error"); return wrapped }
 async function reportSafely(input: Parameters<typeof reportDiagnostic>[0]) { try { await reportDiagnostic(input) } catch {} }
 const HTML_REQUEST_TIMEOUT_MS = 20_000
@@ -94,6 +94,8 @@ export async function resolveImagePage(pageUrl: string): Promise<ResolvedImagePa
 }
 
 export async function loadTorrentList(torrentUrl:string,sourceUrl:string):Promise<TorrentItem[]>{let target:URL;let source:URL;try{target=new URL(torrentUrl);source=new URL(sourceUrl)}catch{throw new Error("种子入口无效。")}if(target.protocol!=="https:"||target.hostname!==source.hostname||!/(?:^|\.)e-hentai\.org$|(?:^|\.)exhentai\.org$/i.test(target.hostname))throw new Error("种子入口无效。");const result=await fetchHtml(target.toString(),"torrent-list",source.toString());return parseTorrentListHtml(result.html,result.finalUrl)}
+
+export async function submitGalleryRating(detail:Pick<GalleryDetail,"sourceUrl"|"ratingCredentials">,rating:number):Promise<RatingResult>{const credentials=detail.ratingCredentials;if(!credentials)throw new Error("评分需要登录。请先在 Safari 导入并验证账户。");const payload=buildGalleryRatingRequest(credentials,rating);let source:URL;try{source=new URL(detail.sourceUrl)}catch{throw new Error("评分入口无效。")}if(source.protocol!=="https:"||!/(?:^|\.)e-hentai\.org$|(?:^|\.)exhentai\.org$/i.test(source.hostname))throw new Error("评分入口无效。");const endpoint=new URL("/api.php",source).toString();const cookie=getCookieHeader(endpoint);let response:Response;try{response=await fetch(endpoint,{method:"POST",headers:{"Content-Type":"application/json",Accept:"application/json",Referer:source.toString(),...(cookie?{Cookie:cookie}:{})},body:JSON.stringify(payload),signal:AbortSignal.timeout(HTML_REQUEST_TIMEOUT_MS)})}catch(error){throw stageError("gallery-rating.fetch",error)}const status=Number(response?.status||0),statusText=String(response?.statusText||"");let raw="";try{raw=await response.text()}catch(error){throw stageError("gallery-rating.response.text",error)}if(!response.ok)throw httpError(`E-Hentai 请求失败：HTTP ${status}${statusText?` ${statusText}`:""}`,response,endpoint);return parseRatingResponse(raw)}
 
 export type MyTag={name:string;searchUrl:string}
 export type AccountOverview={imageLimitCurrent:string;imageLimitMax:string;resetCost:string;values:Array<{label:string;value:string}>}
