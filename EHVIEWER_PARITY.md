@@ -4,7 +4,9 @@ Reference: `xiaojieonly/Ehviewer_CN_SXJ`
 Target: Scripting iOS/iPadOS client  
 Baseline: `main` after 1.0 promotion
 
-Legend: ✅ usable | 🟡 partial | 🔴 missing | ⚪ platform/deferred | 🔵 intentionally not copied
+This map tracks **code capability**, not real-device certification. A ✅ means the capability is implemented in the codebase; if behavior depends on Scripting/device/account/network state, the user may still test it on the real device and report bugs.
+
+Legend: ✅ implemented | 🟡 partial | 🔴 missing | ⚪ platform/deferred | 🔵 intentionally not copied
 
 | Area | Capability | Status | Current Scripting state | Priority |
 |---|---|---:|---|---:|
@@ -17,11 +19,11 @@ Legend: ✅ usable | 🟡 partial | 🔴 missing | ⚪ platform/deferred | 🔵 
 | Account | Account overview | 🟡 | Image limit/basic values only | 4 |
 | Detail | Core metadata | ✅ | Titles, cover, uploader, rating aggregate, metadata, tags | — |
 | Detail | Related galleries / uploader | ✅ | Native navigation | — |
-| Detail | Comments read | 🟡 | Parsed and rendered inline; no dedicated scene | 1 |
-| Detail | Comment post/edit | 🔴 | Cookie/form path exists in EhViewer reference but is not implemented here | 2 |
-| Detail | Comment vote | 🔴 | EhViewer uses gallery-page `apiuid` / `apikey`; implement only after rating path proves safe | 3 |
-| Detail | Gallery rating write | 🟡 | Feasible: EhViewer extracts `apiuid` / `apikey` from current Gallery HTML and calls site `/api.php`; Scripting parser does not yet expose them | 1 |
-| Detail | Torrent list | 🟡 | Popup URL only; no internal list | 1 |
+| Detail | Comments read | ✅ | Dedicated comments scene + compact Detail entry | — |
+| Detail | Comment post/edit | 🔴 | Not implemented | 2 |
+| Detail | Comment vote | 🔴 | Not implemented; may reuse the proven transient Gallery credential path later | 3 |
+| Detail | Gallery rating write | ✅ | `rategallery` via transient in-memory Gallery credentials; no persistence | — |
+| Detail | Torrent list | ✅ | Internal list + normalized URL + external fallback | — |
 | Detail | Archive options | 🟡 | External archive URL only | 3 |
 | Favorites | Cloud favorites | ✅ | 0–9 categories, note, add/change/remove with verification | — |
 | Library | Local bookmarks | ✅ | Local add/remove/list | — |
@@ -39,7 +41,7 @@ Legend: ✅ usable | 🟡 partial | 🔴 missing | ⚪ platform/deferred | 🔵 
 | Reader | Zoom gestures | ⚪ | Depends on current Scripting native image/gesture support | 3 |
 | Download | Offline gallery download | ✅ | Create/run/pause/resume/retry/delete | — |
 | Download | Queue / concurrency manager UX | 🟡 | Core exists; UI/state model is basic and foreground-bound | 2 |
-| Download | Background downloading | ⚪ | Platform capability must be verified; do not fake it | — |
+| Download | Background downloading | ⚪ | Platform capability must be verified before implementation; do not fake it | — |
 | Download | Integrity / recovery | ✅ | Atomic writes + reconcile checks | — |
 | Cache | Image cache | ✅ | Disk cache + clear/reconciliation support | — |
 | Settings | Reader preferences | 🟡 | Layout, original preference, preload count | 3 |
@@ -47,16 +49,18 @@ Legend: ✅ usable | 🟡 partial | 🔴 missing | ⚪ platform/deferred | 🔵 
 
 ## Delivery order
 
-1. **1.1 Gallery Interaction** — dedicated comments scene, internal torrent list, gallery rating write with ephemeral Gallery credentials.
+1. **1.1 Gallery Interaction** — implemented in code; user reports any real-device bugs directly.
 2. **1.2 Reader Parity** — reading direction, tap zones, immersive controls, navigation/fallback/preload improvements.
 3. **1.3 Download Manager** — queue/state UX, progress visibility, retry/detail management, platform-background feasibility.
 4. **1.4 Library Integration** — expose favorite/history/progress/download state coherently around the same gallery.
 5. **1.5 Discovery & Tags** — polish existing Watched/Toplist/My Tags/saved-search flows rather than rebuild them.
 6. **1.6 Settings / Power User** — only controls backed by real implemented behavior.
 
+Do not automatically start the next numbered milestone. The user authorizes the next milestone.
+
 ## Rating credential rule
 
-EhViewer's `GalleryDetailParser` reads `apiuid` and `apikey` from the current Gallery page JavaScript and uses them for `rategallery`. The Scripting implementation may mirror that behavior only as transient in-memory Gallery data. Never persist, print, report, or include either value in diagnostics, sync manifests, errors, or repository fixtures.
+EhViewer's `GalleryDetailParser` reads `apiuid` and `apikey` from the current Gallery page JavaScript and uses them for `rategallery`. The Scripting implementation mirrors that behavior only as transient in-memory Gallery data. Never persist, print, report, or include either value in diagnostics, sync manifests, errors, or repository fixtures.
 
 ## Reference rule
 
