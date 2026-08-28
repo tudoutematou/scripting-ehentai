@@ -1,43 +1,70 @@
+// Portions adapted from Zerolost/SEhViewer browser.tsx under the MIT License.
+// Copyright (c) 2024 Gandum2077 (JSEhViewer)
+// Copyright (c) 2026 Zerolost (SEhViewer modifications)
+// Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions: The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 // ==UserScript==
-// @name E-Hentai Cookie 助手
+// @name E-Hentai 浏览器 Cookie 助手
 // @namespace scripting-ehentai
-// @version 1.0.3-injection
-// @description 在 E-Hentai / ExHentai 页面显式获取登录 Cookie，供 E-Hentai 浏览器 DEV 导入。
+// @version 1.1.0-sehviewer
+// @description 在 E-Hentai / ExHentai 页面一键获取登录 Cookie，供 E-Hentai 浏览器导入。
 // @match https://e-hentai.org/*
 // @match https://*.e-hentai.org/*
 // @match https://exhentai.org/*
 // @match https://*.exhentai.org/*
-// @connect e-hentai.org
-// @connect exhentai.org
-// @grant GM.cookie
-// @grant GM.log
-// @grant GM.registerMenuCommand
-// @grant Scripting.FileManager
-// @run-at document-idle
+// @run-at document-start
 // @inject-into content
 // @noframes
+// @weight 900
+// @grant Scripting.FileManager
+// @grant GM.getValue
+// @grant GM.setValue
+// @grant GM.cookie
+// @grant GM.registerMenuCommand
+// @connect e-hentai.org
+// @connect *.e-hentai.org
+// @connect exhentai.org
+// @connect *.exhentai.org
 // ==/UserScript==
 
-export const COOKIE_HELPER_VERSION="1.0.3-injection"
-export const COOKIE_HELPER_MODE="explicit-acquisition"
+export const COOKIE_HELPER_VERSION="1.1.0-sehviewer"
+export const COOKIE_HELPER_MODE="sehviewer-cookie-text"
 export const COOKIE_HELPER_LOGIN_URL="https://e-hentai.org/bounce_login.php?b=d&bt=1-1"
-const REQUIRED = new Set(["ipb_member_id", "ipb_pass_hash"])
-const WANTED = new Set(["ipb_member_id", "ipb_pass_hash", "ipb_session_id", "igneous"])
-const URLS = ["https://e-hentai.org/", "https://exhentai.org/"]
-const DIRECTORY = "ehentai-cookie-import"
-const FILE = "cookies.json"
+export const COOKIE_IMPORT_FILE="ehviewer_cookie.txt"
+export const COOKIE_IMPORT_GM_KEY="ehviewer_cookie"
 
-type Root = { type: string; path: string }
-function roots(): Root[] { const fm:any=Scripting.FileManager; const all=[{type:"safariBrowserDirectory",path:String(fm.safariBrowserDirectory||"")},{type:"appGroupDocumentsDirectory",path:String(fm.appGroupDocumentsDirectory||"")},{type:"documentsDirectory",path:String(fm.documentsDirectory||"")},{type:"safariBrowserStorageDirectory",path:String(fm.safariBrowserStorageDirectory||"")}]; const seen=new Set<string>(); return all.filter(root=>root.path&& !seen.has(root.path)&&Boolean(seen.add(root.path))) }
-function expiry(raw:any){const value=raw?.expirationDate??raw?.expiresDate??null;if(value==null||value==="")return null;const numeric=typeof value==="number"?value:Number(value),date=Number.isFinite(numeric)?new Date(numeric<1e12?numeric*1000:numeric):new Date(value);return Number.isNaN(date.getTime())?null:date.toISOString()}
-function normalize(raw:any, fallback:string){return {name:String(raw?.name||""),value:String(raw?.value||""),domain:String(raw?.domain||fallback),path:String(raw?.path||"/"),hostOnly:Boolean(raw?.hostOnly),secure:Boolean(raw?.secure??raw?.isSecure),httpOnly:Boolean(raw?.httpOnly??raw?.isHTTPOnly),session:Boolean(raw?.session??raw?.isSessionOnly),expirationDate:expiry(raw)}}
-function valid(cookies:any[]){const now=Date.now(),names=new Set(cookies.filter(cookie=>!cookie.expirationDate||Date.parse(cookie.expirationDate)>now).map(cookie=>cookie.name));return [...REQUIRED].every(name=>names.has(name))}
-async function readCookies(){const found=new Map<string,any>();for(const url of URLS){try{for(const raw of await GM.cookie.list({url})){const cookie=normalize(raw,new URL(url).hostname);if(WANTED.has(cookie.name)&&cookie.value)found.set(`${cookie.name}|${cookie.domain}|${cookie.path}`,cookie)}}catch(error){GM.log("E-Hentai Cookie 助手读取失败",String(error))}}return [...found.values()]}
-export async function probeWritableCookieRoots(fileManager:any,candidates:Root[]){const verified:Root[]=[];for(const root of candidates){const dir=`${root.path}/${DIRECTORY}`,path=`${dir}/.probe-${Date.now()}-${Math.random().toString(36).slice(2)}`;try{await fileManager.createDirectory(dir,true);await fileManager.writeAsString(path,"ok");if(!await fileManager.exists(path))throw new Error("write missing");if(String(await fileManager.readAsString(path))!=="ok")throw new Error("readback mismatch");await fileManager.remove(path);verified.push(root)}catch(error){try{GM.log(`Cookie shared path unavailable: ${root.type}`,String(error))}catch{}}}return verified}
-async function writeCookies(cookies:any[]){const payload=JSON.stringify({time:new Date().toISOString(),source:location.hostname,cookies});const writable=await probeWritableCookieRoots(Scripting.FileManager,roots());const written:string[]=[];for(const root of writable){try{const path=`${root.path}/${DIRECTORY}/${FILE}`;await Scripting.FileManager.writeAsString(path,payload);if(!await Scripting.FileManager.exists(path))throw new Error("write missing");const reread=JSON.parse(String(await Scripting.FileManager.readAsString(path)));if(!valid(reread?.cookies||[]))throw new Error("readback invalid");written.push(root.type)}catch(error){try{GM.log(`Cookie write failed: ${root.type}`,String(error))}catch{}}}if(!written.length)throw new Error("没有可用的 Scripting 共享路径") ;return written}
-let button:any
+type CookieValues={ipb_member_id:string;ipb_pass_hash:string;igneous:string}
+type BrowserCookie={name:string;value:string;domain?:string;path?:string}
+type Root={type:string;path:string}
+
+const BUTTON_ID="__scripting_eh_cookie_btn"
+const COOKIE_NAMES=["ipb_member_id","ipb_pass_hash","igneous"]
+const COOKIE_URLS=["https://e-hentai.org/","https://exhentai.org/"]
+let button:any=null,host:any=null,busy=false,mountTimer:any=null,resetTimer:any=null
+
+function emptyCookies():CookieValues{return{ipb_member_id:"",ipb_pass_hash:"",igneous:""}}
+function safeDecode(value:string){try{return decodeURIComponent(value)}catch{return value}}
+function cookieValue(name:string,source:string){const match=String(source||"").match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));return match?safeDecode(match[1]):""}
+function visiblePageCookies():CookieValues{const source=String(document.cookie||"");return{ipb_member_id:cookieValue("ipb_member_id",source),ipb_pass_hash:cookieValue("ipb_pass_hash",source),igneous:cookieValue("igneous",source)}}
+function mergeCookie(values:CookieValues,cookie:BrowserCookie){if(!COOKIE_NAMES.includes(cookie.name)||!cookie.value)return;const name=cookie.name as keyof CookieValues;if(!values[name]||name==="igneous")values[name]=cookie.value}
+async function listCookies(url:string):Promise<BrowserCookie[]>{try{const values=await GM.cookie.list({url});return Array.isArray(values)?values:[]}catch{return[]}}
+async function readBrowserCookies(){const values=visiblePageCookies();for(const url of COOKIE_URLS)for(const cookie of await listCookies(url))mergeCookie(values,cookie);return values}
+function loggedIn(values:CookieValues){return Boolean(values.ipb_member_id&&values.ipb_pass_hash)}
+function stateText(values:CookieValues){return`${loggedIn(values)?"已登录":"未登录"}${values.igneous?" · 里站可用":""}`}
+function cookieText(values:CookieValues){return COOKIE_NAMES.map(name=>values[name as keyof CookieValues]?`${name}=${values[name as keyof CookieValues]}`:"").filter(Boolean).join("; ")}
+export function isValidBrowserCookieText(source:string){return Boolean(cookieValue("ipb_member_id",source)&&cookieValue("ipb_pass_hash",source))}
+export function browserCookieCandidateRoots(manager:any=Scripting.FileManager):Root[]{const roots:Root[]=[];const add=(type:string,value:any)=>{const path=String(value||"").trim();if(path&&!roots.some(item=>item.path===path))roots.push({type,path})};try{add("documentsDirectory",manager.documentsDirectory)}catch{}try{add("appGroupDocumentsDirectory",manager.appGroupDocumentsDirectory)}catch{}try{add("iCloudDocumentsDirectory",manager.iCloudDocumentsDirectory)}catch{}try{add("safariBrowserDirectory",manager.safariBrowserDirectory)}catch{}return roots}
+export function browserCookieCandidatePaths(manager:any=Scripting.FileManager){return browserCookieCandidateRoots(manager).map(root=>`${root.path}/${COOKIE_IMPORT_FILE}`)}
+async function writeCookieTo(path:string,contents:string){try{await Scripting.FileManager.writeAsString(path,contents);if(!await Scripting.FileManager.exists(path))return false;const saved=String(await Scripting.FileManager.readAsString(path)||"");return saved.trim()===contents.trim()&&isValidBrowserCookieText(saved)}catch{return false}}
+async function writeCookie(){const values=await readBrowserCookies();if(!loggedIn(values)){setButton("🔐 未登录，正在打开登录页…","#6b4e9b");setTimeout(()=>{location.href=COOKIE_HELPER_LOGIN_URL},120);return false}const contents=cookieText(values);let written=0;for(const path of browserCookieCandidatePaths())if(await writeCookieTo(path,contents))written+=1;let gmOk=false;try{await GM.setValue(COOKIE_IMPORT_GM_KEY,contents);const stored=await GM.getValue(COOKIE_IMPORT_GM_KEY);gmOk=typeof stored==="string"&&stored.trim()===contents.trim()&&isValidBrowserCookieText(stored)}catch{}if(written||gmOk){setButton(`✅ 已写入${written?`文件 ${written} 个`:" GM 存储"}，返回 App 导入`,"#1e7d32");return true}setButton("❌ Cookie 写入失败","#b3261e");return false}
 function setButton(text:string,color:string){if(!button)return;button.textContent=text;button.style.background=color}
-async function refresh(){const cookies=await readCookies();setButton(valid(cookies)?"🍪 已登录 · 获取 Cookie":"🍪 未登录 · 前往登录","#242426");return cookies}
-async function acquire(){const cookies=await refresh();if(!valid(cookies)){location.href=COOKIE_HELPER_LOGIN_URL;return}setButton("🍪 正在写入…","#6b4e9b");try{const written=await writeCookies(cookies);setButton(`✓ 已写入 ${written.length} 个路径 · 返回 App 导入`,"#1e7d32")}catch{setButton("✕ 写入失败 · 检查扩展权限","#b3261e")}}
-function mount(){if(button||!document.body)return;button=document.createElement("button");Object.assign(button,{id:"scripting-eh-cookie-button",type:"button",textContent:"🍪 正在检测…"});Object.assign(button.style,{position:"fixed",left:"max(12px, env(safe-area-inset-left))",bottom:"max(12px, env(safe-area-inset-bottom))",zIndex:"2147483647",border:"0",borderRadius:"12px",padding:"10px 16px",color:"#fff",fontSize:"14px",fontWeight:"600",fontFamily:"-apple-system, BlinkMacSystemFont, sans-serif",boxShadow:"0 4px 16px rgba(0,0,0,.35)"});button.onclick=()=>void acquire();document.body.appendChild(button);void refresh()}
-if(typeof window!=="undefined"){if(document.body)mount();else document.addEventListener("DOMContentLoaded",mount,{once:true});GM.registerMenuCommand?.("🍪 获取 E-Hentai Cookie",acquire)}
+async function refreshButton(){const values=await readBrowserCookies();setButton(`🍪 ${stateText(values)} · 点此获取`,loggedIn(values)?"#1e7d32":"#1a1a1c")}
+function resetButton(){if(resetTimer)clearTimeout(resetTimer);resetTimer=setTimeout(()=>{busy=false;void refreshButton()},3000)}
+function mountButton(){if(!document.body)return;host=document.getElementById(`${BUTTON_ID}_host`);if(host?.isConnected){button=host.querySelector(`#${BUTTON_ID}`);if(button)return}host?.parentNode?.removeChild(host);host=document.createElement("div");host.id=`${BUTTON_ID}_host`;host.className="eh-syringe-ignore";host.setAttribute("translate","no");Object.assign(host.style,{position:"fixed",left:"0",bottom:"0",zIndex:"2147483647",pointerEvents:"none"});button=document.createElement("button");button.id=BUTTON_ID;button.type="button";button.setAttribute("translate","no");button.textContent="🍪 正在检测登录状态…";Object.assign(button.style,{position:"fixed",left:"max(12px, env(safe-area-inset-left))",bottom:"max(12px, env(safe-area-inset-bottom))",zIndex:"2147483647",pointerEvents:"auto",border:"0",background:"#1a1a1c",color:"#fff",padding:"10px 16px",borderRadius:"12px",fontSize:"14px",lineHeight:"20px",fontWeight:"600",boxShadow:"0 4px 16px rgba(0,0,0,.35)",cursor:"pointer",fontFamily:"-apple-system, BlinkMacSystemFont, sans-serif",userSelect:"none",WebkitAppearance:"none"});button.addEventListener("click",async()=>{if(busy)return;busy=true;setButton("⏳ 正在读取并写入…","#6b4e9b");await writeCookie();resetButton()});host.appendChild(button);document.body.appendChild(host);void refreshButton()}
+function ensureButton(){if(!document.body)return;const current=document.getElementById(`${BUTTON_ID}_host`),currentButton=current?.querySelector(`#${BUTTON_ID}`);if(!current||!currentButton||!current.isConnected)mountButton()}
+function startMountLifecycle(){ensureButton();document.addEventListener("DOMContentLoaded",ensureButton,{once:true});document.addEventListener("visibilitychange",ensureButton);window.addEventListener("pageshow",ensureButton);if(!mountTimer)mountTimer=window.setInterval(ensureButton,1500)}
+
+if(typeof window!=="undefined"){
+  GM.registerMenuCommand("🍪 获取 EH Cookie 并写入",async()=>{const values=await readBrowserCookies();if(!loggedIn(values)){location.href=COOKIE_HELPER_LOGIN_URL;return}const ok=await writeCookie();alert(ok?"✅ Cookie 已写入，返回 App 点击“导入并验证登录状态”":"❌ 未找到有效 Cookie 或候选路径无权限")})
+  GM.registerMenuCommand("🔄 重新检测登录状态",async()=>{await refreshButton()})
+  startMountLifecycle()
+}
