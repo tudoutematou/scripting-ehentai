@@ -1,437 +1,237 @@
-# CURRENT_TASK — 1.1 Final Optimization Batch
+# CURRENT_TASK — 1.1 Final Real-device QA Cleanup
 
 Branch: `feat/1.1-gallery-interaction`
 
 ## Goal
-Finish the current 1.1 branch as a polished, usable EhViewer-style Scripting client. This is the final consolidated optimization batch for the current PR.
+The major 1.1 feature/UI work is already implemented. This task is now intentionally narrow: fix only the remaining real-device QA problems below, then hand the DEV build back to the user.
 
-Do not keep old Pass 6 / Pass 7 terminology while implementing. Execute the work below in order, continuously, without asking between slices.
-
-User real-device evidence is authoritative. EhViewer is the behavior reference. `UI_TARGET_IPAD.md` is the visual/layout reference.
+Do **not** rerun or rewrite already-working Search/Reader/Login/UI work.
 
 ## Freeze / preserve
-Do not reopen unless a new regression is discovered:
+Keep working behavior unless a new regression is directly caused by this cleanup:
 - Safari login / Cookie helper / import + validation.
-- Preview sprite thumbnail fix.
-- Full EhTagTranslation load (~43,971 entries on device).
-- Root product areas = `发现 / 书库 / 设置`.
-- Existing comments/rating/image search/download/history/local bookmark/session core.
-- Current Archive request work unless the real download handoff is broken.
+- Preview sprite correctness.
+- Full EhTagTranslation and translated multi-tag search.
+- Search category exclusion / advanced filters / full-state search bookmarks.
+- Reader tap zones / quick settings / progress / auto-page.
+- Root areas = `发现 / 书库 / 设置`.
+- Cloud Favorites server access.
+- Current Gallery Detail visual direction and basic-information/tag/comment styling.
+- Archive flow unless a new archive regression is reported.
 
-## Developer workflow
-- Inspect latest branch/code before changing each boundary.
-- Reuse current session/network/search/store/Reader/parser code.
-- Minimal root-cause changes; no broad architecture rewrite.
-- TypeScript diagnostics after logical groups.
-- One focused deterministic check for non-trivial parser/search/storage/state logic.
-- No full regression ritual, release audit, screenshot-perfect self-acceptance, or repeated bootstrap loop.
-- Commit logical groups and push to this branch.
-- Sync isolated DEV once at the end.
+## Workflow
+- Inspect current head first.
+- Minimal root-cause changes only.
+- Reuse current GallerySummary/store/session/parser/Reader code.
+- TypeScript diagnostics + focused Torrent/navigation/state checks only.
+- No full acceptance run or repeated bootstrap ritual.
+- Commit logical fixes, push, sync isolated DEV once, stop.
 - Final status: **Implemented · needs user test**.
 
 ---
 
-# 1. iPad shell + gallery card density
+# A — Library gallery cards: one visual language everywhere
 
-## Sidebar
-Current iPad sidebar is too wide for only three root areas.
+## Real-device problem
+`书库 → 全部 / 历史 / 书签 / 下载` still squeezes gallery titles badly. Some specialized child lists also use wide/list-row compositions that feel inconsistent with Discover.
+
+## Required UI
+For **Library content browsing** use the same gallery card/grid language as the current Discover `最新画廊` layout.
+
+### Regular iPad
+- exactly **3 gallery cards per row** at normal landscape width;
+- useful cover size;
+- title gets about 2–3 readable lines;
+- category + uploader/pages/date/progress/status remain compact secondary information;
+- card dimensions should visually match the successful Discover grid.
+
+Apply this browsing presentation to:
+- 全部;
+- 收藏;
+- 历史;
+- 书签;
+- 下载.
+
+Do not put a horizontal `GalleryRow` inside a 3-column grid. Create/reuse a true card composition suitable for a grid.
+
+### History
+Card may add a small progress line/bar such as `第 12 页 / 100` using existing history data.
+
+### Bookmark
+Card may show a small bookmark indicator/status.
+
+### Download
+Card may show compact download state/progress, but browsing the gallery remains card-based.
+Complex actions such as pause/retry/delete may stay in a **single dedicated download-management child scene**, reached through one management action rather than being embedded into every card.
+
+### Compact iPhone
+Keep adaptive 1–2 columns.
+
+---
+
+# B — Library navigation stack: one gallery = one pushed level
+
+## Real-device problem
+Opening a gallery from Library History/Bookmarks/Downloads can create a layered navigation stack, so Back must be tapped repeatedly before returning to Library. The number of Back taps can grow with the number of items.
+
+## Current risky pattern
+Do not place many unrelated `NavigationLink` destinations inside one aggregate `LazyVGrid`/List row in a way that Scripting/SwiftUI interprets as nested navigation state.
+
+## Required behavior
+For every Library segment:
+
+`Library → one Gallery Detail → Back → Library`
+
+One Back only, regardless of whether Library contains 3 items or 300.
 
 Required:
-- keep native `NavigationSplitView`;
-- reduce regular-width sidebar using the supported native split-column width API if available;
-- visually target a compact ~220–280 pt navigation column on a full-size iPad;
-- preserve native collapse behavior;
-- do not create a custom fake sidebar merely to force width.
+- use a navigation pattern proven to produce one push for the tapped gallery;
+- keep the selected Library segment after returning;
+- do not stack every card as a hidden navigation level;
+- do not fix this with repeated dismiss/back calls;
+- do not push `HistoryScene / LocalBookmarksScene / DownloadsScene` merely to open a normal gallery from the Library grid.
 
-## Gallery cards
-For regular iPad:
-- Discover/Home gallery results: prefer **3 columns** at normal landscape width;
-- Cloud Favorites: **3 columns**;
-- card titles should have roughly 2–3 useful lines before truncation;
-- keep real cover/category/uploader/pages/date information;
-- preserve server pagination and item count.
+Specialized management scenes may remain, but they are separate explicit management destinations.
 
-For iPhone:
-- adaptive 1–2 columns;
-- never force the iPad density.
-
-Reuse the existing gallery summary/detail navigation. Extract a small shared GalleryCard/Grid only if it genuinely reduces duplication.
+Focused/manual structural check:
+- render multiple cards;
+- opening the Nth card must not imply N navigation pushes;
+- Gallery Detail Back returns directly to the originating Library segment.
 
 ---
 
-# 2. Library cleanup + direct Cloud Favorites
+# C — Gallery Detail preview architecture: compact summary + dedicated full browser
 
-Library remains one root area with:
-- 全部
-- 收藏
-- 历史
-- 书签
-- 下载
+## Real-device problem
+A gallery with 100+ pages renders every preview down the **right** column of the iPad Detail layout. The left Detail column ends much earlier, creating a huge blank left half while the right side continues for dozens of rows.
 
-## 收藏
-Selecting `书库 → 收藏` must directly display real authenticated E-Hentai cloud favorites.
+This is a layout architecture problem, not a thumbnail-spacing problem.
 
-Required:
-- default = All Favorites;
-- real category names/counts;
-- real gallery cards in the content area;
-- regular iPad = readable 3-column grid;
-- compact iPhone = adaptive 1–2 columns;
-- lightweight category selection/summary in the same Library segment;
-- at most one secondary action such as `管理收藏分类` if the dedicated management scene is still useful.
+## Final design
+Do **not** render the entire preview inventory inside the right Detail column.
 
-Remove duplicate routes such as both:
-- `打开云端收藏与分类管理`
-- `管理 → 云端收藏`
+### C1. Detail preview summary
+Keep the approved two-column Detail content for identity/tags/comments/resources.
 
-Never replace cloud favorites with local bookmarks.
+Then make `页面预览` a **full-width section below the two-column top content** on regular iPad.
 
----
+In the Detail page:
+- show only the first **12–18 previews** (choose a clean complete row count for the current grid, e.g. 15 or 18);
+- header shows `页面预览 · <total>`;
+- provide a clear `查看全部` action whenever total > summary limit;
+- every visible preview still opens Reader at the correct page;
+- keep retry/loading status when preview inventory is incomplete;
+- do not discard the full `pageLinks` inventory internally; only limit what the Detail UI renders.
 
-# 3. Torrent parser: real torrents only
+This removes the giant empty left column while keeping Detail fast to scan.
 
-Real-device QA showed a fake torrent item named `All`.
+### C2. Full Preview Browser
+Create one dedicated child scene, e.g. conceptually `AllPreviewsScene` / `PreviewBrowserScene`.
 
-Use EhViewer `TorrentParser.java` as the narrow contract.
+It receives the existing complete `pageLinks` + GallerySummary and displays all available previews.
 
-Required:
-- split real `<form>...</form>` blocks;
-- require the torrent row `<td colspan="5"> ... <a href="...">TORRENT NAME</a></td>`;
-- parse Posted date spans;
-- remove private `?p=` suffix;
-- remove any whole-form generic-anchor fallback;
-- never accept `All` or navigation/filter anchors;
-- accept only plausible real torrent resources (real tracker / `.torrent` resource shape);
-- preserve torrent name/date;
-- zero real torrents => truthful empty state + original torrent-page Safari fallback.
+Regular iPad:
+- full content width;
+- adaptive/lazy grid, roughly 5–7 thumbnails per row depending on available width;
+- consistent thumbnail aspect/spacing;
+- page number visible;
+- tapping page N opens Reader at N;
+- normal one-level Back returns to Gallery Detail.
 
-Focused fixture:
-- two valid torrent forms;
-- one fake `All` navigation anchor;
-- result count = 2;
-- neither result is `All`;
-- final URLs remain valid torrent URLs after `?p=` stripping.
+Compact iPhone:
+- adaptive 3–4 columns if readable.
 
----
+Performance:
+- use `LazyVGrid` / existing cached thumbnails so off-screen thumbnails do not all need to render at once;
+- do not create 100 separate nested navigation levels;
+- preserve existing preview sprite/direct-thumbnail cache and background preview-page loading.
 
-# 4. Search category exclusion parity
+### C3. Optional useful controls
+Only if small and easy with current native APIs:
+- page jump field/button in the full preview browser;
+- current reading-progress marker.
 
-EhViewer normal category controls are **include/exclude toggles**, not single-select filters.
-
-Behavior:
-- bright = included;
-- dim = excluded;
-- tap toggles one category independently;
-- multiple categories may be excluded at once;
-- `全部包含` resets exclusions.
-
-## State
-Use one authoritative exclusion representation, preferably `excludedCategoryMask:number` using the existing category bits.
-
-- mask `0` = include all categories;
-- one/multiple bits = excluded categories.
-
-Migrate current single-category behavior carefully:
-- Home `全部` = mask 0;
-- Home quick category such as `同人` must still mean only that category by excluding all other category bits.
-
-Do not keep two conflicting category truths after normalization.
-
-## URL
-`buildGallerySearchUrl()`:
-- mask 0 => omit `f_cats`;
-- non-zero => `f_cats=<excluded mask>`;
-- preserve selected exact tags, free text, language and advanced filters.
-
-## UI
-Use a compact grid/chip layout.
-Show a short explanation:
-`点按可排除分类；变暗 = 排除`
-
-Focused checks:
-- exclude Manga + Cosplay simultaneously;
-- toggling a category twice restores state;
-- Home quick single-category browse still works.
+Do not add sorting/filtering or another feature family.
 
 ---
 
-# 5. Advanced search parity
+# D — Torrent list: structural parser parity, no over-filtering
 
-Preserve current working options and add the straightforward EhViewer/E-Hentai flags needed for parity.
+## Real-device problem
+The fake `All` torrent is gone, but real galleries still frequently show `服务器未返回可用种子`.
 
-Keep:
-- search gallery name;
-- search gallery tags;
-- search description;
-- minimum rating;
-- page range;
-- only galleries with torrents;
-- show expunged/deleted galleries.
+## Important correction
+Follow EhViewer `TorrentParser.java` **structurally**.
 
-Add/support:
-- search torrent filenames (`f_storr=on`);
-- search low-power tags (`f_sdt1=on`);
-- search downvoted tags (`f_sdt2=on`);
-- disable default language filter (`f_sfl=on`);
-- disable default uploader filter (`f_sfu=on`);
-- disable default tag filter (`f_sft=on`).
+Upstream behavior:
+1. split `<form>...</form>` blocks;
+2. require the real torrent row containing `<td colspan="5"> ... <a href="...">NAME</a></td>`;
+3. parse Posted spans;
+4. strip private `?p=` suffix;
+5. accept that structurally identified href.
 
-Keep advanced options compact/collapsible. Ordinary search must remain simple.
+EhViewer does **not** apply an extra `.torrent URL must look plausible` gate after locating the correct torrent cell.
 
-Do not confuse:
-- `f_sto` = only galleries with torrents;
-- `f_storr` = search torrent filenames.
+## Required parser changes
+- keep removal of the dangerous whole-form generic-anchor fallback;
+- keep rejection of navigation/filter anchors by requiring the correct torrent cell;
+- once an href is found inside the verified torrent cell, normalize it with the page base URL and strip `?p=`;
+- **remove/relax the additional URL-shape plausibility filter if it can reject a structurally valid torrent row**;
+- preserve real torrent name and Posted date;
+- do not require link text to contain `Download`;
+- do not fabricate `All` or any navigation item;
+- zero structurally valid torrent rows => truthful empty state + Safari original-page fallback.
 
-Focused URL-state check for supported flags.
+## Focused fixture
+Mirror current EhViewer `TorrentParserTest` structure:
+- two forms;
+- `<td colspan="5">` torrent rows;
+- expected two parsed items;
+- Posted values parsed;
+- `?p=` removed;
+- names preserved;
+- add a fake `All` outside/elsewhere and prove it is not parsed.
 
----
+## Safe runtime diagnosis if the real device still returns zero
+Do not log HTML, torrent URLs, gallery gid/token or Cookie.
+Only expose/report safe structural counts such as:
+- formCount;
+- torrentCellCount;
+- torrentAnchorCount;
+- parsedItemCount.
 
-# 6. Search bookmarks = full search-state snapshots
+This tells whether the current E-Hentai HTML shape has changed without leaking private data.
 
-A search bookmark must restore the whole search, not only the keyword.
-
-Persist a versioned safe semantic snapshot containing at least:
-- mode;
-- free-text keyword;
-- selected translated tags (`namespace`, `tag`, display label);
-- excluded category mask;
-- quick/language filter state;
-- advanced options;
-- user bookmark title;
-- id/timestamps.
-
-Do not persist:
-- Cookie/session;
-- pagination cursor/current result URL;
-- gallery/page tokens;
-- authenticated HTML.
-
-Backward compatibility:
-- migrate old `{title, query}` saved searches into a normal semantic search state;
-- do not delete existing saved searches.
-
-## UI
-Provide a clear `保存搜索` / `搜索书签` action for the current composed state.
-
-Search bookmark list should:
-- show bookmark title;
-- show a compact human-readable summary of selected tags/filter state;
-- tap => restore and execute the full state;
-- allow delete.
-
-At Discover root:
-- preferred: left-edge right-swipe opens the search-bookmark drawer if current Scripting gestures can do so without interfering with iOS back gestures;
-- always provide a visible `搜索书签` fallback button/entry;
-- do not intercept child-page back gestures.
-
-Focused checks:
-- two selected translated tags + two excluded categories + rating/page filter survive save/reload;
-- generated URL semantics before/after reload match;
-- old query-only bookmark migrates and still works.
+Reference:
+- EhViewer `TorrentParser.java`
+- EhViewer `TorrentParserTest.java`
 
 ---
 
-# 7. Reader preference migration
-
-Extend existing Reader preferences safely rather than replacing them.
-
-Preserve current values:
-- single / continuous layout;
-- reading direction;
-- fit mode;
-- preload count;
-- prefer original;
-- related download/reader preferences already stored.
-
-Add:
-- `autoPageSeconds` with a safe default and supported range.
-
-If the schema version changes:
-- v1 preferences must migrate automatically;
-- malformed new fields fall back safely without discarding old preferences.
-
----
-
-# 8. Reader EhViewer-style tap zones
-
-Single-page Reader interaction follows the confirmed EhViewer geometry:
-
-- physical left third = page action;
-- physical right third = page action;
-- center third upper half = quick Reader settings;
-- center third lower half = progress/auto-page controls.
-
-## Reading direction
-LTR:
-- left = previous;
-- right = next.
-
-RTL:
-- left = next;
-- right = previous.
-
-Respect first/last-page boundaries and existing progress persistence.
-
-Normal reading should no longer require permanent `上一页 / 下一页` buttons. Small explicit controls may remain as a fallback/accessibility path, but must not dominate the Reader.
-
-## Center-upper quick settings
-Open a native sheet/card inside Reader containing only working controls:
-- 单页 / 连续;
-- 从左到右 / 从右到左;
-- 适应宽度 / 适应屏幕;
-- 优先原图;
-- 相邻预加载数量;
-- 自动翻页秒数.
-
-Changes persist and update the current Reader where safe.
-
-Do not add Android-only controls that Scripting/iOS cannot reliably support.
-
-## Center-lower progress controls
-Toggle a compact bottom overlay with:
-- current page / total pages;
-- native slider/seek control if current Scripting API supports it, otherwise the closest native step/jump control;
-- play/pause auto-page button;
-- direct page jump if useful.
-
-Changing progress navigates to that page and records progress.
-
-## Continuous mode
-Preserve vertical scrolling. Do not put giant invisible left/right overlays over continuous mode that steal scroll gestures.
-
----
-
-# 9. Auto page turn
-
-Playback is OFF by default.
-
-Required:
-- configurable interval from Reader quick settings;
-- use a reasonable supported range, roughly 2–30 seconds;
-- play starts periodic logical-next-page navigation;
-- pause stops it;
-- final logical page stops it automatically;
-- Reader unmount/close always cancels timer;
-- switching mode/jumping manually must not create duplicate timers;
-- never keep a hidden timer alive after Reader closes.
-
-Use a normal lifecycle-managed timer, no background polling framework.
-
-Focused state checks for next-page mapping and boundary stop; no timing automation required.
-
----
-
-# 10. Gallery Detail UI — FINAL APPROVED DESIGN
-
-`UI_TARGET_IPAD.md` section **Gallery Detail — FINAL APPROVED DESIGN** is authoritative.
-
-Implement the approved detail layout after functional search/Reader work so the final UI is built on the stable behavior.
-
-## iPad
-Two-column content composition.
-
-### Left
-- cover;
-- title/Japanese title;
-- uploader/category;
-- compact real summary metrics only;
-- prominent full-width `开始阅读 / 继续阅读`;
-- secondary actions: 云端收藏 / 下载离线 / 本地书签;
-- one large rounded **基本信息** card.
-
-Basic Information:
-- one card;
-- aligned key/value rows;
-- field name left, real value right;
-- use available fields such as language, original/parent, category, uploader, date/time, size, page count;
-- do not fabricate missing values merely to fill the design.
-
-### Right
-1. **标签** card
-   - every tag = independent rounded capsule/chip;
-   - translated Chinese when available;
-   - preserve click-to-search behavior;
-   - wrap naturally;
-   - **no `更多` button**.
-
-2. **评论** card
-   - a few real comment previews;
-   - author/date/text;
-   - existing interaction/full-comments entry remains available when needed.
-
-3. **页面预览** card
-   - consistent thumbnail grid;
-   - page number;
-   - preserve fixed sprite/direct thumbnails;
-   - open correct Reader page when supported.
-
-4. Related/resources below as secondary content.
-
-## iPhone
-Use the same hierarchy as one vertical composition; never squeeze the iPad columns onto compact width.
-
-## Visual language
-- native iOS/iPadOS;
-- blue system accent;
-- rounded cards;
-- restrained borders/shadows;
-- consistent spacing;
-- reduce giant unused blank areas;
-- no placeholder/mockup-only data in shipped UI;
-- no fake view/like/follower/notification metrics;
-- no `更多` entry in the approved tag design.
-
----
-
-# 11. Navigation correctness
-
-Keep only root areas:
-- Discover
-- Library
-- Settings
-
-Root selection replaces root content.
-Child pages push one logical level only.
-No aggregate List row containing many unrelated NavigationLinks.
-No manual back/dismiss hacks.
-
-Expected:
-- Discover → category/results → Back = Discover;
-- results → Gallery Detail → Back = results;
-- Library → Favorites management → Back = Library with segment preserved;
-- Settings → Account → Back = Settings.
-
----
+# Preserve UI / behavior
+- Discover current successful 3-column gallery design.
+- Approved Gallery Detail top layout, Basic Information key/value card, rounded tag chips and comments.
+- Reader behavior and search behavior already implemented.
+- Cloud Favorites parsing.
+- Existing image/cache priority scheduler.
 
 # Execution order
+1. Build/reuse a true Gallery Card for 3-column Library browsing.
+2. Apply it to Library All/Favorites/History/Bookmarks/Downloads.
+3. Fix Library gallery navigation to one push/one Back.
+4. Refactor Gallery Detail so full-width preview summary is below the two-column top content.
+5. Add dedicated full Preview Browser with lazy adaptive grid.
+6. Align Torrent parser exactly to EhViewer structural behavior and remove over-filtering.
+7. Run TS diagnostics + focused Torrent/navigation/state checks.
+8. Push commits and sync isolated DEV once.
+9. Stop.
 
-1. Sidebar + gallery-card density.
-2. Library direct Cloud Favorites / remove duplicates.
-3. Torrent real-link parser fix.
-4. Search category exclusion state + URL.
-5. Advanced search flags.
-6. Full search-bookmark storage/migration/UI.
-7. Reader preference migration.
-8. Reader tap zones + quick settings + progress overlay.
-9. Auto page turn.
-10. Final Gallery Detail UI from `UI_TARGET_IPAD.md`.
-11. TypeScript diagnostics + focused parser/search/storage/state checks.
-12. Push commits and sync isolated DEV once.
-13. Stop.
+# User test only
+Ask the user to test:
+1. Library `全部 / 收藏 / 历史 / 书签 / 下载` all use readable 3-column cards on iPad.
+2. Open any Library gallery, Back once = same Library segment.
+3. A 100+ page Gallery Detail no longer has a huge empty half-page; Detail shows a compact preview summary.
+4. `查看全部` opens a dedicated full preview grid; tapping page N opens Reader at N; one Back returns Detail.
+5. A gallery known to have torrents shows real torrent entries; no `All`; a gallery with no torrents shows a truthful empty state.
 
-Do not stop between slices to ask permission. Do not start another milestone.
-
-# Final handoff
-Keep the report short:
-- **Implemented:** functional/search/Reader/UI groups;
-- **Commit(s):** SHA(s);
-- **Checks:** diagnostics + focused checks actually run;
-- **Please test:**
-  1. Library cloud favorites grid + sidebar width;
-  2. Torrent no longer shows `All` and shows only real torrents/true empty state;
-  3. Manga + Cosplay can both be dimmed/excluded;
-  4. complex search bookmark restores tags + exclusions + advanced filters;
-  5. Reader left/right + center-upper + center-lower + auto page;
-  6. final iPad Gallery Detail layout matches the approved structure, especially Basic Information rows and rounded tag chips with no `更多` button.
-
-User performs real-device QA. Do not merge `main` automatically.
+Do not merge `main` automatically.
