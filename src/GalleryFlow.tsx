@@ -119,8 +119,7 @@ function AccountSection({ account, onAccountContextChanged }: { account: ReturnT
         const text = await prompt({ title: "手工导入 Cookie", message: "高级回退：粘贴 Cookie 字符串或 JSON。验证成功前不会覆盖当前登录。", obscureText: true, placeholder: "ipb_member_id=…; ipb_pass_hash=…", confirmLabel: "导入并验证" })
         if (text) { const status=await saveAndValidateCookieDraft(text);updateContext(status);setNotice(status.exAvailable?"已导入并验证 E-Hentai / ExHentai 登录。":"已验证 E-Hentai 登录；当前 Cookie 无法使用 ExHentai。") }
       } else if (action === "safari") {
-        const ready=await confirm({title:"先启用 Safari 扩展",message:"请先在系统设置或 Safari 扩展菜单中启用 Scripting，并允许访问 E-Hentai / ExHentai。打开登录页后请刷新页面，再使用左下角 Cookie 助手或扩展菜单中的“获取 E-Hentai Cookie”。",confirmLabel:"已启用，打开 Safari",cancelLabel:"取消"})
-        if(ready){await openSafariLogin();setNotice("若助手仍未出现，请在 Safari 扩展菜单确认 Scripting 已启用、当前网站访问已允许，然后刷新页面。")}
+        await openSafariLogin();setNotice("已打开 Safari。登录后点击页面左下角 Cookie 助手，或在 Scripting 扩展菜单选择“获取 EH Cookie 并写入”，再返回此处导入。")
       } else if (action === "import") {
         const status=await importAndValidateBrowserCookies();updateContext(status);setNotice(status.exAvailable?"已导入并验证 E-Hentai / ExHentai 登录。":"已验证 E-Hentai 登录；当前账户暂不可使用 ExHentai。")
       } else if (action === "refresh") updateContext(await refreshAccountStatus())
@@ -138,7 +137,7 @@ function AccountSection({ account, onAccountContextChanged }: { account: ReturnT
     <Section header={<Text textCase={null}>登录</Text>}><VStack alignment="leading" spacing={10}>
       <Button title="在 Safari 登录" buttonStyle="bordered" disabled={busy} action={() => { void run("safari") }} />
       <Button title="导入并验证登录状态" buttonStyle="borderedProminent" disabled={busy} action={() => { void run("import") }} />
-      <Text font="caption" foregroundStyle="secondaryLabel">前提：Safari 中已启用 Scripting 扩展，并允许访问 E-Hentai / ExHentai。登录页需刷新后才会注入 Cookie 助手；扩展菜单中的“获取 E-Hentai Cookie”可作为备用入口。</Text>
+      <Text font="caption" foregroundStyle="secondaryLabel">Safari 登录后点击左下角 Cookie 助手；也可从 Scripting 扩展菜单选择“获取 EH Cookie 并写入”。返回 App 后点击导入并验证。</Text>
       {busy ? <ProgressView progressViewStyle="circular" /> : null}{notice?<Text font="caption" foregroundStyle="systemGreen">{notice}</Text>:null}{error?<ErrorText message={error}/>:null}
     </VStack></Section>
     {account.loggedIn?<Section header={<Text textCase={null}>站点</Text>}><HStack spacing={8}><Button title="E-Hentai" buttonStyle={account.site === "e" ? "borderedProminent" : "bordered"} disabled={busy || account.site === "e"} action={() => { void run("e") }} /><Button title="ExHentai" buttonStyle={account.site === "ex" ? "borderedProminent" : "bordered"} disabled={busy || account.site === "ex" || account.exAvailable !== true} action={() => { void run("ex") }} /></HStack></Section>:null}
