@@ -101,6 +101,7 @@ No fake UI/settings for behavior that does not exist.
 - Preserve manual UI operation even when AI automation exists.
 - AI actions and manual UI should share the same typed core functions.
 - UI must not build raw E-Hentai protocol requests, parse HTML, or read raw Keychain values.
+- In native Scripting app code, use `Dialog.confirm()` / `Dialog.prompt()` (or the existing project compatibility wrapper). Never assume browser DOM globals such as bare `confirm()` / `prompt()` exist just because TypeScript DOM typings accept them. Browser-script code is a separate runtime.
 
 ## Repository / GitHub
 The repository may be private and the local workspace may be empty. Use Scripting's native GitHub integration/API for repository work.
