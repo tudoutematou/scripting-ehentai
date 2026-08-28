@@ -1,303 +1,199 @@
-# CURRENT_TASK — 1.1 Final Reader / Detail / Compact QA Cleanup
+# CURRENT_TASK — 1.1 Final Micro Polish: Reader Zoom + Glass Actions
 
 Branch: `feat/1.1-gallery-interaction`
 
 ## Goal
-The app is functionally close to complete. Fix only the remaining real-device UX problems below. Do not reopen Search/Login/TagTranslation/Cloud Favorites/Archive or other already-working feature families.
+The product is now close to a stable small app. Do **not** reopen already-working search, login, translated tags, favorites, Library, responsive gallery browsing, preview browser, Reader controls, Archive or other feature families unless a new real-device regression appears.
 
-## Real-device truth
-Current HEAD already has:
-- three-column regular-iPad gallery browsing and improved metadata rows;
-- simplified root navigation;
-- compact Detail preview summary + dedicated full Preview Browser;
-- Reader quick settings, progress and auto-page code;
-- iPhone compact root = TabView with Discover / Library / Settings.
+This final 1.1 micro-pass contains only:
+1. native Reader image zoom/pan;
+2. Gallery Detail action-button visual polish;
+3. preserve the unresolved Torrent investigation if a known-positive gallery is available.
 
-New QA shows the remaining problems are implementation/layout details, not missing user settings.
+AI Assistant expansion is **next-version work**, not part of this stabilization pass.
 
 ## Workflow
-- Inspect current head first.
-- Root-cause changes only.
-- No broad UI redesign or acceptance ritual.
-- TypeScript diagnostics + focused pure/state checks only.
-- Push logical commit(s), sync isolated DEV once, stop for user QA.
+- inspect current branch/head first;
+- minimal root-cause/UI changes only;
+- reuse existing `GlassUI` and Reader core;
+- no architecture rewrite;
+- TypeScript diagnostics + focused zoom/state checks only;
+- sync isolated DEV once and stop for user QA;
+- do not merge `main` automatically.
 
 ---
 
-# A — Reader must default to immersive / clean reading
+# A — Reader: pinch zoom + pan
 
-## Current bugs confirmed in code
-Current `ReaderView` / `OfflineReaderView` initialize:
-- `progressVisible = true`;
-- permanently render the bottom `上一页 / 阅读设置 / 下一页 / 跳转` row;
-- permanently render explanatory help text.
+## User need
+Some galleries contain long strip pages or small text/details. Current Reader can fit the page but cannot magnify it interactively.
 
-That is not the intended EhViewer-like reading experience.
+## Platform direction
+Use Scripting native gestures supported by current runtime, especially `MagnifyGesture` for pinch zoom and `DragGesture` for panning. Verify current typings/docs before implementation rather than inventing a custom web/canvas reader.
 
-## Required single-page default
-When opening a page, the normal resting state should be:
-- one large page image as the dominant content;
-- no persistent progress card;
-- no persistent page buttons;
-- no persistent Reader settings button;
-- no persistent explanatory text;
-- auto-page is off unless the user explicitly starts it.
+## Required single-page behavior
+- pinch with two fingers to zoom the current page;
+- reasonable scale range, approximately `1.0x` to `4.0x` (adjust only if native behavior requires it);
+- when zoom > 1x, allow dragging/panning the enlarged page to inspect details;
+- clamp/settle translation so the page cannot be permanently lost far outside the viewport;
+- changing page resets zoom and translation to the normal fitted state;
+- leaving/re-entering Reader starts from normal scale unless there is a very strong existing preference reason to persist zoom;
+- apply the same behavior to online and offline single-page Reader;
+- continuous vertical Reader does not need this exact single-page zoom implementation unless it can be added safely without breaking scrolling.
 
-Set progress controls hidden by default.
+## Interaction conflict rule
+Reader tap zones and zoom gestures must not fight each other.
 
-If current Scripting APIs support a clean full-screen/presented Reader that hides the app split/sidebar/tab chrome, prefer that for single-page reading. Verify current Scripting API first. If full-screen presentation is not cleanly supported, keep the navigation container but still remove all nonessential Reader controls from the resting content area.
+- at normal scale, existing left/right/center tap zones work normally;
+- while a magnify/drag gesture is actively occurring, do not trigger a page turn;
+- when meaningfully zoomed (> about 1.05x), dragging must pan the page rather than switch pages;
+- avoid accidental left/right page turns while the user is inspecting a zoomed image;
+- progress/settings overlays remain usable and take interaction priority when visible.
 
-Do not add fake custom window chrome.
+Optional only if trivial and stable with current gesture APIs:
+- double-tap may toggle normal scale / a useful zoom scale.
+Do not block the required pinch behavior on double-tap support.
 
----
+## Visual rule
+Zoom must not add a permanent toolbar. The Reader should remain image-first and immersive.
 
-# B — Reader tap zones must work reliably without a setup step
-
-## Expected behavior
-In **single-page mode**, no extra user setting is required for tap-zone paging.
-
-The reading-direction setting only changes the meaning of physical left/right:
-- LTR: left = previous, right = next;
-- RTL: left = next, right = previous.
-
-Center area:
-- center upper = quick Reader settings;
-- center lower = progress / auto-page controls.
-
-Continuous mode keeps vertical scrolling and does not need left/right single-page paging.
-
-## Current implementation risk
-`ReaderTapZones` currently uses almost-transparent (`opacity=0.01`) blank Buttons. Real-device QA shows left/right actions are not reliably hit-testable.
-
-## Required fix
-- replace the fragile nearly-transparent button technique with a tap surface proven to receive touches in current Scripting runtime;
-- inspect current Scripting gesture / GeometryReader / content-shape APIs first;
-- make hit regions cover the **actual visible reader/image interaction area**, not a nominal fixed box;
-- physical regions approximately: left third / center third split upper-lower / right third;
-- overlay must not shrink or block the image layout;
-- add a small pure helper test for zone → action mapping, including RTL.
-
-Do not require the user to enable tap paging in Settings.
+## Focused checks
+- clamp scale lower/upper bounds;
+- page change -> scale 1 / translation reset;
+- zoomed state suppresses accidental page-turn action;
+- online/offline state helpers behave the same where shared.
 
 ---
 
-# C — Reader overlays are on-demand and independently toggleable
+# B — Gallery Detail: frame all actual actions with native glass language
 
-## Progress / auto-page
-- hidden on entry;
-- tap center-lower → show bottom progress overlay;
-- tap center-lower again (or close/outside when supported) → hide it;
-- overlay contains current/total, slider/jump and play/pause;
-- play starts configured auto-page interval;
-- pause stops it;
-- final page stops it;
-- leaving Reader destroys timer;
-- manual page changes stop auto-page unless a clearly consistent behavior is intentionally chosen.
+## User feedback
+The current Detail page is visually close to final, but sections such as `关联内容` and `资源` still contain naked blue text actions. They look abrupt next to the rounded/glass cards used elsewhere.
 
-## Quick Reader settings
-Current real-device QA: center-upper can open settings once, then after dismissal another center-upper tap may fail.
+The project already has reusable `GlassSurface` and `GlassActionButton` using native `thinMaterial`. Reuse them rather than creating another visual system.
 
-Required:
-- reopen unlimited times in the same Reader session;
-- dismiss always resets presentation state;
-- prefer one explicit Reader overlay state conceptually `none | settings | progress` over stale independent booleans;
-- if native sheet dismissal is unreliable in Scripting, use an in-Reader native overlay/card with explicit close state;
-- settings only contains working controls: layout, direction, fit, original preference, preload, auto-page interval;
-- closing settings keeps current page/progress.
+## Required action hierarchy
+Every **actual tappable action** in Gallery Detail should look tappable and framed consistently.
 
-Visible overlay controls take priority over page tap zones.
+### Primary
+`开始阅读 / 继续阅读`
+- remains the strongest primary action;
+- full-width or visually dominant;
+- may use accent/blue prominent styling while staying consistent with the glass system.
 
----
+### Secondary action group
+- 云端收藏;
+- 下载离线;
+- 本地书签.
 
-# D — Reader image sizing / visual hierarchy
+Render as a balanced row/grid of framed glass actions where width allows. On compact iPhone, allow wrapping/stacking without crushing labels.
 
-- image centered;
-- preserve aspect ratio;
-- `fit=width` uses useful available content width;
-- `fit=screen` fits usable viewport;
-- avoid fixed heights that unnecessarily shrink portrait pages;
-- tap-zone overlay follows actual reader viewport/image area;
-- no reserved blank panel below image when overlays are hidden;
-- keep `查看原图` accessible but not permanently dominant if a cleaner contextual action is possible.
+### Related-content actions
+Examples currently implemented:
+- 查看上传者画廊;
+- 搜索封面;
+- any real related-gallery navigation action.
 
-Apply equivalent single-page interaction to `OfflineReaderView`.
+Put these inside one compact `关联内容` GlassSurface/card and use small framed glass action buttons rather than naked blue text links.
 
----
+### Resource actions
+Examples currently implemented:
+- 在 Safari 打开;
+- 查看种子列表;
+- 归档选项.
 
-# E — Gallery Detail: remove the right-side blank area
+Put these inside one `资源` GlassSurface/card and render each as a clear framed glass action. Use suitable SF Symbols when helpful, but do not depend on decorative icons for meaning.
 
-## Current cause
-Preview summary is below the top two-column content, but the first iPad HStack is still as tall as the longer left column. Sparse right-side tags/comments end early and leave a huge blank area.
+## Do not over-style
+- metadata key/value rows are information, not buttons;
+- tags remain rounded tag chips and should not become large glass buttons;
+- comments remain content cards;
+- page preview thumbnails remain thumbnails;
+- do not add extra `更多` menus;
+- do not invent new actions merely to fill space.
 
-## Required regular-iPad layout
-Preserve the approved visual language but split the top content into balanced rows.
+## Responsive behavior
+### iPad
+Use compact rows/grids of glass actions; keep spacing aligned with Basic Information / Tags / Comments / Preview cards.
 
-### Row 1 — identity / interaction
-Left:
-- cover;
-- title/Japanese title/uploader/category;
-- rating;
-- Start/Continue Reading;
-- cloud favorite / offline download / local bookmark.
+### iPhone
+Actions may use full-width or 2-column arrangements where labels remain readable. Never squeeze three long labels into an unreadable row.
 
-Right:
-- rounded tag chips;
-- comment preview / interaction entry.
-
-### Row 2 — information / resources
-Below Row 1, outside the first fixed two-column row:
-- Basic Information card;
-- relations / uploader / cover-search;
-- Safari / Torrent / Archive resources.
-
-Use compact full-width or a balanced secondary two-card row according to real data. Do not let a short right column force a giant blank block.
-
-### Row 3 — preview
-Full-width `页面预览 · N` + `查看全部`, preserving the dedicated Preview Browser.
-
-Compact iPhone remains a vertical stack.
+## Accessibility/interaction
+- minimum comfortable touch target around 44pt where practical;
+- disabled/unavailable actions use native disabled appearance;
+- preserve existing action behavior exactly; this is presentation polish, not networking logic.
 
 ---
 
-# F — Preserve unresolved Torrent structural fix
+# C — Torrent remains a known QA item
 
-Torrent remains a known real-device issue until a known-positive gallery parses successfully.
+Do not redesign Torrent again in this micro-pass unless testing uses a gallery known to actually contain a torrent.
 
-Keep:
-- verified `<td colspan="5">` torrent row only;
+Preserve structural EhViewer parsing rules:
+- real torrent row only;
 - no `All` false positive;
-- no whole-form generic-anchor fallback;
-- do not reject a structurally valid torrent merely because an extra guessed URL-shape pattern fails;
+- no generic whole-form anchor fallback;
 - real name + Posted;
 - strip private `?p=`;
 - truthful empty state.
 
-If real-device parsing still returns zero, expose only safe counts: `formCount`, `torrentCellCount`, `torrentAnchorCount`, `parsedItemCount` — never HTML/Cookie/gid/token/private URLs.
+If a known-positive gallery still returns zero, report only safe structural counts and continue root-cause diagnosis without exposing Cookie/HTML/gid/token/private URLs.
 
 ---
 
-# G — iPhone compact gallery browsing: ONE gallery per row
+# D — AI Assistant is the next version
 
-## Real-device problem
-Current compact gallery layout still uses two columns (`galleryGridColumnCount(compact) = 2` and adaptive cards around ~158pt). Real-device screenshots show title, uploader, page count and upload time are crushed/truncated and no longer scan-friendly.
+Do not implement this in the current stabilization PR.
 
-This is not a font-size issue. The compact card is too narrow.
+The repository already contains:
+- `assistant_tool.json`;
+- `assistant_tool.tsx`;
+- typed `src/ehAction.ts` actions for search/detail/favorites/history/account state.
 
-## Final compact rule
-For normal iPhone portrait browsing, render **exactly one gallery per row**.
+After 1.1 is accepted/merged, create a fresh branch/task for an expanded Scripting AI Assistant. The preferred direction is to let AI call the same browser/search core rather than simulate screen taps.
 
-Apply to all ordinary gallery browsing surfaces:
-- Discover latest galleries;
-- Discover/category/search results where the same gallery-card language is used;
-- Library All;
-- Library Favorites;
-- Library History;
-- Library Bookmarks;
-- Library Downloads browsing cards.
+Candidate next-version capabilities:
+- natural-language gallery search;
+- translated multi-tag/filter search state;
+- inspect a returned gallery's safe metadata/tags;
+- query cloud Favorites and local History;
+- interactive AssistantTool result UI for selecting a returned gallery;
+- investigate a safe handoff/deep-link/navigation path from an Assistant result into the app's Gallery Detail, only if current Scripting APIs support it cleanly.
 
-Do not keep a 2-column fallback merely because two cards technically fit.
-
-## Compact card composition
-Prefer a readable horizontal/landscape card rather than an oversized full-width poster card:
-- thumbnail on the left, approximately 96–120pt wide with stable aspect;
-- content on the right using remaining width;
-- title gets 2–3 useful lines;
-- category chip remains compact;
-- metadata uses separate rows and must not be concatenated into one sentence:
-  - uploader row;
-  - page-count row, slightly stronger emphasis;
-  - upload-time row;
-- a long uploader may truncate only its own row and must never hide page count/date;
-- history/download note may appear as one extra compact line/progress indicator.
-
-Target scanning experience conceptually:
-
-`[thumb]  Gallery title line 1`
-`         Gallery title line 2`
-`         [category]`
-`         上传者 · ...`
-`         页数 · 107 页`
-`         上传时间 · ...`
-
-One card consumes one row; then the next gallery starts below it.
-
-## Continue Reading on iPhone
-Do not show two tiny side-by-side Continue Reading cards.
-Use either:
-- one readable card per horizontal viewport (~85–92% width) in horizontal scrolling; or
-- one-column vertical cards if simpler/more consistent.
-
-Progress must remain readable.
-
-## iPad preservation
-Regular iPad remains 3 columns. Do not regress the successful iPad layout.
-
----
-
-# H — Library management must be at the TOP on iPhone and iPad
-
-## Real-device problem
-The user still sees the Library management block only after scrolling below gallery content. With many history/bookmark/download items this can require a very long scroll.
-
-Current source already attempts a `topBarTrailing` 管理 toolbar action, but real-device compact UI does not show it reliably inside the `TabView + NavigationStack` shell. Therefore source intent is not acceptance; real-device visibility is authoritative.
-
-## Required behavior
-Management must be reachable immediately when entering Library, before scrolling any gallery list.
-
-Use a robust visible top-content action if toolbar propagation is unreliable:
-- place a compact `管理` / gear button in the first Library header/control section, adjacent to or immediately above the segmented `全部 / 收藏 / 历史 / 书签 / 下载` control;
-- it must be visible at the top on both iPhone and iPad;
-- the existing toolbar button may remain only if it actually renders, but do not depend on it as the sole entry.
-
-Do **not** render a duplicate management Section after all gallery content.
-
-## Management destination
-One management scene contains:
-- 历史与进度;
-- 本地书签;
-- 下载与离线阅读;
-- 搜索书签;
-- 我的标签.
-
-`订阅更新与排行榜` stays in Discover, not Library management.
-
-Opening management = one navigation level. Back once returns to Library with the selected segment preserved.
+Keep opaque gallery references and current credential/token redaction boundaries.
 
 ---
 
 # Preserve
-- regular-iPad Discover/Library 3-column layout;
-- current Gallery metadata semantics;
-- Library one-push/one-back gallery navigation;
-- dedicated full Preview Browser;
-- Search/category exclusion/search bookmarks;
+- Safari login / Cookie import;
 - full EhTagTranslation;
-- Safari login;
+- translated multi-tag search and category exclusion;
+- full-state search bookmarks;
 - Cloud Favorites;
+- responsive iPad/iPhone gallery layouts;
+- Library management/navigation;
+- immersive Reader controls/tap zones/auto-page already working on current head;
+- dedicated full Preview Browser;
+- current balanced Gallery Detail structure;
 - Archive flow.
 
 # Execution order
-1. Fix Reader resting UI: progress hidden, remove permanent controls/help.
-2. Replace fragile Reader hit zones and prove LTR/RTL mapping.
-3. Make settings/progress overlays repeatedly toggleable/state-safe.
-4. Improve Reader image sizing and online/offline parity.
-5. Rebalance regular-iPad Gallery Detail to remove right dead space.
-6. Change compact/iPhone normal gallery browsing from 2 columns to one readable gallery per row; fix Continue Reading density.
-7. Put a reliable Library management action at the top; remove bottom management duplication.
-8. Preserve/finish Torrent structural diagnosis if still failing.
-9. Run TS diagnostics + focused Reader/grid/navigation/Torrent checks.
-10. Push and sync isolated DEV once.
-11. Stop.
+1. Add single-page Reader pinch zoom/pan with safe gesture coexistence.
+2. Apply equivalent behavior to offline single-page Reader.
+3. Convert naked Gallery Detail actions to existing glass action/surface language.
+4. Run TypeScript diagnostics + focused zoom/state checks.
+5. If and only if a known-positive Torrent gallery is available, retain/continue safe Torrent diagnosis.
+6. Push logical commit(s), sync isolated DEV once.
+7. Stop for user QA.
 
 # User test only
 Ask the user to test:
-1. Reader opens as clean large-image view with no permanent controls.
-2. Single-page left/right tap works immediately; RTL reverses direction.
-3. Center-upper settings can repeatedly open/close; center-lower progress/play toggles show/hide.
-4. Gallery Detail no longer leaves the large blank right block.
-5. iPhone Discover/search/library gallery lists show one readable gallery per row; title/uploader/pages/date are legible.
-6. iPhone Continue Reading is not two squeezed cards at once.
-7. Library management is visible immediately at the top, with no need to scroll to the end.
-8. Torrent known-positive gallery returns real entries if available.
+1. pinch zoom from 1x to useful magnification;
+2. drag/pan while zoomed and reset on page change;
+3. no accidental page turns during zoom/pan;
+4. online/offline single-page zoom parity;
+5. Gallery Detail primary/secondary/related/resource actions are consistently framed/glass and remain readable on iPad/iPhone;
+6. no regression to existing Detail actions.
 
 Do not merge `main` automatically.
