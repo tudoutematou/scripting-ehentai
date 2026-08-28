@@ -1,136 +1,140 @@
-# CURRENT_TASK — 1.1 Final Micro Polish: Reader Zoom + Glass Actions
+# CURRENT_TASK — 1.1 Final Micro Polish
 
 Branch: `feat/1.1-gallery-interaction`
 
 ## Goal
-The product is now close to a stable small app. Do **not** reopen already-working search, login, translated tags, favorites, Library, responsive gallery browsing, preview browser, Reader controls, Archive or other feature families unless a new real-device regression appears.
+The product is close to a stable 1.1. Fix only the remaining real-device polish/regressions below. Do not reopen already-working Search, Login, TagTranslation, Library, Preview Browser, Reader navigation, Archive or other feature families.
 
-This final 1.1 micro-pass contains only:
-1. native Reader image zoom/pan;
-2. Gallery Detail action-button visual polish;
-3. preserve the unresolved Torrent investigation if a known-positive gallery is available.
+This pass contains only:
+1. Reader pinch zoom + pan;
+2. Gallery Detail glass action polish;
+3. Cloud Favorite state/UI parity with EhViewer;
+4. preserve Torrent as a known QA item when a known-positive gallery is available.
 
-AI Assistant expansion is **next-version work**, not part of this stabilization pass.
+AI Assistant expansion is next-version work, not part of this stabilization pass.
 
 ## Workflow
 - inspect current branch/head first;
 - minimal root-cause/UI changes only;
-- reuse existing `GlassUI` and Reader core;
+- reuse existing `GlassUI`, Reader core and Favorites network layer;
 - no architecture rewrite;
-- TypeScript diagnostics + focused zoom/state checks only;
+- TypeScript diagnostics + focused state/parser checks only;
 - sync isolated DEV once and stop for user QA;
 - do not merge `main` automatically.
 
 ---
 
-# A — Reader: pinch zoom + pan
+# A — Reader pinch zoom + pan
 
-## User need
-Some galleries contain long strip pages or small text/details. Current Reader can fit the page but cannot magnify it interactively.
+Use current Scripting native gesture APIs (`MagnifyGesture`, `DragGesture`) for single-page Reader.
 
-## Platform direction
-Use Scripting native gestures supported by current runtime, especially `MagnifyGesture` for pinch zoom and `DragGesture` for panning. Verify current typings/docs before implementation rather than inventing a custom web/canvas reader.
+Required:
+- pinch to zoom current page, approximately 1x–4x;
+- drag/pan while zoomed;
+- page change resets scale/translation;
+- online and offline single-page Reader behave the same;
+- while actively zooming/panning or meaningfully zoomed, do not accidentally trigger left/right page turns;
+- no permanent zoom toolbar; preserve immersive image-first Reader;
+- continuous mode does not need the exact same zoom implementation if it would break vertical scrolling.
 
-## Required single-page behavior
-- pinch with two fingers to zoom the current page;
-- reasonable scale range, approximately `1.0x` to `4.0x` (adjust only if native behavior requires it);
-- when zoom > 1x, allow dragging/panning the enlarged page to inspect details;
-- clamp/settle translation so the page cannot be permanently lost far outside the viewport;
-- changing page resets zoom and translation to the normal fitted state;
-- leaving/re-entering Reader starts from normal scale unless there is a very strong existing preference reason to persist zoom;
-- apply the same behavior to online and offline single-page Reader;
-- continuous vertical Reader does not need this exact single-page zoom implementation unless it can be added safely without breaking scrolling.
-
-## Interaction conflict rule
-Reader tap zones and zoom gestures must not fight each other.
-
-- at normal scale, existing left/right/center tap zones work normally;
-- while a magnify/drag gesture is actively occurring, do not trigger a page turn;
-- when meaningfully zoomed (> about 1.05x), dragging must pan the page rather than switch pages;
-- avoid accidental left/right page turns while the user is inspecting a zoomed image;
-- progress/settings overlays remain usable and take interaction priority when visible.
-
-Optional only if trivial and stable with current gesture APIs:
-- double-tap may toggle normal scale / a useful zoom scale.
-Do not block the required pinch behavior on double-tap support.
-
-## Visual rule
-Zoom must not add a permanent toolbar. The Reader should remain image-first and immersive.
-
-## Focused checks
-- clamp scale lower/upper bounds;
-- page change -> scale 1 / translation reset;
-- zoomed state suppresses accidental page-turn action;
-- online/offline state helpers behave the same where shared.
+Focused checks:
+- clamp scale;
+- reset on page change;
+- zoomed state suppresses accidental page turn;
+- online/offline shared behavior stays aligned.
 
 ---
 
-# B — Gallery Detail: frame all actual actions with native glass language
+# B — Gallery Detail glass action polish
 
-## User feedback
-The current Detail page is visually close to final, but sections such as `关联内容` and `资源` still contain naked blue text actions. They look abrupt next to the rounded/glass cards used elsewhere.
+Reuse existing `GlassSurface` / `GlassActionButton`; do not invent a second visual system.
 
-The project already has reusable `GlassSurface` and `GlassActionButton` using native `thinMaterial`. Reuse them rather than creating another visual system.
+Keep the hierarchy:
+- primary: `开始阅读 / 继续阅读`;
+- secondary: cloud favorite / offline download / local bookmark;
+- related-content actions inside one compact glass card;
+- resource actions (`Safari / Torrent / Archive`) inside one compact glass card.
 
-## Required action hierarchy
-Every **actual tappable action** in Gallery Detail should look tappable and framed consistently.
+Actual tappable actions should look framed/tappable. Metadata rows, tags, comments and preview thumbnails remain information/content, not oversized glass buttons.
 
-### Primary
-`开始阅读 / 继续阅读`
-- remains the strongest primary action;
-- full-width or visually dominant;
-- may use accent/blue prominent styling while staying consistent with the glass system.
-
-### Secondary action group
-- 云端收藏;
-- 下载离线;
-- 本地书签.
-
-Render as a balanced row/grid of framed glass actions where width allows. On compact iPhone, allow wrapping/stacking without crushing labels.
-
-### Related-content actions
-Examples currently implemented:
-- 查看上传者画廊;
-- 搜索封面;
-- any real related-gallery navigation action.
-
-Put these inside one compact `关联内容` GlassSurface/card and use small framed glass action buttons rather than naked blue text links.
-
-### Resource actions
-Examples currently implemented:
-- 在 Safari 打开;
-- 查看种子列表;
-- 归档选项.
-
-Put these inside one `资源` GlassSurface/card and render each as a clear framed glass action. Use suitable SF Symbols when helpful, but do not depend on decorative icons for meaning.
-
-## Do not over-style
-- metadata key/value rows are information, not buttons;
-- tags remain rounded tag chips and should not become large glass buttons;
-- comments remain content cards;
-- page preview thumbnails remain thumbnails;
-- do not add extra `更多` menus;
-- do not invent new actions merely to fill space.
-
-## Responsive behavior
-### iPad
-Use compact rows/grids of glass actions; keep spacing aligned with Basic Information / Tags / Comments / Preview cards.
-
-### iPhone
-Actions may use full-width or 2-column arrangements where labels remain readable. Never squeeze three long labels into an unreadable row.
-
-## Accessibility/interaction
-- minimum comfortable touch target around 44pt where practical;
-- disabled/unavailable actions use native disabled appearance;
-- preserve existing action behavior exactly; this is presentation polish, not networking logic.
+On iPhone, wrap/stack actions rather than crushing labels. On iPad, use compact balanced rows/grids.
 
 ---
 
-# C — Torrent remains a known QA item
+# C — Cloud Favorite parity: server state is authoritative
 
-Do not redesign Torrent again in this micro-pass unless testing uses a gallery known to actually contain a torrent.
+## Real-device regression
+A gallery can already exist in a cloud favorite category (for example `性转`) while Gallery Detail still shows the unfavorited-style cloud favorite action and asks the user to enter a numeric 0–9 category.
 
-Preserve structural EhViewer parsing rules:
+This is incorrect.
+
+## EhViewer target behavior
+- if the gallery is already favorited, the Detail favorite action visibly shows the **current favorite category name** (for example `性转`, `生肉`, etc.);
+- if the gallery is not favorited, the action shows an add-favorite state;
+- tapping an unfavorited gallery opens a category chooser;
+- tapping an already-favorited gallery opens the category chooser with the current category selected/highlighted and also provides a clear `移除收藏` action;
+- changing category updates the visible category name immediately after the server confirms it;
+- removing favorite returns the button to the unfavorited/add state;
+- keep local bookmark as its own existing feature; do not silently merge local bookmark semantics into cloud favorite.
+
+## Root cause direction
+Current Detail derives `existing` from cached/parsed `detail.isFavorited`, and only calls `loadFavoriteState()` when it already believes the gallery is favorited. That allows stale/incorrect Detail state to enter the add-favorite path.
+
+Fix this by treating the authenticated `gallerypopups.php?...act=addfav` response as the authoritative cloud favorite operation state.
+
+### Required data model
+Extend the favorite popup parser/state so one popup fetch can provide:
+- current category index (`0..9` or null);
+- current **category display name**;
+- current note;
+- the available cloud favorite categories with index + display name, when present in the popup HTML.
+
+Do not require a second heavy Favorites-list page merely to map `0..9` to a name if the popup already contains the option labels.
+
+### Detail synchronization
+When a logged-in Gallery Detail opens:
+1. render Detail quickly from existing core;
+2. asynchronously call `loadFavoriteState(summary)` regardless of cached `detail.isFavorited`;
+3. synchronize the visible favorite button from the server result;
+4. do not block the rest of Detail while this lightweight state check runs.
+
+When the user taps the cloud favorite action:
+1. refresh/read the server favorite state again before presenting destructive/change actions;
+2. present a native category picker/list using **category names**, not a freeform numeric text prompt;
+3. current category is visibly selected when favorited;
+4. if currently favorited, expose `移除收藏` separately and require confirmation;
+5. preserve/edit the existing optional cloud favorite note without forcing an extra prompt on every category tap if a cleaner native flow is possible;
+6. call existing `changeFavorite()` for the mutation;
+7. rely on its post-mutation server verification;
+8. update Detail state only after server confirmation.
+
+### Button presentation
+Examples:
+- not favorited: `♡ 云端收藏` or `♡ 添加收藏`;
+- favorited in `性转`: `♥ 性转` (or `♥ 已收藏 · 性转` if space permits).
+
+Prefer the actual server category name over generic `收藏夹 0`.
+
+### Failure behavior
+- if the lightweight state refresh fails, do not silently assume unfavorited;
+- keep the last truthful state if one exists and show a safe retry/error for management action;
+- never log popup HTML, Cookie, gid/token, notes or private URLs.
+
+### Focused checks
+Add pure tests for:
+- unfavorited popup -> category null;
+- favorited popup -> category index + selected category display name;
+- category option list parsing;
+- note parsing remains intact;
+- mutation verification still rejects server mismatch.
+
+---
+
+# D — Torrent remains a known QA item
+
+Do not redesign Torrent again unless testing uses a gallery known to actually contain a torrent.
+
+Preserve:
 - real torrent row only;
 - no `All` false positive;
 - no generic whole-form anchor fallback;
@@ -142,58 +146,49 @@ If a known-positive gallery still returns zero, report only safe structural coun
 
 ---
 
-# D — AI Assistant is the next version
+# E — AI Assistant is next-version work
 
-Do not implement this in the current stabilization PR.
+Do not implement AI expansion in this stabilization PR.
 
-The repository already contains:
-- `assistant_tool.json`;
-- `assistant_tool.tsx`;
-- typed `src/ehAction.ts` actions for search/detail/favorites/history/account state.
-
-After 1.1 is accepted/merged, create a fresh branch/task for an expanded Scripting AI Assistant. The preferred direction is to let AI call the same browser/search core rather than simulate screen taps.
-
-Candidate next-version capabilities:
-- natural-language gallery search;
-- translated multi-tag/filter search state;
-- inspect a returned gallery's safe metadata/tags;
-- query cloud Favorites and local History;
-- interactive AssistantTool result UI for selecting a returned gallery;
-- investigate a safe handoff/deep-link/navigation path from an Assistant result into the app's Gallery Detail, only if current Scripting APIs support it cleanly.
-
-Keep opaque gallery references and current credential/token redaction boundaries.
+After 1.1 is accepted/merged, create a fresh branch/task. Preferred architecture:
+- in-script AI is the primary UX;
+- Scripting Agent/Assistant Tool remains compatible;
+- Scripting-configured provider/model is reused;
+- AI calls typed E-Hentai core actions rather than simulating screen taps.
 
 ---
 
 # Preserve
 - Safari login / Cookie import;
 - full EhTagTranslation;
-- translated multi-tag search and category exclusion;
+- translated multi-tag search and exclusion;
 - full-state search bookmarks;
-- Cloud Favorites;
+- working cloud Favorites list;
 - responsive iPad/iPhone gallery layouts;
 - Library management/navigation;
-- immersive Reader controls/tap zones/auto-page already working on current head;
+- immersive Reader controls/tap zones/auto-page;
 - dedicated full Preview Browser;
 - current balanced Gallery Detail structure;
 - Archive flow.
 
 # Execution order
-1. Add single-page Reader pinch zoom/pan with safe gesture coexistence.
-2. Apply equivalent behavior to offline single-page Reader.
-3. Convert naked Gallery Detail actions to existing glass action/surface language.
-4. Run TypeScript diagnostics + focused zoom/state checks.
-5. If and only if a known-positive Torrent gallery is available, retain/continue safe Torrent diagnosis.
-6. Push logical commit(s), sync isolated DEV once.
-7. Stop for user QA.
+1. Reader pinch zoom/pan.
+2. Offline Reader parity.
+3. Gallery Detail glass action polish.
+4. Fix cloud Favorite authoritative-state sync + named category chooser + remove flow.
+5. Run TS diagnostics + focused zoom/favorite parser-state checks.
+6. If and only if a known-positive Torrent gallery is available, continue safe Torrent diagnosis.
+7. Push logical commit(s), sync isolated DEV once.
+8. Stop for user QA.
 
 # User test only
 Ask the user to test:
-1. pinch zoom from 1x to useful magnification;
-2. drag/pan while zoomed and reset on page change;
-3. no accidental page turns during zoom/pan;
-4. online/offline single-page zoom parity;
-5. Gallery Detail primary/secondary/related/resource actions are consistently framed/glass and remain readable on iPad/iPhone;
-6. no regression to existing Detail actions.
+1. Reader pinch zoom/pan and page-change reset;
+2. no accidental page turns while zoomed;
+3. Detail glass actions on iPad/iPhone;
+4. open a gallery already in `性转` (or another cloud folder): Detail immediately resolves to the real category name rather than `添加收藏`;
+5. tap the favorite action: current category is selected, changing category works, and `移除收藏` works;
+6. open an unfavorited gallery: category chooser appears by name and successful add updates the Detail button;
+7. no regression to Library cloud Favorites.
 
 Do not merge `main` automatically.
