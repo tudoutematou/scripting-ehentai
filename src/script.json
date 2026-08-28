@@ -7,7 +7,7 @@
   "remoteResource" : null,
   "author" : null,
   "localizedDescriptions" : {
-    "zh-Hans" : "1.0 Release Candidate 开发版：用于最终实机验收的 E-Hentai \/ ExHentai 浏览器。"
+    "zh-Hans" : "1.1 Final Combined Batch：ExHentai 会话修复、Liquid Glass、Reader 缩放、云端收藏与 AI Assistant 1.0。"
   },
   "permissions" : null,
   "runInApp" : true,
@@ -18,8 +18,8 @@
   "localizedNames" : {
     "zh-Hans" : "E-Hentai 浏览器 DEV"
   },
-  "version" : "1.0.0-rc",
+  "version" : "1.1.0-dev",
   "icon" : "books.vertical.fill",
   "color" : "#8B5CF6",
-  "description" : "1.0 Release Candidate development build of the E-Hentai \/ ExHentai gallery browser."
+  "description" : "1.1 development build with ExHentai session fixes, native Liquid Glass, Reader zoom, Cloud Favorites parity, and AI Assistant 1.0."
 }
