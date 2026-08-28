@@ -1,275 +1,238 @@
-# UI_TARGET_IPAD — Native Responsive UI 2.1
+# UI_TARGET_IPAD — Native Responsive UI 2.2 Final
 
-This file is the current responsive UI contract after real-device QA.
+This is the final responsive UI contract for the current optimization batch.
 
-The visual direction from the approved iPad/iPhone mockups remains valid: clean native layout, cards, adaptive grids, clear hierarchy, iPad split layout and compact mobile layout. However, device QA showed that the previous root navigation duplicated the same features too many times. UI 2.1 therefore simplifies the information architecture.
+The goal is a clean native iOS/iPadOS E-Hentai client with clear product areas, readable gallery cards, compact navigation, and a polished Gallery Detail page. Reuse all existing business/network/parser/store actions. This is UI composition, not a core rewrite.
 
-## Core rule
+## 1. Root information architecture
 
-Do not create a root navigation item merely because a feature exists.
-
-Top-level navigation represents **product areas**, while actions and content types live inside those areas.
-
-Reuse all existing business/network/store/parser actions. This is navigation/layout cleanup, not a core rewrite.
-
----
-
-# 1. Top-level information architecture
-
-## iPad regular width
-
-Persistent sidebar has only:
-
+### iPad regular width
+Persistent sidebar contains only:
 - **发现**
 - **书库**
 - **设置**
 
-Remove separate sidebar roots for:
-- 搜索
-- 收藏
-- 下载
-- 历史
+Do not restore separate root items for 搜索 / 收藏 / 下载 / 历史 / 账号.
 
-Reason:
-- Search Composer already belongs at the top of Discover.
-- 收藏 / 历史 / 书签 / 下载 are Library content types.
-- Account/login belongs in Settings.
+Search belongs to Discover. 收藏 / 历史 / 书签 / 下载 belong to Library. Account/login belongs to Settings.
 
-Root switching replaces content. It must never push several root pages onto one stack.
+Make the sidebar visibly narrower than the current oversized column. Prefer the native split-column width API supported by current Scripting/SwiftUI typings; preserve system collapse behavior.
 
-## iPhone compact width
+### iPhone compact width
+Use the same three product roots in a compact bottom/root navigation when supported:
+- 发现
+- 书库
+- 设置
 
-Use the same product hierarchy with three stable bottom roots when current Scripting tab APIs allow it:
+Child pages use normal navigation push/pop.
 
-- **发现**
-- **书库**
-- **设置**
-
-Do not duplicate Search/Favorites as extra bottom tabs.
-
-Child pages use a normal NavigationStack.
-
----
-
-# 2. Discover
-
-Discover is the browsing + search home.
+## 2. Discover
 
 Order:
 1. title/header;
-2. **Search Composer** — the only primary ordinary search entry;
-3. advanced-filter action;
+2. Search Composer;
+3. advanced-filter entry;
 4. discovery cards;
 5. category browsing;
 6. Continue Reading;
 7. latest galleries;
-8. external links as secondary content.
+8. secondary external links.
 
-## Search Composer
+Search Composer keeps:
+- Chinese/English local tag suggestions;
+- multiple selected exact tags;
+- free text coexistence;
+- existing FilterView / advanced filtering;
+- search-bookmark action.
 
-Keep the translated multi-tag behavior:
-- Chinese/English local suggestions;
-- selected real tags;
-- multiple tags;
-- ordinary text coexistence;
-- `+ 高级筛选` reuses existing FilterView.
+Do not also expose Search as a root sidebar/tab destination.
 
-Do not also expose a permanent root Search page in the sidebar/tab bar.
+### Gallery grid density
+On regular iPad, use a stable **3-column** gallery card grid where practical so titles have useful width. Cards should allow about 2–3 useful title lines before truncation.
 
-A dedicated Search/Results child scene may still exist internally for focused search, saved searches or results. It is not a root destination.
+On iPhone, use adaptive 1–2 columns depending on available width.
 
-## iPad
+## 3. Library
 
-Discovery cards can use a responsive row/grid.
-Categories use compact chips/buttons.
-Latest galleries use adaptive cards.
+Top content segments:
+- 全部
+- 收藏
+- 历史
+- 书签
+- 下载
 
-## iPhone
+### 收藏
+Selecting Library → 收藏 directly displays real E-Hentai cloud favorites in the content area.
+- default = All Favorites;
+- show real category names/counts;
+- use the same readable gallery-card language as Discover;
+- regular iPad = 3 columns;
+- compact iPhone = adaptive 1–2 columns;
+- keep at most one secondary action such as `管理收藏分类` if a dedicated management scene remains useful.
 
-Use the approved compact hierarchy:
-- 2×2 discovery cards;
-- horizontal category chips;
-- horizontal Continue Reading strip;
-- adaptive 2-column latest gallery cards when readable.
+Remove duplicate routes such as both `打开云端收藏与分类管理` and another `云端收藏` management row.
 
----
+History, local bookmarks and downloads remain Library content types, not root navigation items.
 
-# 3. Library
-
-Library is the single root for saved/local/persistent content.
-
-Top segmented content types:
-- **全部**
-- **收藏**
-- **历史**
-- **书签**
-- **下载**
-
-Do not repeat these same destinations in the sidebar/tab bar.
-
-## 收藏
-
-Uses real E-Hentai cloud Favorites.
-Must show real category names/counts and actual gallery items.
-A detailed Favorites management scene may remain as a child page if needed for category/search/pagination controls.
-
-## 历史
-
-Uses existing local history/progress.
-
-## 书签
-
-Uses existing local bookmarks.
-
-## 下载
-
-Uses existing offline download records and management actions.
-
-## 全部
-
-May aggregate Continue Reading + useful saved content without duplicating storage.
-
-## iPad
-
-Use adaptive card grids and Continue Reading strip.
-
-## iPhone
-
-Use the approved compact layout:
-- segmented control at top;
-- horizontal Continue Reading;
-- 2-column cards where readable;
-- management child pages for complex actions.
-
----
-
-# 4. Settings / Account
+## 4. Settings / Account
 
 Settings is the single root for:
-- current login state;
-- account overview;
+- login status / account overview;
 - E-Hentai / ExHentai site selection;
-- Safari login / import+validate flow when needed;
+- Safari login / import+validate;
+- manual Cookie fallback;
 - Reader preferences;
 - download preferences;
-- cache management;
-- diagnostics/build info where useful.
+- cache / diagnostics where useful.
 
 Do not create another Account root destination.
-Manual Cookie import stays an advanced fallback.
 
----
+## 5. Gallery Detail — FINAL APPROVED DESIGN
 
-# 5. Gallery Detail
+The user approved the final Gallery Detail visual direction. Follow this structure closely while using real project data and native Scripting components.
 
-Keep the current responsive direction.
+Do **not** add a `更多` button/section merely because the reference mockup contains one. Do not invent metrics that the project/server does not actually provide.
 
-## iPad regular width
+### iPad regular width
+Use a polished two-column content composition inside the existing root shell.
 
-Two-column composition.
+#### Left identity/action column
+Upper block:
+- real cover image with stable aspect ratio;
+- gallery title and Japanese title when available;
+- uploader/creator line;
+- compact real summary metrics only (for example rating, rating count, page count, favorite state if actually available);
+- prominent full-width `开始阅读` / `继续阅读` primary button;
+- three secondary actions arranged cleanly: 云端收藏 / 下载离线 / 本地书签.
 
-Left:
-- cover;
-- title/Japanese title;
-- uploader/category;
-- rating + count;
-- primary Start/Continue Reading;
-- cloud favorite / offline download / local bookmark;
-- key metadata;
-- related/resource actions where appropriate.
+Below it, one large rounded **基本信息** card.
 
-Right:
-- translated tags;
-- comment preview + interaction entry;
-- page preview grid;
-- relations/uploader/cover search;
-- Torrent/Archive resources.
+Basic Information must use a clean key/value layout inside one card, not scattered vertical text.
+Each row is visually aligned as:
+`字段名称` on the left and `真实值` on the right.
 
-## iPhone compact
+Use available fields such as:
+- 语言
+- 原作/父画廊 when meaningful
+- 分类
+- 上传者
+- 上传时间 / 更新时间 when available
+- 文件大小
+- 页数
+- other existing metadata that fits naturally
 
-One vertical composition:
+Do not fabricate fields just to fill space.
+
+#### Right content column
+Stack rounded cards in this order:
+
+1. **标签**
+   - each tag is an individual rounded capsule/chip;
+   - use translated Chinese label when available while preserving correct click-to-search behavior;
+   - wrap naturally into multiple rows;
+   - no `更多` button in this design;
+   - show the useful available tags directly and allow normal scrolling/wrapping.
+
+2. **评论**
+   - compact preview of a few real comments;
+   - author/date/text;
+   - existing comment interactions remain reachable;
+   - provide the existing `查看全部/查看与互动` entry only when needed.
+
+3. **页面预览**
+   - native preview thumbnail grid;
+   - consistent thumbnail size and spacing;
+   - page number below/with each preview;
+   - keep already-fixed sprite/direct preview behavior;
+   - clicking opens the reader at the correct page when current behavior supports it.
+
+4. **关联 / 资源** below the primary content
+   - uploader/relations/search cover where already implemented;
+   - Torrent and Archive actions;
+   - visually secondary, not mixed into the primary identity buttons.
+
+### iPhone compact Gallery Detail
+Use the same information hierarchy as one vertical composition:
 1. navigation header;
 2. large cover;
-3. identity;
-4. real summary metrics only;
+3. title/Japanese title/uploader/category;
+4. real compact summary metrics;
 5. full-width Start/Continue Reading;
-6. cloud favorite / download / local bookmark;
-7. metadata;
-8. tags;
-9. comments preview;
-10. page previews;
-11. related/resources.
+6. 云端收藏 / 下载 / 本地书签;
+7. one Basic Information card using aligned key/value rows;
+8. rounded tag chips;
+9. short comments preview;
+10. compact/horizontal page previews;
+11. relations/resources.
 
-Never invent view/like/follower/notification counters to imitate a mockup.
+Do not squeeze the iPad two-column layout onto iPhone.
 
----
+## 6. Torrent / Archive resource UI
 
-# 6. Torrent / Archive UI
+Torrent:
+- native list of real parsed torrents only;
+- real name + Posted date;
+- clear Safari/system download action;
+- never display navigation/filter text such as `All` as a torrent;
+- truthful empty state if no real torrent exists.
 
-These are **Gallery Detail resource actions**, not root navigation destinations.
+Archive:
+- real archive/resolution choices;
+- choices are actions, not labels;
+- complete authenticated request until a real download handoff or a clear server restriction is reached.
 
-## Torrent
+## 7. Search Filter visual behavior
 
-- open native list;
-- show real torrent name + posted date;
-- each parsed torrent has a clear `下载 / 在 Safari 下载` action;
-- fallback to original torrent page only if parsing/request genuinely fails.
+Category controls follow EhViewer semantics:
+- bright = included;
+- dim = excluded;
+- multiple categories can be excluded independently;
+- compact grid/chip layout;
+- short explanatory text such as `点按可排除分类；变暗 = 排除`.
 
-## Archive
+Advanced options stay compact/collapsible and reuse the existing filter model. Do not let advanced controls dominate ordinary search.
 
-- show real archive/resolution choices;
-- choices must be actionable, not read-only labels;
-- implement the actual authenticated archive request/download flow supported by E-Hentai/EhViewer behavior;
-- if a final binary/archive must be handed to Safari/system download due Scripting platform limits, resolve the real authenticated final download URL first and then hand it off;
-- do not show a fake `Original / 800x / 1280x / 1920x` menu with no action.
+## 8. Reader interaction UI
 
----
+Single-page Reader must prioritize content and gestures/tap zones over permanent buttons.
+- physical left/right zones page according to reading direction;
+- center-upper opens quick Reader settings;
+- center-lower opens progress + play/pause auto-page controls;
+- continuous mode preserves vertical scrolling.
 
-# 7. Navigation correctness
+Quick Reader settings should use a native sheet/card and contain only working settings.
+
+## 9. Visual language
+
+- native iOS/iPadOS appearance;
+- system accent blue;
+- rounded cards with restrained borders/shadows;
+- consistent horizontal/vertical spacing;
+- avoid giant unused blank areas;
+- avoid overly narrow gallery cards;
+- use real gallery thumbnails/data;
+- no full-screen Canvas/Web/CSS recreation;
+- no placeholder artwork in the shipped app merely to imitate a mockup;
+- no mockup-only notification/like/view/follower counters.
+
+## 10. Navigation correctness
 
 Mandatory:
-- only one root level for Discover / Library / Settings;
+- one root level: Discover / Library / Settings;
 - root selection replaces root content;
-- child content pushes exactly one logical level;
-- no many unrelated NavigationLinks inside one aggregate List row;
-- no repeated dismiss/back hacks.
+- child pages push one logical level;
+- no aggregate List row containing many unrelated NavigationLinks;
+- no dismiss/back hacks.
 
 Expected:
 - Discover → category/results → Back = Discover;
-- Discover → Gallery Detail → Back = previous Discover/results scene;
-- Library → Favorites management → Back = Library with selected segment preserved;
+- Discover/results → Gallery Detail → Back = previous scene;
+- Library → Favorites management → Back = Library with segment preserved;
 - Settings → Account → Back = Settings.
 
----
-
-# 8. Visual language
-
-Keep the approved visual direction:
-- native iOS/iPadOS appearance;
-- system accent;
-- rounded cards where useful;
-- clear white/secondary grouped surfaces;
-- restrained borders/shadows;
-- adaptive grids;
-- generous iPad spacing and compact readable iPhone spacing;
-- no full-screen Canvas/Web/CSS recreation;
-- no placeholder images merely to match mockups.
-
-Use real gallery thumbnails/data.
-
----
-
-# 9. Implementation principle
+## 11. Implementation principle
 
 Do not rewrite `GalleryFlow.tsx` in one shot.
+Reuse existing scenes/actions and extract only small real reusable UI units where needed, such as gallery cards, metadata rows, tag chips, or Reader overlay controls.
 
-Reuse current scenes and business actions. Split a scene/component only when it becomes a real reusable or independent UI unit.
-
-Priority after current device QA:
-1. Cloud Favorites runtime fix;
-2. Torrent parser/list fix;
-3. Archive actionable download flow;
-4. root navigation de-duplication;
-5. polish Discover / Library / Detail layouts around the simplified structure.
-
-Developer checks only. User performs real-device QA.
+Developer performs diagnostics/focused checks only. User performs real-device QA.
