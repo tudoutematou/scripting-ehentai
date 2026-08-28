@@ -27,18 +27,16 @@ declare const location: any;
 declare const Scripting: any;
 declare const GM: any;
 
-type CookieValues = {
-  ipb_member_id: string;
-  ipb_pass_hash: string;
-  igneous: string;
-};
-
 type BrowserCookie = {
   name: string;
   value: string;
   domain?: string;
   path?: string;
+  hostOnly?: boolean;
   secure?: boolean;
+  httpOnly?: boolean;
+  session?: boolean;
+  expirationDate?: number | string | null;
 };
 
 (function () {
@@ -50,21 +48,13 @@ type BrowserCookie = {
   var COOKIE_URLS = ["https://e-hentai.org/", "https://exhentai.org/"];
   var buttonBusy = false;
   var resetButtonTimer: any = null;
-  var cachedCookies: CookieValues = emptyCookies();
+  var cachedCookies: BrowserCookie[] = [];
   var btn: any = null;
   var host: any = null;
   var mountCheckTimer: any = null;
 
-  function emptyCookies(): CookieValues {
-    return { ipb_member_id: "", ipb_pass_hash: "", igneous: "" };
-  }
-
   function safeDecode(value: string): string {
-    try {
-      return decodeURIComponent(value);
-    } catch {
-      return value;
-    }
+    try { return decodeURIComponent(value); } catch { return value; }
   }
 
   function cookieValue(name: string, source: string): string {
@@ -72,19 +62,30 @@ type BrowserCookie = {
     return match ? safeDecode(match[1]) : "";
   }
 
-  function visiblePageCookies(): CookieValues {
-    var source = document.cookie || "";
-    return {
-      ipb_member_id: cookieValue("ipb_member_id", source),
-      ipb_pass_hash: cookieValue("ipb_pass_hash", source),
-      igneous: cookieValue("igneous", source),
-    };
+  function normalizeDomain(value: string): string {
+    return String(value || "").trim().toLowerCase().replace(/^\./, "");
   }
 
-  function mergeCookie(values: CookieValues, cookie: BrowserCookie): void {
-    if (COOKIE_NAMES.indexOf(cookie.name) < 0 || !cookie.value) return;
-    var name = cookie.name as keyof CookieValues;
-    if (!values[name] || cookie.name === "igneous") values[name] = cookie.value;
+  function normalizeBrowserCookie(cookie: BrowserCookie, fallbackHost: string): BrowserCookie | null {
+    if (COOKIE_NAMES.indexOf(cookie.name) < 0 || !cookie.value) return null;
+    var domain = normalizeDomain(cookie.domain || fallbackHost);
+    if (domain !== "e-hentai.org" && domain !== "exhentai.org" && !domain.endsWith(".e-hentai.org") && !domain.endsWith(".exhentai.org")) return null;
+    return { name: cookie.name, value: cookie.value, domain: domain, path: cookie.path || "/", hostOnly: cookie.hostOnly === true || !cookie.domain, secure: cookie.secure !== false, httpOnly: cookie.httpOnly === true, session: cookie.session === true, expirationDate: cookie.expirationDate == null ? null : cookie.expirationDate };
+  }
+
+  function visiblePageCookies(): BrowserCookie[] {
+    var source = document.cookie || "";
+    return COOKIE_NAMES.map(function (name) {
+      var value = cookieValue(name, source);
+      return value ? normalizeBrowserCookie({ name: name, value: value }, location.hostname) : null;
+    }).filter(Boolean) as BrowserCookie[];
+  }
+
+  function mergeCookie(map: Record<string, BrowserCookie>, cookie: BrowserCookie, fallbackHost: string): void {
+    var normalized = normalizeBrowserCookie(cookie, fallbackHost);
+    if (!normalized) return;
+    var key = normalizeDomain(normalized.domain || fallbackHost) + "|" + (normalized.path || "/") + "|" + normalized.name;
+    map[key] = normalized;
   }
 
   async function listCookies(url: string): Promise<BrowserCookie[]> {
@@ -96,36 +97,59 @@ type BrowserCookie = {
     }
   }
 
-  async function readBrowserCookies(): Promise<CookieValues> {
-    var values = visiblePageCookies();
+  async function readBrowserCookies(): Promise<BrowserCookie[]> {
+    var map: Record<string, BrowserCookie> = {};
+    var visible = visiblePageCookies();
+    for (var visibleIndex = 0; visibleIndex < visible.length; visibleIndex++) mergeCookie(map, visible[visibleIndex], location.hostname);
     for (var i = 0; i < COOKIE_URLS.length; i++) {
       var cookies = await listCookies(COOKIE_URLS[i]);
-      for (var j = 0; j < cookies.length; j++) mergeCookie(values, cookies[j]);
+      var fallbackHost = new URL(COOKIE_URLS[i]).hostname;
+      for (var j = 0; j < cookies.length; j++) mergeCookie(map, cookies[j], fallbackHost);
     }
-    cachedCookies = values;
-    return values;
+    cachedCookies = Object.keys(map).map(function (key) { return map[key]; });
+    return cachedCookies;
   }
 
-  function isLoggedIn(values: CookieValues): boolean {
-    return !!values.ipb_member_id && !!values.ipb_pass_hash;
+  function cookiesForHost(cookies: BrowserCookie[], hostname: string): BrowserCookie[] {
+    return cookies.filter(function (cookie) {
+      var domain = normalizeDomain(cookie.domain || "");
+      return cookie.hostOnly ? domain === hostname : domain === hostname || hostname.endsWith("." + domain);
+    });
   }
 
-  function loginStateText(values: CookieValues): string {
-    var state = isLoggedIn(values) ? "已登录" : "未登录";
-    return state + (values.igneous ? " · 里站可用" : "");
+  function cookieByName(cookies: BrowserCookie[], name: string): BrowserCookie | undefined {
+    return cookies.find(function (cookie) { return cookie.name === name && !!cookie.value; });
+  }
+
+  function validIgneous(value: string): boolean {
+    return !!String(value || "").trim() && !/^(?:mystery|null|undefined|none|false|0)$/i.test(String(value).trim());
+  }
+
+  function isLoggedIn(cookies: BrowserCookie[]): boolean {
+    var e = cookiesForHost(cookies, "e-hentai.org");
+    return !!cookieByName(e, "ipb_member_id") && !!cookieByName(e, "ipb_pass_hash");
+  }
+
+  function exReady(cookies: BrowserCookie[]): boolean {
+    var ex = cookiesForHost(cookies, "exhentai.org");
+    return !!cookieByName(ex, "ipb_member_id") && !!cookieByName(ex, "ipb_pass_hash") && validIgneous((cookieByName(ex, "igneous") || {}).value || "");
+  }
+
+  function loginStateText(cookies: BrowserCookie[]): string {
+    return (isLoggedIn(cookies) ? "已登录" : "未登录") + (exReady(cookies) ? " · 里站凭据已捕获" : "");
   }
 
   function isValidCookieText(source: string): boolean {
-    var text = (source || "").trim();
-    return !!cookieValue("ipb_member_id", text) && !!cookieValue("ipb_pass_hash", text);
+    try {
+      var parsed = JSON.parse(String(source || ""));
+      return Array.isArray(parsed) && isLoggedIn(parsed);
+    } catch {
+      return false;
+    }
   }
 
-  function cookieText(values: CookieValues): string {
-    var parts: string[] = [];
-    if (values.ipb_member_id) parts.push("ipb_member_id=" + values.ipb_member_id);
-    if (values.ipb_pass_hash) parts.push("ipb_pass_hash=" + values.ipb_pass_hash);
-    if (values.igneous) parts.push("igneous=" + values.igneous);
-    return parts.join("; ");
+  function cookieText(cookies: BrowserCookie[]): string {
+    return JSON.stringify(cookies);
   }
 
   function candidatePaths(): string[] {
@@ -168,13 +192,13 @@ type BrowserCookie = {
   }
 
   async function writeCookie(): Promise<{ ok: boolean; writtenTo: string[]; failed: string[]; gmOk: boolean }> {
-    var values = await readBrowserCookies();
-    if (!isLoggedIn(values)) {
+    var cookies = await readBrowserCookies();
+    if (!isLoggedIn(cookies)) {
       setButtonMessage("🔐 未登录，正在打开登录页…", "#6b4e9b");
       setTimeout(redirectToLogin, 120);
       return { ok: false, writtenTo: [], failed: [], gmOk: false };
     }
-    var contents = cookieText(values);
+    var contents = cookieText(cookies);
     var paths = candidatePaths();
     var writtenTo: string[] = [];
     var failed: string[] = [];
@@ -234,7 +258,7 @@ type BrowserCookie = {
         document.cookie = CLEAR_COOKIE_NAMES[n] + "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/" + suffix;
       }
     }
-    cachedCookies = emptyCookies();
+    cachedCookies = [];
     return deleted;
   }
 
@@ -261,15 +285,17 @@ type BrowserCookie = {
   }
 
   async function cookieStatusText(): Promise<string> {
-    var values = await readBrowserCookies();
+    var cookies = await readBrowserCookies();
     var file = await readCookieFile();
+    var e = cookiesForHost(cookies, "e-hentai.org");
+    var ex = cookiesForHost(cookies, "exhentai.org");
     return [
       "当前页面：" + location.host,
-      "页面登录：" + loginStateText(values),
-      "ipb_member_id：" + (values.ipb_member_id || "（无）"),
-      "ipb_pass_hash：" + (values.ipb_pass_hash ? values.ipb_pass_hash.slice(0, 6) + "…（长度 " + values.ipb_pass_hash.length + "）" : "（无）"),
-      "igneous：" + (values.igneous ? values.igneous.slice(0, 8) + "…（长度 " + values.igneous.length + "）" : "（无）"),
-      "已写入文件：" + (file ? "是（" + file.length + " 字符）" : "否"),
+      "页面登录：" + loginStateText(cookies),
+      "E 认证字段：" + (!!cookieByName(e, "ipb_member_id") && !!cookieByName(e, "ipb_pass_hash") ? "完整" : "不完整"),
+      "Ex 认证字段：" + (!!cookieByName(ex, "ipb_member_id") && !!cookieByName(ex, "ipb_pass_hash") ? "完整" : "不完整"),
+      "Ex igneous：" + (validIgneous((cookieByName(ex, "igneous") || {}).value || "") ? "结构有效" : "缺失或无效"),
+      "已写入文件：" + (file ? "是" : "否"),
     ].join("\n");
   }
 
@@ -279,8 +305,8 @@ type BrowserCookie = {
     btn.style.background = color;
   }
 
-  function renderButtonState(values: CookieValues): void {
-    setButtonMessage("🍪 " + loginStateText(values) + " · 点此获取", isLoggedIn(values) ? "#1e7d32" : "#1a1a1c");
+  function renderButtonState(cookies: BrowserCookie[]): void {
+    setButtonMessage("🍪 " + loginStateText(cookies) + " · 点此获取", isLoggedIn(cookies) ? "#1e7d32" : "#1a1a1c");
   }
 
   async function refreshButtonState(): Promise<void> {
@@ -371,8 +397,8 @@ type BrowserCookie = {
   }
 
   GM.registerMenuCommand("🍪 获取 EH Cookie 并写入", async function () {
-    var values = await readBrowserCookies();
-    if (!isLoggedIn(values)) {
+    var cookies = await readBrowserCookies();
+    if (!isLoggedIn(cookies)) {
       redirectToLogin();
       return;
     }
