@@ -5,7 +5,7 @@ import { parseSearchHtml } from "./searchHtml"
 import { parseDetailHtml, parsePreviewPageHtml, parseTorrentListHtml, buildGalleryRatingRequest, parseRatingResponse, parseCommentMutationHtml, parseEditableCommentResponse, parseCommentVoteResponse, parseArchiveOptionsHtml, buildArchiveDownloadRequest, parseArchiveDownloadHtml, type RatingResult, type TorrentItem, type GalleryComment, type CommentVoteResult, type ArchiveOption } from "./detailHtml"
 import { parseImagePageHtml } from "./pageHtml"
 import { reportDiagnostic } from "./githubBridge"
-import { getBaseUrl, getCookieHeader } from "./account"
+import { getBaseUrl, getCookieHeader, productionRequestAuth } from "./account"
 
 export type { GalleryPageLink, GallerySummary }
 export type SearchPage = SearchExtractData & { url: string }
@@ -29,7 +29,7 @@ function stageError(stage: string, error: unknown): Error { const value = error 
 async function reportSafely(input: Parameters<typeof reportDiagnostic>[0]) { try { await reportDiagnostic(input) } catch {} }
 const HTML_REQUEST_TIMEOUT_MS = 20_000
 
-function requestOptions(url: string): Record<string, any> { const cookie = getCookieHeader(url); return { ...(cookie ? { headers: { Cookie: cookie } } : {}), signal: AbortSignal.timeout(HTML_REQUEST_TIMEOUT_MS) } }
+function requestOptions(url: string): Record<string, any> { const context=productionRequestAuth(url); return { ...(Object.keys(context.headers).length ? { headers: context.headers } : {}), signal: AbortSignal.timeout(HTML_REQUEST_TIMEOUT_MS) } }
 export async function fetchHtml(url: string, stagePrefix: string, referer = ""): Promise<{ html: string; finalUrl: string; response: Response }> {
   let response: Response; try { const options=requestOptions(url); response = await fetch(url, { ...options, ...(referer ? { headers: { ...(options.headers || {}), Referer: referer } } : {}) }) } catch (error) { throw stageError(`${stagePrefix}.fetch`, error) }
   const finalUrl = String(response?.url || url); const status = Number(response?.status || 0); const statusText = String(response?.statusText || "")
