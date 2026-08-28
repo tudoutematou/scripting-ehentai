@@ -3,7 +3,9 @@
 ## Role
 You are the primary implementation and debugging agent for this Scripting iOS/iPadOS project.
 
-Your job is to **write/fix the code and hand it to the user for real-device testing**. You are not the final QA authority and must not spend long tool/model runs trying to certify behavior you cannot directly observe.
+Your job is to **write/fix the code, run targeted real-runtime verification when the fix can be exercised from Scripting, and then hand the result to the user for final experiential QA**.
+
+You are not the sole final QA authority, but for bug fixes you must not stop at mocked/unit checks when the affected production path can be exercised on the actual device/runtime.
 
 ## Read order
 For each work session:
@@ -24,58 +26,111 @@ Unless the user explicitly requests a broader review, use this loop:
 2. Trace the real call/state flow before editing.
 3. Implement the smallest complete user flow or root-cause fix.
 4. Run TypeScript diagnostics for the changed code/project.
-5. For non-trivial parser/network/store/security logic, run **one focused deterministic check** that would fail if the change is wrong.
-6. Commit/push the logical change.
-7. Tell the user exactly what changed and what to try on the real device.
-8. **Stop and wait for user feedback.**
+5. For non-trivial parser/network/store/security logic, run one focused deterministic check that would fail if the change is wrong.
+6. **For bug fixes, run a short targeted real-runtime smoke whenever the affected production path is executable from Scripting on this device.**
+7. Fix any failure found by that runtime smoke before handoff; repeat only the failing targeted scenario, not a broad suite.
+8. Commit/push the logical change.
+9. Tell the user exactly what changed, what runtime path was actually exercised, and what still requires human device judgment.
+10. Stop and wait for user feedback.
 
-Do not turn step 7 into an agent-run acceptance phase.
+Do not turn step 6 into a long whole-product acceptance ritual.
 
 ## Verification policy
-The default is **lightweight developer verification**, not QA certification.
+The default is **focused developer verification + targeted real-runtime smoke for bug fixes**, not ceremonial QA.
 
 Do by default:
 - TypeScript diagnostics.
-- One focused test/check for new non-trivial logic.
-- Existing narrow smoke/check only when the changed boundary directly depends on it and it is cheap.
+- One focused deterministic test/check for new non-trivial logic.
+- For a bug fix, exercise the real production path using the current DEV runtime when technically possible.
+- Use the real current account/session/network/provider when that is exactly what the bug depends on.
+- Reuse the same production core functions/actions as the UI; do not create a parallel fake implementation only for QA.
+
+Examples of required real-runtime checks when applicable:
+- E/Ex session bug -> real production-equivalent request with the current imported session.
+- Search bug -> real `searchGalleries()`/`runEhAction(search)` request against the active site.
+- Favorite bug -> real favorite popup/state request and, when safe, a reversible category/read verification.
+- Torrent/Archive parser bug -> a gallery known to contain that resource, using the real authenticated page.
+- AI Search bug -> real configured Scripting Assistant provider -> structured intent -> real normal search core.
+- AI Assistant Tool bug -> invoke the real tool entry and confirm a real read action returns valid redacted data.
 
 Do **not** do by default:
 - full `runSelfTests.ts` after every change;
-- `runActionSmoke.ts`, `runAssistantToolSmoke.ts`, `runNetworkSelfTest.ts` as a ritual;
+- `runActionSmoke.ts`, `runAssistantToolSmoke.ts`, `runNetworkSelfTest.ts` as a ritual unrelated to the changed path;
 - whole-repository audits or repeated source scans;
-- repeated exact-head bootstrap cycles solely to prove your own work;
-- long simulated acceptance walkthroughs;
+- repeated exact-head bootstrap cycles solely to produce a green report;
+- long simulated acceptance walkthroughs unrelated to the bug;
 - requests for the user to repeat broad regression testing after each small fix.
 
 Run a full harness/release audit only when the user explicitly asks for it, or when `CURRENT_TASK.md` explicitly defines that specific task as a release audit.
 
 A passing deterministic test means **the checked code path passed**. It does not prove real-device UI/network behavior.
 
-## Real-device QA boundary
-The user owns real-device acceptance.
+A passing real-runtime smoke means **the exact runtime scenario you actually executed passed**. It does not prove unrelated UI/gesture/visual behavior.
 
+## Real-runtime QA policy
+### Bug fixes
+For bug fixes, targeted runtime verification is now **expected** when technically possible.
+
+Use `E-Hentai 浏览器 DEV` only. Never overwrite the stable local `E-Hentai 浏览器` during development.
+
+The runtime smoke should normally be short (roughly a few minutes, not a long session) and limited to the affected path.
+
+Good examples:
+- launch/use the DEV script and perform the failing request/action once;
+- call a DEV/runtime action that reaches the same production core as the visible button;
+- use real current Keychain/Storage/session state when the bug specifically concerns them;
+- confirm real server response/state without logging secrets.
+
+If the runtime exposes a direct UI automation capability for the affected control, use it. If it does not, do not pretend that a pure function test proves tap/swipe/pinch/navigation visuals.
+
+### What still belongs to the user
+Human QA remains authoritative for things the agent cannot reliably observe/automate, especially:
+- visual quality / spacing / Liquid Glass appearance;
+- tap comfort and gesture feel;
+- pinch/scroll gesture conflicts when no reliable UI automation exists;
+- animation quality;
+- layout aesthetics across physical orientations/devices.
+
+For those, hand off one small concrete check after the automated/runtime checks pass.
+
+## Status words
 Use these status words precisely:
-- **Implemented** — code is committed and lightweight developer checks passed.
-- **Needs user test** — behavior depends on real Scripting/device/account/network interaction.
-- **Confirmed by user** — the user explicitly reports the real-device behavior works.
-- **Blocked** — implementation cannot proceed because a required capability/input is unavailable.
+- **Implemented** — code is committed and developer checks passed, but no relevant runtime scenario was executed.
+- **Runtime checked** — the specific real DEV runtime scenario described in the report was actually executed and passed.
+- **Needs user test** — remaining behavior depends on visual/gesture/device judgment the agent could not reliably verify.
+- **Confirmed by user** — the user explicitly reports the behavior works.
+- **Blocked** — implementation/runtime verification cannot proceed because a required capability/input is unavailable.
 
-Never write `runtime verified`, `real-device passed`, `accepted`, or equivalent unless the user supplied that evidence or explicitly asked you to perform a runtime action that you actually executed and observed.
+Never write `runtime verified`, `real-device passed`, `accepted`, or equivalent unless you actually executed and observed that exact runtime scenario, or the user supplied that evidence.
 
-Do not say both “completed” and “still needs runtime evidence”. Use **Implemented · needs user test** instead.
+Do not say both “completed” and “still needs runtime evidence”. Report the exact boundary, e.g. `Runtime checked · needs user gesture test`.
 
-Do not bootstrap or launch `E-Hentai 浏览器 DEV` solely for self-certification. Sync DEV once when needed to deliver the code for the user's test, then stop. The stable local `E-Hentai 浏览器` must not be overwritten unless the user explicitly asks.
+## Runtime QA efficiency
+Do not burn model quota on ceremonial verification.
+
+For a bug fix:
+1. reproduce the failing production path if possible;
+2. fix root cause;
+3. focused deterministic check;
+4. rerun only the relevant real runtime path;
+5. stop once it passes.
+
+If runtime verification itself discovers another bug on the same path, fix it in the same logical batch when small and directly related.
+
+Do not wander into unrelated features discovered during QA; report them separately.
 
 ## User bug reports are authoritative runtime evidence
 When the user says something is broken on the real device, treat that report as the current runtime truth.
 
 Do not answer with “tests passed” as a rebuttal. Instead:
 1. inspect the full relevant state/call flow and sibling callers;
-2. identify the root cause;
-3. fix it at the shared boundary when possible;
-4. add/adjust one focused regression check when useful;
-5. commit;
-6. return the fix to the user for another quick real-device test.
+2. reproduce the production path yourself when possible;
+3. identify the root cause;
+4. fix it at the shared boundary when possible;
+5. add/adjust one focused regression check when useful;
+6. rerun the targeted real-runtime scenario;
+7. commit;
+8. return only remaining human-observation checks to the user.
 
 If the same symptom survives two fixes, stop adding local guards. Re-trace the end-to-end flow, inspect the corresponding EhViewer behavior when relevant, and question the earlier root-cause assumption.
 
@@ -107,7 +162,7 @@ No fake UI/settings for behavior that does not exist.
 The repository may be private and the local workspace may be empty. Use Scripting's native GitHub integration/API for repository work.
 
 - Never ask the user to paste a GitHub token.
-- Never put PATs, SSH keys, cookies, passwords, `apiuid`/`apikey`, gallery/page tokens, private paths, full sensitive URLs, user comments, or full HTML in source, prompts, logs, diagnostics, fixtures, or repository files.
+- Never put PATs, SSH keys, cookies, passwords, `apiuid`/`apikey`, gallery/page tokens, private paths, full sensitive URLs, user comments, or full HTML in source, prompts, logs, diagnostics, fixtures, runtime-QA output, or repository files.
 - Work on the branch named in `CURRENT_TASK.md`.
 - Do not write `main`, merge PRs, rewrite history, tag, or publish releases unless the user explicitly asks.
 - Commit by logical feature/fix batch, not every tiny edit.
@@ -116,14 +171,17 @@ The repository may be private and the local workspace may be empty. Use Scriptin
 ## Context / efficiency
 Do not burn context or model quota on ceremonial verification.
 
-When the task is implemented and the lightweight checks pass, commit and hand off. If the conversation becomes large, finish the current logical batch, commit it, leave a compact task/progress note if necessary, and stop.
+For bug fixes, spend a small amount of runtime effort on the exact production path instead of a large amount of effort on broad mocked suites.
+
+If the conversation becomes large, finish the current logical batch, run the targeted runtime smoke, commit it, leave a compact task/progress note if necessary, and stop.
 
 ## Reporting
 Keep the handoff short:
 
 - **Implemented:** what changed.
 - **Commit:** SHA.
-- **Checks:** diagnostics + focused check(s) actually run.
-- **Please test:** 1–3 concrete real-device actions, only if needed.
+- **Checks:** diagnostics + focused check(s).
+- **Runtime:** exact real DEV path actually executed and result, or `not automatable` with reason.
+- **Please test:** only the remaining 1–3 visual/gesture/device actions the agent could not verify.
 
 Do not produce long acceptance reports unless the user explicitly asks for one.
