@@ -26,7 +26,12 @@ export type EhActionResult = EhActionSuccess | EhActionFailure
 type GalleryRefEntry = { url: string; expiresAt: number; sessionGeneration:number }
 const GALLERY_REF_TTL_MS = 10 * 60 * 1000
 const MAX_GALLERY_REFS = 100
+const GALLERY_REF_KEY="ehentai.assistant.gallery-refs.v1"
 const galleryRefs = new Map<string, GalleryRefEntry>()
+function refKeychain():any{return(globalThis as any).Keychain}
+function readStoredGalleryRefs(){try{const parsed=JSON.parse(String(refKeychain()?.get?.(GALLERY_REF_KEY)||"{}"));if(!parsed||typeof parsed!=="object")return;for(const [ref,value] of Object.entries(parsed).slice(-MAX_GALLERY_REFS)){const item=value as any;if(/^gallery_[a-z0-9]+_[a-z0-9]+$/i.test(ref)&&typeof item?.url==="string"&&Number(item?.expiresAt)>Date.now()&&Number.isInteger(Number(item?.sessionGeneration)))galleryRefs.set(ref,{url:item.url,expiresAt:Number(item.expiresAt),sessionGeneration:Number(item.sessionGeneration)})}}catch{}}
+function writeStoredGalleryRefs(){try{const entries=[...galleryRefs].slice(-MAX_GALLERY_REFS),payload=Object.fromEntries(entries);refKeychain()?.set?.(GALLERY_REF_KEY,JSON.stringify(payload),{accessibility:"first_unlock_this_device",synchronizable:false})}catch{}}
+readStoredGalleryRefs()
 
 function failure(code: ActionErrorCode, stage: ActionStage, message: string): EhActionFailure {
   return { ok: false, code, stage, message }
@@ -45,6 +50,7 @@ function pruneGalleryRefs(now = Date.now()) {
     if (!oldest) break
     galleryRefs.delete(oldest)
   }
+  writeStoredGalleryRefs()
 }
 
 export function isGalleryRefSessionCurrent(entryGeneration:number,currentGeneration=getAccountSessionGeneration()){return entryGeneration===currentGeneration}
@@ -52,7 +58,7 @@ function createGalleryRef(url: string): string {
   pruneGalleryRefs()
   let ref = ""
   do { ref = `gallery_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}` } while (galleryRefs.has(ref))
-  galleryRefs.set(ref, { url, expiresAt: Date.now() + GALLERY_REF_TTL_MS,sessionGeneration:getAccountSessionGeneration() })
+  galleryRefs.set(ref, { url, expiresAt: Date.now() + GALLERY_REF_TTL_MS,sessionGeneration:getAccountSessionGeneration() });writeStoredGalleryRefs()
   return ref
 }
 
@@ -60,7 +66,7 @@ function resolveGalleryRef(galleryRef: unknown): { ok: true; url: string } | EhA
   if (typeof galleryRef !== "string" || !/^gallery_[a-z0-9]+_[a-z0-9]+$/i.test(galleryRef)) return failure("INVALID_GALLERY_REF", "validate", "画廊引用无效，请先重新搜索。")
   const entry = galleryRefs.get(galleryRef)
   if (!entry || entry.expiresAt <= Date.now()) {
-    galleryRefs.delete(galleryRef)
+    galleryRefs.delete(galleryRef);writeStoredGalleryRefs()
     return failure("GALLERY_REF_EXPIRED", "gallery-ref", "画廊引用已过期，请重新搜索。")
   }
   if(!isGalleryRefSessionCurrent(entry.sessionGeneration)){galleryRefs.delete(galleryRef);return failure("GALLERY_REF_EXPIRED", "gallery-ref", "画廊引用已因账号或站点变更失效，请重新搜索。")}
