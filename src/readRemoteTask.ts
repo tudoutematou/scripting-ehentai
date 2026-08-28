@@ -6,7 +6,7 @@ const ref = "feat/1.1-gallery-interaction"
 
 async function main() {
   const files = await Promise.all(
-    ["AGENTS.md", "CURRENT_TASK.md", "EHVIEWER_PARITY.md"].map(path => GitHub.getTextContent({ owner, repo, path, ref })),
+    ["AGENTS.md", "CURRENT_TASK.md", "EHVIEWER_PARITY.md", "UI_TARGET_IPAD.md"].map(path => GitHub.getTextContent({ owner, repo, path, ref })),
   )
   console.log(JSON.stringify({
     ref,
