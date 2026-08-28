@@ -29,6 +29,7 @@ export const QUICK_FILTERS: QuickFilterOption[] = [
 export type GallerySearchMode = "normal" | "tag" | "uploader" | "popular"
 export type AdvancedSearchOptions = { enabled:boolean; searchName:boolean; searchTags:boolean; searchDescription:boolean; minimumRating:""|"2"|"3"|"4"|"5"; pageFrom:string; pageTo:string; searchTorrents:boolean; showExpunged:boolean }
 export const DEFAULT_ADVANCED_SEARCH: AdvancedSearchOptions = { enabled:false, searchName:true, searchTags:true, searchDescription:false, minimumRating:"", pageFrom:"", pageTo:"", searchTorrents:false, showExpunged:false }
+export type GallerySearchTag={namespace:string;tag:string;display:string}
 export type GallerySearchState = {
   keyword:string
   category:GalleryCategoryKey
@@ -37,6 +38,7 @@ export type GallerySearchState = {
   sourceUrl:string
   rawQuery:string
   displayQuery:string
+  selectedTags:GallerySearchTag[]
   advanced:AdvancedSearchOptions
 }
 
@@ -48,6 +50,13 @@ const COMMON_TAG_ZH:Record<string,string>={
   "other:full color":"全彩","other:anthology":"选集","other:story arc":"剧情连续","other:uncensored":"无修正","other:censored":"有修正","reclass:non-h":"全年龄"
 }
 function normalize(value:string){return String(value||"").trim().toLowerCase().replace(/[_-]+/g," ").replace(/\s+/g," ")}
+const TAG_PREFIX_BY_NAMESPACE:Record<string,string>={rows:"n",artist:"a",cosplayer:"cos",character:"c",female:"f",group:"g",language:"l",male:"m",mixed:"x",other:"o",parody:"p",reclass:"r"}
+function normalizeTagPart(value:string){return normalize(value).replace(/:$/g,"")}
+export function createGallerySearchTag(namespace:string,tag:string,display=""):GallerySearchTag|null{const ns=normalizeTagPart(namespace),value=normalizeTagPart(tag);if(!TAG_PREFIX_BY_NAMESPACE[ns]||!value)return null;return{namespace:ns,tag:value,display:String(display||"").trim()||value}}
+function gallerySearchTagKey(value:GallerySearchTag){return`${TAG_PREFIX_BY_NAMESPACE[value.namespace]||value.namespace}:${normalizeTagPart(value.tag)}`}
+export function galleryExactTagTerm(value:GallerySearchTag){const prefix=TAG_PREFIX_BY_NAMESPACE[normalizeTagPart(value.namespace)];if(!prefix)return"";const tag=normalizeTagPart(value.tag).replace(/\\/g,"\\\\").replace(/"/g,'\\"');return tag?`${prefix}:"${tag}$"`:""}
+export function composeGallerySearchState(state:GallerySearchState,plainText:string,selectedTags:readonly GallerySearchTag[]):GallerySearchState{const tags:GallerySearchTag[]=[],seen=new Set<string>();for(const item of selectedTags){const tag=createGallerySearchTag(item.namespace,item.tag,item.display);if(!tag)continue;const key=gallerySearchTagKey(tag);if(seen.has(key))continue;seen.add(key);tags.push(tag)}const keyword=String(plainText||"").trim(),rawQuery=[keyword,...tags.map(galleryExactTagTerm)].filter(Boolean).join(" "),displayQuery=[keyword,...tags.map(tag=>tag.display||tag.tag)].filter(Boolean).join(" · ");return{...state,keyword,rawQuery,displayQuery,selectedTags:tags,advanced:{...state.advanced}}}
+export function removeGallerySearchTag(state:GallerySearchState,tag:GallerySearchTag){const key=gallerySearchTagKey(tag);return composeGallerySearchState(state,state.keyword,(state.selectedTags||[]).filter(item=>gallerySearchTagKey(item)!==key))}
 export function getCategoryOption(key:GalleryCategoryKey){return GALLERY_CATEGORIES.find(item=>item.key===key)||GALLERY_CATEGORIES[0]}
 export function getQuickFilter(key:QuickFilterKey){return QUICK_FILTERS.find(item=>item.key===key)||QUICK_FILTERS[0]}
 export function localizeCategory(value:string){const raw=String(value||"").trim();return CATEGORY_ZH[normalize(raw)]||raw}
@@ -57,16 +66,12 @@ export function localizeCommonTag(namespace:string,tag:string){return COMMON_TAG
 
 export function createHomeSearchState(keyword="",category:GalleryCategoryKey="all",quickFilter:QuickFilterKey="none"):GallerySearchState{
   const q=String(keyword||"").trim()
-  return {keyword:q,category,quickFilter,mode:"normal",sourceUrl:"",rawQuery:q,displayQuery:q,advanced:{...DEFAULT_ADVANCED_SEARCH}}
+  return {keyword:q,category,quickFilter,mode:"normal",sourceUrl:"",rawQuery:q,displayQuery:q,selectedTags:[],advanced:{...DEFAULT_ADVANCED_SEARCH}}
 }
-export function createTagSearchState(searchUrl:string,namespace:string,tag:string,translated:string):GallerySearchState{
-  let rawQuery=`${namespace}:${tag}`
-  try{const value=new URL(searchUrl).searchParams.get("f_search");if(value)rawQuery=value}catch{}
-  return {keyword:"",category:"all",quickFilter:"none",mode:"tag",sourceUrl:String(searchUrl||""),rawQuery,displayQuery:translated||tag,advanced:{...DEFAULT_ADVANCED_SEARCH}}
-}
-export function createUploaderSearchState(uploader:string):GallerySearchState{const value=String(uploader||"").trim();return {keyword:value,category:"all",quickFilter:"none",mode:"uploader",sourceUrl:"",rawQuery:value?`uploader:${value}`:"",displayQuery:value?`上传者：${value}`:"上传者",advanced:{...DEFAULT_ADVANCED_SEARCH}}}
-export function createPopularSearchState():GallerySearchState{return {keyword:"",category:"all",quickFilter:"none",mode:"popular",sourceUrl:"",rawQuery:"",displayQuery:"热门画廊",advanced:{...DEFAULT_ADVANCED_SEARCH}}}
-export function cloneSearchState(state:GallerySearchState):GallerySearchState{return {...state,advanced:{...state.advanced}}}
+export function createTagSearchState(searchUrl:string,namespace:string,tag:string,translated:string):GallerySearchState{const base:GallerySearchState={keyword:"",category:"all",quickFilter:"none",mode:"tag",sourceUrl:String(searchUrl||""),rawQuery:"",displayQuery:"",selectedTags:[],advanced:{...DEFAULT_ADVANCED_SEARCH}},selected=createGallerySearchTag(namespace,tag,translated);return selected?composeGallerySearchState(base,"",[selected]):base}
+export function createUploaderSearchState(uploader:string):GallerySearchState{const value=String(uploader||"").trim();return{keyword:value,category:"all",quickFilter:"none",mode:"uploader",sourceUrl:"",rawQuery:value?`uploader:${value}`:"",displayQuery:value?`上传者：${value}`:"上传者",selectedTags:[],advanced:{...DEFAULT_ADVANCED_SEARCH}}}
+export function createPopularSearchState():GallerySearchState{return{keyword:"",category:"all",quickFilter:"none",mode:"popular",sourceUrl:"",rawQuery:"",displayQuery:"热门画廊",selectedTags:[],advanced:{...DEFAULT_ADVANCED_SEARCH}}}
+export function cloneSearchState(state:GallerySearchState):GallerySearchState{return{...state,selectedTags:[...(state.selectedTags||[])],advanced:{...state.advanced}}}
 function applyCategory(url:URL,key:GalleryCategoryKey){const option=getCategoryOption(key);if(option.bit)url.searchParams.set("f_cats",String(ALL_CATEGORY_MASK&~option.bit));else url.searchParams.delete("f_cats")}
 function applyAdvanced(url:URL,advanced:AdvancedSearchOptions){for(const key of ["advsearch","f_sname","f_stags","f_sdesc","f_srdd","f_spf","f_spt","f_sto","f_sh"])url.searchParams.delete(key);if(!advanced.enabled)return;url.searchParams.set("advsearch","1");if(advanced.searchName)url.searchParams.set("f_sname","on");if(advanced.searchTags)url.searchParams.set("f_stags","on");if(advanced.searchDescription)url.searchParams.set("f_sdesc","on");if(advanced.minimumRating)url.searchParams.set("f_srdd",advanced.minimumRating);const from=Math.max(0,Math.floor(Number(advanced.pageFrom)));const to=Math.max(0,Math.floor(Number(advanced.pageTo)));if(Number.isFinite(from)&&from>0)url.searchParams.set("f_spf",String(from));if(Number.isFinite(to)&&to>0)url.searchParams.set("f_spt",String(to));if(advanced.searchTorrents)url.searchParams.set("f_sto","on");if(advanced.showExpunged)url.searchParams.set("f_sh","on")}
 export function buildGallerySearchUrl(baseUrl:string,state:GallerySearchState):string{
@@ -78,7 +83,7 @@ export function buildGallerySearchUrl(baseUrl:string,state:GallerySearchState):s
   applyCategory(url,state.category)
   if(state.mode!=="uploader"&&state.mode!=="popular"){
     const existing=String(url.searchParams.get("f_search")||"").trim()
-    const primary=existing||(!state.sourceUrl?state.rawQuery.trim()||state.keyword.trim():"")
+    const primary=state.rawQuery.trim()||existing||state.keyword.trim()
     const quick=getQuickFilter(state.quickFilter).query
     const query=[primary,quick].filter(Boolean).join(" ")
     if(query)url.searchParams.set("f_search",query);else url.searchParams.delete("f_search")
