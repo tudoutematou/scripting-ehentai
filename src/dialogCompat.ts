@@ -1,5 +1,8 @@
-import { Dialog } from "scripting"
+declare const Dialog: {
+  confirm(options: any): Promise<boolean>
+  prompt(options: any): Promise<string | null>
+}
 
-// Native Scripting app code does not provide browser DOM globals such as confirm()/prompt().
+// Scripting exposes Dialog as a host global; it is not a named export from the "scripting" module.
 ;(globalThis as any).confirm = (options: any) => Dialog.confirm(options)
 ;(globalThis as any).prompt = (options: any) => Dialog.prompt(options)
