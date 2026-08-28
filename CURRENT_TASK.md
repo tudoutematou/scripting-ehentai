@@ -1,201 +1,176 @@
-# CURRENT_TASK — 1.1.x User QA Fix Pass 5
+# CURRENT_TASK — 1.1.x User QA Fix Pass 6
 
 Branch: `feat/1.1-gallery-interaction`
 
-## Freeze
-User-confirmed working unless a new regression appears:
-- Preview thumbnail sprite fix.
-- Safari login / Cookie helper / import + validation.
-- Current responsive Gallery Detail direction.
+## Goal
+The app is now close to the intended product. This pass is a **real-device polish + one confirmed resource parser fix**, not a new feature wave.
 
-## Execute in order
-Complete this pass without asking between fixes:
+## User-confirmed / observed state
+Preserve unless a new regression is reported:
+- Safari login / Cookie import works.
+- Preview sprite thumbnails work.
+- Cloud Favorites now returns real server gallery items.
+- Full EhTagTranslation is loaded: device UI reports about `43971` entries from cache.
+- Root navigation is now only `发现 / 书库 / 设置`.
+- Archive options now render actionable `下载此归档` buttons; do not redesign the archive scene unless actual download handoff is reported broken.
+- Current Gallery Detail direction is acceptable.
 
-1. **P0 Cloud Favorites** — real web Favorites has 20+ items; App must show them.
-2. **P0 Complete translated tag database** — current runtime effectively falls back to only two hard-coded suggestions (`汉语`, `巨乳`). Restore the full EhTagTranslation index.
-3. **P0 Torrent list** — parse real E-Hentai torrent rows and expose usable download actions.
-4. **P0 Archive actual download flow** — choices must perform the authenticated archive request and resolve a real download handoff.
-5. **P1 Information architecture cleanup** — root navigation only 发现 / 书库 / 设置.
+## Execute now
+1. iPad root/sidebar density cleanup.
+2. Gallery grid density/card readability, especially Cloud Favorites.
+3. Library → 收藏 direct content + remove duplicated Cloud Favorites entry.
+4. Torrent parser false-positive fix (`All` must never be treated as a torrent).
 
-Do not add another feature family.
+## Explicitly defer until user provides Android EhViewer screenshots
+- Search filter interaction/layout details.
+- Reader page-turn interaction/tap zones/gesture behavior.
+
+Do not guess those two behaviors in this pass.
 
 ## Workflow
 - User real-device evidence is authoritative.
-- Inspect current branch before editing.
-- Reuse current session/network/parser/store/UI.
-- Root-cause fixes only; do not patch symptoms with more hard-coded examples.
-- TypeScript diagnostics after logical fixes.
-- Focused deterministic checks only for Favorites / tag database / Torrent / Archive.
-- No broad regression ritual or screenshot-perfect self-acceptance.
-- Commit logical fixes, sync isolated DEV once, then stop for user testing.
+- Inspect latest branch before editing.
+- Reuse existing core/session/parser/store/UI.
+- Minimal UI restructuring only; no new architecture layer.
+- TypeScript diagnostics + focused Torrent/parser checks only.
+- No broad regression/acceptance run.
+- Commit logical fixes, sync isolated DEV once, then stop for user test.
 
 ---
 
-# Fix A — Cloud Favorites
+# Fix A — iPad root/sidebar density
 
-Immediate known runtime bug:
-- `FavoritesScene` previously referenced `loadFavorites` / `FavoritesPage` without importing them from `favorites.ts`.
-- Ensure that wiring is present and fix any nearby compile/runtime typo before handoff, including an undefined saved-search delete symbol if present.
-
-Then trace the real path:
-`Library → 收藏 → FavoritesScene → loadFavorites() → authenticated favorites.php → categories + .itg gallery rows`.
+Current regular iPad `NavigationSplitView` leaves a visibly oversized sidebar/blank horizontal area for only three root items.
 
 Required:
-- initial view = all cloud Favorites;
-- first 10 `.fp` entries map positionally to slots 0–9;
-- category names/counts come from server;
-- `.itg` gallery rows become existing `GallerySummary` items;
-- never replace cloud Favorites with local bookmarks;
-- if structural gallery rows exist but parsing returns zero, surface parser error rather than false empty state.
+- reduce the regular iPad sidebar width so `发现 / 书库 / 设置` occupy a compact navigation rail/column and the content area gains useful width;
+- target roughly the visual density of a 220–280 pt sidebar on a full-size iPad, but use the actual supported Scripting/SwiftUI API rather than forcing a magic width if the platform exposes a native split-column width modifier;
+- inspect current Scripting docs/API before choosing the implementation;
+- keep the system split/collapse behavior working;
+- do not replace `NavigationSplitView` with a custom fake sidebar unless the native API truly cannot control width;
+- compact iPhone TabView remains unchanged.
 
-References: EhViewer `FavoritesParser.java`, `GalleryListParser.java`, `FavListUrlBuilder.java`.
-
-Focused check: synthetic Favorites HTML with non-zero categories and at least two gallery rows.
+This is a density fix, not another visual redesign.
 
 ---
 
-# Fix B — Full EhTagTranslation database + search suggestions
+# Fix B — Gallery cards / Cloud Favorites grid
 
-## Confirmed root symptom
+The Cloud Favorites page currently uses one very wide list row per gallery. The user wants the same card/grid language as Discover/Home, with fewer cards per row so titles are readable.
 
-Current `src/tagTranslation.ts` contains exactly two hard-coded fallback suggestions:
-- `language:chinese / 汉语`
-- `female:big breasts / 巨乳`
+## Regular iPad
+- Cloud Favorites gallery content: **3 columns per row** at normal landscape width.
+- Discover/Home gallery grids should also avoid squeezing titles into 4–5 narrow cards. Prefer a stable 3-column regular-iPad density where practical.
+- Reuse the existing `GallerySummary` / thumbnail / Gallery Detail navigation.
+- Card title should have enough room for approximately 2–3 useful lines before truncation.
+- Preserve cover, category, uploader/pages/date metadata without turning the card into a huge row.
 
-Real-device QA shows those two work while ordinary translated tags do not. Treat this as evidence that the full translation database/index is not successfully available at search time.
+## Compact iPhone
+- do not force 3 columns;
+- keep an adaptive compact layout, normally 1–2 columns depending on available width.
 
-Do **not** solve this by adding more `BUILTIN_SUGGESTIONS`.
+## Paging
+- do not arbitrarily discard server results just to show fewer items;
+- "fewer" means lower visual density / fewer columns at once, while keeping existing server pagination semantics.
 
-## Upstream format
-
-Current source is:
-`xiaojieonly/EhTagTranslation/tag-translations/tag-translations-zh-rCN.json`
-
-Despite the `.json` extension, upstream `main.py` writes it as a binary-style payload:
-- 4-byte big-endian size header;
-- repeated UTF-8 key;
-- CR byte;
-- Base64-encoded UTF-8 Chinese translation;
-- LF byte.
-
-Inspect current Scripting `fetch` / `Data` APIs and load this payload in a way that preserves bytes. Do not assume a normal JSON document.
-
-The current `parseDatabase(text)` / `response.text()` path must be verified against the actual binary payload. Prefer a byte-safe parser if text decoding can corrupt or silently fail.
-
-## Required behavior
-
-- full upstream database successfully builds the local translation map and suggestion index;
-- cache stores/reads a representation that preserves the payload correctly;
-- a failed download/parse must not silently pretend that the two built-ins are the full database;
-- while the database is loading, preserve the user's current input and recompute suggestions when loading completes;
-- Chinese substring search and English search both work;
-- duplicate namespace/tag suggestions are de-duplicated;
-- selecting a suggestion continues using exact E-Hentai search syntax through existing search state.
-
-## Mandatory focused examples
-
-The upstream database contains `gender change` in both namespaces:
-- `female:gender change` → `性转换`
-- `male:gender change` → `性转换`
-
-Therefore typing `性转` must return **both** candidates, not zero and not one.
-
-Also check:
-- `性转换` → both female/male `gender change`;
-- `gender change` → both namespaces;
-- `女体化` → `male:gender morph`;
-- `男体化` → `female:gender morph`;
-- existing `汉语` and `巨乳` still work through the real database/index, not because they are the only hard-coded exceptions.
-
-Do not ship if the loaded translation count is only the two fallback entries. Expose a safe translation-load status/count somewhere developer-visible or in the final report so user QA can distinguish `full DB loaded` from fallback mode.
-
-References:
-- `xiaojieonly/EhTagTranslation/main.py`
-- `EhTagTranslation/Database` male/female tag tables
-- existing `tagTranslation.ts`, `SearchComposer`.
-
-Focused check must exercise a representative parsed binary fixture and the five queries above.
+Prefer one small shared gallery-card/grid helper if it actually removes duplication between Home and Favorites. Do not perform a broad UI component rewrite.
 
 ---
 
-# Fix C — Torrent list
+# Fix C — Library → 收藏 should be direct content, not duplicate navigation
 
-Use EhViewer `TorrentParser.java` as the narrow behavior reference.
+Current `LibraryScene` has two overlapping Cloud Favorites routes when the 收藏 segment is selected:
+- `打开云端收藏与分类管理`
+- later under 管理: `云端收藏`
 
-Required:
-- parse each `<form>...</form>` torrent block;
-- read torrent name/download URL from the real torrent row, including `<td colspan="5"> ... <a href="...">NAME</a>` structure;
-- parse Posted date span structure;
-- tolerate harmless quote/attribute/whitespace differences;
-- do not require anchor text to contain `Download`;
-- strip private `?p=` suffix;
-- each native item has a clear Safari/system download action;
-- keep original torrent-page fallback only for genuine request/parse failure;
-- do not log private torrent URLs or HTML.
+This is redundant.
 
-Focused check: at least two torrent forms + `?p=` stripping.
+Required Library behavior:
+- selecting `书库 → 收藏` should show **real cloud favorite gallery cards directly in the Library content area**;
+- use the authenticated `loadFavorites()` data that is now proven to work;
+- default to All Favorites;
+- show lightweight category selection/summary without forcing the user through another page merely to see favorites;
+- provide at most **one** clearly named management/navigation action if a separate full category-management scene is still useful (for example `管理收藏分类`);
+- remove the duplicate `打开云端收藏与分类管理` + `管理 → 云端收藏` pair;
+- do not substitute local bookmarks for cloud favorites.
 
----
-
-# Fix D — Archive actual download flow
-
-Current option labels alone are incomplete.
-
-Use EhViewer `ArchiveParser.java`, `EhEngine.downloadArchive(...)`, `EhUrl.getDownloadArchive(...)`.
-
-Required flow:
-1. authenticated GET archive page;
-2. parse `hathdl_form` action parameter `or`;
-3. parse `do_hathdl('org' | numeric)` choices;
-4. tapping a choice POSTs `hathdl_xres=<resolution>` to the correct `archiver.php?gid=...&token=...&or=...` using current E/Ex Cookie, gallery Referer and origin;
-5. follow/parse server response until the real `Click Here To Start Downloading` href is available;
-6. hand the resolved final URL to Safari/system download if Scripting should not own the binary archive.
-
-Options must be actions, not read-only labels.
-Show safe server restriction/error messages when applicable.
-
-Focused checks: parse `or` + choices; build POST contract; parse final download href.
+Keep History / Bookmarks / Downloads in Library. Do not move Discover features back into root navigation.
 
 ---
 
-# Fix E — Information architecture de-duplication
+# Fix D — Torrent parser: reject fake `All` and parse real torrent links
 
-`UI_TARGET_IPAD.md` UI 2.1 is authoritative.
+## Confirmed current bug
+Real-device Torrent scene currently shows a single item named `All` with `在 Safari 下载`. Treat this as a parser false positive, **not** as a valid torrent.
 
-Both iPad and iPhone roots:
-- **发现**
-- **书库**
-- **设置**
+Current parser is too permissive: it can select the first generic anchor in the candidate area and can fall back from the torrent `<td colspan=5>` to the entire `<form>`.
 
-Discover owns Search Composer, advanced filter, categories, Popular/Image Search/ranking/latest and browsing.
-Library owns 全部 / 收藏 / 历史 / 书签 / 下载.
-Settings owns account/login/site/Reader/download/cache/manual Cookie fallback.
+## EhViewer reference
+Use current EhViewer `TorrentParser.java` behavior as the contract:
+- split by `<form>...</form>`;
+- require the torrent row `<td colspan="5"> ... <a href="...">TORRENT NAME</a></td>`;
+- parse the adjacent Posted spans;
+- remove private `?p=` suffix.
 
-Do not restore separate root Search/Favorites/Downloads/History/Account destinations.
-Root switching replaces root content; child pages push one logical level only.
+The upstream parser test expects real URLs shaped like:
+`https://ehtracker.org/get/<id>/<hash>.torrent`
+
+## Required
+- **remove the fallback that searches the whole form when the actual torrent cell is absent**;
+- only accept an anchor from the real torrent row;
+- reject generic filter/navigation anchors such as `All`;
+- require the resolved download candidate to be a plausible torrent resource (at minimum a `.torrent` resource / real tracker download shape), while allowing harmless query strings before normalization;
+- strip private `?p=` without damaging the rest of the torrent URL;
+- preserve real torrent name and Posted date;
+- zero real torrent rows => show `服务器未返回可用种子` + original-page Safari fallback;
+- never fabricate a torrent item from navigation/filter links.
+
+## Focused regression
+Use a fixture modeled after upstream `TorrentParserTest`:
+- two valid form blocks;
+- expected count = 2;
+- both final URLs end in `.torrent` and match the expected tracker path after `?p=` stripping;
+- names include meaningful torrent names (for example `Part 2`, `1280x`);
+- Posted = real timestamp;
+- include an `All` navigation/filter anchor in the fixture and prove it is **not** returned.
+
+No logging of private torrent URLs or full HTML.
 
 ---
 
-# Preserve
-- working login/Cookie flow;
-- fixed preview thumbnails;
-- multi-tag exact-query model;
-- current Gallery Detail responsive layout direction;
-- Reader/offline core;
-- comments/rating/bookmark behavior.
+# Reader note — DO NOT IMPLEMENT YET
+
+Current code behavior is known:
+- single-page mode: tapping the image only toggles toolbar visibility;
+- page changes are currently only via `上一页 / 跳转 / 下一页` buttons;
+- `从右向左翻页` currently changes the order/direction of those page controls;
+- `连续纵向阅读` switches to continuous scrolling.
+
+This means the user's lack of tap-zone/swipe page turning is **not a hidden setting problem**; the interaction has not been implemented yet.
+
+Wait for the user's Android EhViewer screenshots/explanation, then define the Reader parity task from that evidence.
+
+# Search Filter note — DO NOT IMPLEMENT YET
+Wait for the user's Android EhViewer screenshots/explanation before changing current search-filter behavior/layout.
+
+---
 
 # Handoff
-After all five fixes:
-- push logical commits;
+After A–D only:
+- push logical commit(s) to `feat/1.1-gallery-interaction`;
 - sync isolated DEV once;
-- no long acceptance run;
-- report Favorites / full tag DB / Torrent / Archive / navigation + commit(s) + diagnostics/focused checks.
+- do not modify `main`;
+- report only:
+  - sidebar/density change;
+  - Home/Favorites grid density;
+  - Library Favorites de-dup/direct-content change;
+  - Torrent false-positive/root-cause fix;
+  - commit(s) + TS diagnostics + focused Torrent check.
 
-Ask user to test only:
-1. Library → 收藏 shows real cloud favorites/categories;
-2. typing `性转` shows both `female:gender change` and `male:gender change`;
-3. a real gallery Torrent page lists usable torrent entries;
-4. an Archive option actually proceeds to download handoff or a clear server restriction;
-5. root navigation only contains 发现 / 书库 / 设置.
+Ask the user to test only:
+1. iPad sidebar is visibly narrower and content has more room;
+2. Library → 收藏 directly shows real favorites in a readable 3-column iPad grid and no duplicate Cloud Favorites route;
+3. Discover/Home gallery titles are less aggressively squeezed;
+4. Torrent scene never shows `All` as a torrent and either shows real `.torrent` entries or a truthful empty state.
 
-Stop and wait for user feedback.
+Stop and wait for the Android Search/Reader screenshots.
