@@ -1,338 +1,188 @@
-# CURRENT_TASK — 1.1.x User QA Fix Pass 4 + Search Parity
+# CURRENT_TASK — 1.1.x Fixes + Search Parity + iPad UI 2.0
 
 Branch: `feat/1.1-gallery-interaction`
 
-## Confirmed by user — freeze these
+## Confirmed by user — freeze
 
 - Preview thumbnail duplication is fixed on the real device.
-- Safari login + Cookie helper + import/validation now works on the real device.
-- Do not reopen Preview or Login/Cookie work unless the user reports a new regression.
+- Safari login + Cookie helper + import/validation works on the real device.
+- Do not reopen Preview or Login/Cookie unless a new regression is reported.
 
-## Authorized work for this pass
+## Execute in this order
 
-Complete the following in order, without asking between slices:
+Complete all four phases without asking between them:
 
-1. **P0 — Cloud Favorites:** web has 20+ cloud favorites; App shows zero.
-2. **P0 — Home category navigation:** category results require many Back taps instead of one.
-3. **P1 — EhViewer-style translated tag search:** Chinese/English input must suggest real E-Hentai tags, allow multiple selected tags in one search, and preserve the existing advanced-search filters.
+1. **P0 Cloud Favorites** — the same logged-in account has 20+ favorites on `favorites.php`, while App shows zero.
+2. **P0 Category navigation** — Home → category → Back must return Home in one tap.
+3. **P1 EhViewer-style translated tag search** — Chinese/English tag suggestions, exact tag expressions, multiple selected tags, ordinary text coexistence, existing advanced filters preserved.
+4. **P1 iPad UI 2.0** — implement the user-approved responsive layout in `UI_TARGET_IPAD.md` using existing data/actions.
 
-Do not add any other feature family in this pass.
+Do not start any other feature family.
 
-## Development contract
+## Developer workflow
 
-- User real-device evidence is authoritative.
-- Trace the real flow before editing.
-- Reuse existing session/search/tag-translation code; no second search engine or second tag database.
-- TypeScript diagnostics + one focused deterministic check per non-trivial parser/search-expression change.
-- No full regression, release audit, simulated acceptance, or broad refactor.
-- Do not log/commit full authenticated HTML, Cookie values, gallery titles, gids/tokens, private URLs, user search history, or other user data.
-- Commit logical slices and push to the current branch.
+- Inspect current code and narrow EhViewer behavior before editing.
+- Reuse existing network/session/parser/store/search/Reader/download code.
+- Fix root cause; no speculative architecture rewrite.
+- TypeScript diagnostics after each logical phase.
+- One focused deterministic check for non-trivial Favorites/search-expression logic.
+- No full regression ritual, release audit, screenshot-perfect automated acceptance, or repeated bootstrap loops.
+- Commit logical phases and push to the current branch.
+- User performs real-device QA.
 - Final status: **Implemented · needs user test**.
 
----
+## Phase 1 — Cloud Favorites
 
-# Slice A — P0 Cloud Favorites
+Current flow:
 
-## Runtime truth
+`FavoritesScene → loadFavorites() → buildFavoritesUrl() → fetchHtml(favorites.php) → parseFavoriteCategories() → parseSearchHtml()`
 
-The same authenticated account has **20+ cloud favorites on the E-Hentai Favorites webpage**, while App → Library → Cloud Favorites shows no galleries.
-
-Treat this as a Favorites parser/request integration bug, not as an empty account and not as a login bug.
-
-## Current flow
-
-`FavoritesScene`
-→ `loadFavorites()`
-→ `buildFavoritesUrl()`
-→ authenticated `fetchHtml(favorites.php)`
-→ `parseFavoriteCategories()`
-→ generic `parseSearchHtml()`
-→ `FavoritesPage.items`
-
-## Reference behavior
-
-Use only the narrow EhViewer reference:
-
+Use EhViewer references only as needed:
 - `FavoritesParser.java`
 - `GalleryListParser.java`
 - `FavListUrlBuilder.java`
 
-Important behavior:
+Required behavior:
+- All cloud favorites uses `favorites.php` without requiring `favcat=all`.
+- Parse `.ido → .fp` positionally: first 10 entries are slots 0–9; count from child 0, name from child 2.
+- Do not require a `favcat` attribute on each `.fp` element.
+- Parse gallery rows from Favorites `.itg` into the existing `GallerySummary` model.
+- Reuse existing gallery-list parsing where compatible; create only the smallest Favorites-specific parser boundary needed.
+- Preserve category selection, search, pagination, notes, mutation and active E/Ex routing.
+- If HTML structurally contains gallery rows but parser returns zero, show a parser error instead of a false empty state.
+- Never log/save full authenticated HTML, Cookie values, titles, gids/tokens or private URLs.
 
-1. All cloud favorites uses `favorites.php` without requiring `favcat=all`.
-2. Favorites has a dedicated parser boundary.
-3. Categories come from `.ido` → `.fp`; upstream expects 11 `.fp` entries and uses the first 10 as slots 0–9.
-4. Slot number is positional. Count is child 0 and category name is child 2. Do **not** require a `favcat` attribute on the `.fp` opening tag.
-5. Gallery rows come from the Favorites page `.itg` gallery-list container.
+Focused check: synthetic Favorites HTML with non-zero category counts and at least two distinct gallery rows.
 
-## Known suspicious code
+## Phase 2 — Category navigation
 
-Current `parseFavoriteCategories()` requires a `favcat=0..9` attribute on each `.fp` tag, which does not match upstream behavior and can turn real categories into ten zero-count placeholders.
+Current bug source: many unrelated category `NavigationLink`s are inside one aggregate `LazyVGrid` List row.
 
-Current `loadFavorites()` also reuses generic `parseSearchHtml()` for the Favorites gallery list. Verify compatibility with the authenticated `favorites.php` structure returned by the real site.
+Required:
+- `Home → category results → Back → Home` in one tap.
+- Do not patch Back/dismiss manually.
+- Do not imperatively manipulate the navigation stack.
+- One semantic navigation destination per ordinary List row, or use root/state selection where the new iPad shell requires card/chip grids.
+- Inspect only immediate siblings for the same aggregate-row anti-pattern.
 
-## Required fix
+## Phase 3 — EhViewer-style translated tag search
 
-- Parse 10 favorite slots by Favorites page structure/position.
-- Parse actual gallery rows from the Favorites `.itg` container into the existing `GallerySummary` model.
-- Reuse existing gallery-summary parsing where compatible; extract/adapt the minimum list parsing needed rather than creating a parallel gallery model.
-- Preserve Favorites search, category selection, pagination, notes, mutations, and active E/Ex routing.
-- Initial Favorites view means **all cloud favorites** and must display the server items.
-- If structural evidence says galleries exist but parsing returns zero items, surface a parser error rather than the misleading empty-state message.
+Reuse the existing `tagTranslation.ts` database/cache. Do not add another tag DB or remote autocomplete service.
 
-## Safe runtime inspection
-
-If local DEV runtime inspection is available, only inspect safe structural facts:
-- pathname `favorites.php`;
-- response status;
-- counts of `.ido`, `.fp`, `.itg`, `/g/` anchors;
-- parsed category/item counts.
-
-Never print/save/report full authenticated HTML or gallery identities/titles/tokens.
-
-## Focused check
-
-Use a synthetic Favorites HTML fixture with:
-- 10 favorite slots (+ summary slot if needed);
-- non-zero category counts;
-- at least two `.itg` gallery rows;
-- assertions for category indexes/counts/names and non-empty distinct gallery summaries.
-
-Do not use the user's real Favorites data in fixtures.
-
----
-
-# Slice B — P0 Home category navigation
-
-## Runtime truth
-
-From Home → 分类 → `其他` (and likely sibling categories), Back requires many taps before Home is reached.
-
-Expected:
-
-`Home → category results → Back → Home`
-
-with one Back action.
-
-## Root-cause area
-
-Current Home Categories is:
-
-`List → Section → LazyVGrid → many NavigationLink destinations`
-
-This is the same aggregate-List-row navigation pattern that previously caused extra Account/Library stack levels.
-
-## Required fix
-
-- One semantic category `NavigationLink` per List row.
-- Do not put multiple unrelated navigation destinations inside one `LazyVGrid`, `VStack`, `HStack`, or other aggregate List row.
-- Preserve the current category labels and `GallerySearchState` values.
-- Do not patch the Back button, manually call dismiss to compensate, or imperatively manipulate the navigation stack.
-- Inspect only immediate Home/List siblings for the exact same anti-pattern and flatten them if necessary; do not start another UI redesign.
-
-## User check
-
-- Home → 其他 → Back = Home in one tap.
-- Home → one other category → Back = Home in one tap.
-
----
-
-# Slice C — P1 EhViewer-style translated tag search
-
-## User expectation
-
-Match the **behavior** shown by EhViewer, while keeping native Scripting/iOS UI:
-
-1. User types Chinese such as `汉语` or `巨乳`.
-2. Local tag database immediately shows matching real E-Hentai tag suggestions, for example:
-   - `language:chinese` / `汉语`
-   - `female:big breasts` / `巨乳`
-   - other tags whose English or Chinese translation contains the typed text.
-3. Tapping a suggestion commits the real tag into the search expression rather than searching the Chinese display text as a gallery-title keyword.
-4. User can continue typing and select a second, third, or later tag.
-5. Multiple selected tags are combined in one E-Hentai search (logical AND by space-separated exact tag terms).
-6. The user can remove one selected tag without clearing the whole search.
-7. Ordinary free-text search must still work when the user does not select a tag suggestion.
-8. Existing category/language/advanced filters must apply to the same composed search, not a separate search system.
-
-## Existing assets to reuse
-
-The project already has `tagTranslation.ts`:
-- downloads/caches the EhTagTranslation database;
-- parses English tag key → Chinese translation;
-- exposes `ensureTagTranslations()` and `translateTag()`.
-
-Do **not** download a second tag database and do not call a remote autocomplete API on every keystroke.
-
-Extend the current in-memory parsed database so it can also support **reverse suggestions** from both Chinese and English input.
-
-## EhViewer reference behavior
-
-Use only:
+Reference behavior:
 - `EhTagDatabase.java`
 - `Tag.java`
 - `SearchBar.java`
 
-Relevant upstream behavior:
+Required:
+- Input Chinese or English → local tag suggestions matching either English tag or Chinese translation.
+- Example: `汉语` suggests `language:chinese / 汉语`.
+- Example: `巨乳` suggests `female:big breasts / 巨乳` and other real matching tags.
+- Tapping a suggestion commits a known exact E-Hentai tag term rather than searching the Chinese display text.
+- Support multiple selected tags; selecting a second tag must append, not replace the first.
+- Selected tags are independently removable and de-duplicated.
+- Remaining plain text may coexist with selected tags.
+- Reuse existing `GallerySearchState`, `rawQuery`, `displayQuery`, `buildGallerySearchUrl()` and `ResultsView`.
+- Existing category/language/rating/page/torrent/expunged filters apply to the same composed query.
+- Provide a clear `+ / 高级筛选` entry that reuses existing `FilterView` and preserves the composed query.
 
-- `Tag.involve(keyword)` matches if either the English tag or Chinese translation contains the input.
-- `EhTagDatabase.suggest()` returns matching tag pairs and caps the suggestion list.
-- SearchBar only treats the current unfinished text fragment as the suggestion input; already committed tag expressions remain intact.
-- Selecting a tag converts it into an exact E-Hentai search term. Example upstream expressions:
-  - `female:big breasts` → `f:"big breasts$"`
-  - `language:chinese` → `l:"chinese$"`
-- A second selected tag is appended instead of replacing the first, e.g.:
-  - `f:"big breasts$" l:"chinese$"`
+Exact-query behavior should match EhViewer semantics for known namespaces, e.g.:
+- `female:big breasts` → `f:"big breasts$"`
+- `language:chinese` → `l:"chinese$"`
+- combined → `f:"big breasts$" l:"chinese$"`
 
-Reproduce the protocol/behavior, not the Android widget architecture.
+Build the suggestion index once when the current tag database is parsed/loaded. Cap visible suggestions to a UI-friendly number and prefer exact/prefix matches where simple.
 
-## Tag suggestion model
+Focused checks:
+- Chinese and English suggestion matching;
+- exact query building;
+- two-tag composition;
+- duplicate prevention;
+- selected tags + plain text coexistence.
 
-Add the smallest useful typed representation, e.g. conceptually:
+## Phase 4 — iPad UI 2.0
 
-`TagSuggestion { namespace, tag, english, translated, exactQuery }`
+Read and follow `UI_TARGET_IPAD.md`.
 
-The exact naming is up to the implementation.
+This is an interface reorganization, not a rewrite of the app.
 
-Build the suggestion index when the existing translation database is parsed/loaded; do not re-decode Base64 or reparse the file on every keystroke.
+Key outcomes:
 
-The suggestion matcher must:
-- normalize case/underscore/hyphen/space consistently with existing translation logic;
-- match both normalized English and Chinese display text;
-- cap visible results (roughly 20–40; use a small UI-friendly number initially);
-- prefer stronger/exact/prefix matches ahead of weak contains matches when practical without building a large search framework;
-- return no suggestions cleanly while the translation DB is unavailable/loading.
+### Responsive shell
+- Regular-width iPad: use current Scripting-supported split-navigation/layout APIs for a persistent root sidebar.
+- Compact/iPhone: retain a normal single-column `NavigationStack` flow.
+- Root destinations: 发现 / 搜索 / 书库 / 收藏 / 下载 / 历史 / 设置.
+- Root switching must replace root detail content, not stack several root pages.
 
-## Exact query builder
+### Discover
+- Search Composer at top.
+- Discovery cards for existing Popular / Image Search / ranking-discovery / latest browse capabilities.
+- Compact category chips/buttons without reintroducing multi-link List-row bugs.
+- Continue Reading from real history/progress.
+- Latest Galleries as adaptive iPad cards using real gallery data.
+- External links visually secondary.
 
-Add one pure helper for exact tag search expressions.
+### Search
+- Dedicated root page.
+- Translated multi-tag Search Composer from Phase 3.
+- Adaptive results grid on regular width; compact list/grid on iPhone as appropriate.
+- Reuse existing advanced filter state; regular iPad may show a right filter panel only if the current Scripting API supports it cleanly, otherwise open existing `FilterView`.
 
-Use EhViewer-compatible namespace prefix behavior where known from the existing map/reference:
-- `female` → `f:`
-- `male` → `m:`
-- `language` → `l:`
-- `artist` → `a:`
-- `group` → `g:`
-- `parody` → `p:`
-- `character` → `c:`
-- `cosplayer` → `cos:`
-- `mixed` → `x:`
-- `other` → `o:`
-- `reclass` → `r:`
-- `rows` → `n:`
-- misc/no-prefix tags remain valid exact tag terms.
+### Library
+- Aggregate existing real data into tabs/segments: 全部 / 收藏 / 历史 / 书签 / 下载.
+- Reuse Continue Reading cards.
+- Adaptive content grid on iPad.
+- Specialized management scenes may remain for complex Favorites/download actions.
 
-Quote tags containing spaces and include the trailing `$` exact-match marker in the same form EhViewer uses.
-Do not blindly concatenate unescaped user input into exact tag syntax; the exact term must come from a known suggestion record.
+### Gallery Detail
+- Regular-width iPad: two-column composition.
+  - Left: cover, titles, uploader/category, rating/pages, primary Read/Continue button, favorite/download/bookmark actions, key metadata.
+  - Right: tags, comments summary, preview grid, related/resources.
+- Compact/iPhone: collapse the same semantic sections into one vertical column.
+- Reuse existing Gallery actions and already-fixed Preview thumbnails.
+- Do not invent unsupported counters/features to mimic mockups.
 
-## Search UI
+### Settings
+- Stable home for account status/login, E/Ex selector, Reader preferences, download/cache management and build info.
+- Manual Cookie import remains advanced fallback.
 
-Do not copy the Android dark overlay literally. Build a stable native Scripting layout.
+### UI constraints
+- Native Scripting/iOS components; no Canvas-rendered full UI and no fake web/CSS framework.
+- Prefer clear hierarchy, spacing, cards and adaptive grids over animation.
+- Do not add placeholder art/assets just to imitate the reference screenshots.
+- Create only small reusable UI components when genuinely reused.
+- Do not create a new service/repository/use-case architecture for UI.
 
-The existing Home search area should become a small **search composer** rather than a bare keyword box.
+## Files / structure
 
-Required behavior:
+Do not one-shot rewrite `GalleryFlow.tsx`.
 
-### Active input
-- one normal `TextField` for the current unfinished word/phrase;
-- typing updates local suggestions from the already loaded tag index.
+Split scenes/components only when the change makes them real independent units, for example:
+- responsive app shell/sidebar;
+- Discover scene;
+- Search Composer;
+- reusable Gallery/ContinueReading card;
+- Gallery Detail composition.
 
-### Suggestions
-- show candidate rows directly below the input while there is an active input;
-- each row shows the real English tag (for example `female:big breasts`) and the Chinese translation (`巨乳`) when available;
-- tapping a row adds it to selected tags and clears only the active input, ready for the next tag.
+Keep business logic in existing core modules.
 
-### Selected tags
-- show already committed tags above/below the input as compact independent rows/tokens;
-- display a human-friendly label plus the English tag;
-- each selected tag has an explicit remove action;
-- prevent accidental duplicate identical tags.
+## Final handoff
 
-Do not place many selectable tag `NavigationLink`s inside one aggregate List row; suggestions are actions, not navigation destinations.
-
-### Search action
-Compose the raw query from:
-
-`selected exact tag terms + remaining free text`
-
-Example:
-
-Selected `巨乳` (`female:big breasts`) + selected `汉语` (`language:chinese`)
-→ raw search query approximately:
-
-`f:"big breasts$" l:"chinese$"`
-
-If the user also leaves a plain title/keyword fragment, append it as ordinary search text.
-
-Pass this query into the existing `GallerySearchState` / `buildGallerySearchUrl()` / `ResultsView` pipeline. Do not bypass it and do not create a second Results scene.
-
-### Advanced search `+`
-Provide a clear `+ / 高级筛选` entry in the search composer, analogous in purpose to EhViewer's top-right plus button.
-
-It must open the **existing `FilterView`** with the currently composed tag/free-text query preserved.
-When the user applies category/language/rating/page/torrent/expunged filters, those filters must apply to the same selected tags.
-
-Do not duplicate advanced-search controls inside the composer.
-
-## Search display
-
-Results should distinguish:
-- human-readable selected-tag display (Chinese when available);
-- actual raw E-Hentai query used for the request.
-
-Existing `displayQuery` / `rawQuery` fields should be reused rather than inventing another search-state model.
-
-Do not expose internal syntax as the only user-facing label when a translation is available.
-
-## Preserve
-
-- Clicking a tag from Gallery Detail must continue to open tag search as it already does.
-- Quick language filters must continue to work.
-- Image Search, uploader search, Popular, Watched, Toplist, saved searches, and ordinary keyword search must continue using their existing routes.
-- Tag translation failure must not block ordinary text search.
-
-## Focused checks
-
-Add small deterministic pure checks using synthetic tag records (not the network DB):
-
-1. Chinese `汉语` matches `language:chinese`.
-2. Chinese `巨乳` can return `female:big breasts` plus other translated matches where appropriate.
-3. English partial input can match the same records.
-4. Exact query building:
-   - `female / big breasts` → `f:"big breasts$"`
-   - `language / chinese` → `l:"chinese$"`
-5. Combining two selected tags preserves both terms in order and does not replace the first.
-6. Duplicate selection is ignored or de-duplicated.
-7. Plain text can coexist after selected tags.
-
-No full UI automation is required.
-
----
-
-# Preserve / do not touch
-
-- Working Preview sprite fix.
-- Working Safari/Cookie/login flow.
-- Existing E/Ex site selection and Keychain/session behavior.
-- Gallery Detail, Reader, downloads, image search, comments, rating, torrent/archive behavior.
-- User-QA workflow.
-
-No broad navigation/UI redesign beyond Slice B and the search composer required by Slice C.
-
-# Final handoff
-
-After A+B+C:
-- push to `feat/1.1-gallery-interaction`;
+After all four phases:
+- push all logical commits to `feat/1.1-gallery-interaction`;
 - sync isolated DEV once if needed;
-- do not run a broad acceptance campaign;
-- report only:
-  - **Fix:** Cloud Favorites + category navigation;
-  - **Search:** translated tag suggestions + multi-tag query + advanced-filter integration;
-  - **Commit(s):** SHA(s);
-  - **Checks:** diagnostics + focused Favorites/search-expression checks;
+- do not run a long final acceptance campaign;
+- report:
+  - **Fix:** Favorites + category navigation;
+  - **Search:** translated multi-tag composer + advanced-filter integration;
+  - **UI:** responsive iPad shell + Discover/Search/Library/Detail redesign;
+  - **Commit(s):** SHAs;
+  - **Checks:** diagnostics + focused parser/search checks actually run;
   - **Please test:**
-    1. cloud Favorites now shows real categories/items;
-    2. Home → category → Back returns Home once;
-    3. type `汉语`, select `language:chinese`, then type/select a second translated tag, search, and confirm results use both tags; open `+ 高级筛选` and confirm the selected tags remain in the query.
+    1. Cloud Favorites shows real categories/items;
+    2. Category Back returns Home once;
+    3. `汉语` + second translated tag searches both;
+    4. iPad landscape sidebar/Discover/Search/Library/Detail layout;
+    5. one compact-width/iPhone smoke if available.
 
-Stop and wait for user feedback. Do not automatically begin another milestone.
+Stop and wait for user feedback. Do not automatically start another milestone.
