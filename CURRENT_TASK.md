@@ -1,178 +1,214 @@
-# CURRENT_TASK — 1.1.x Fixes + Search Parity + Responsive UI 2.0
+# CURRENT_TASK — 1.1.x User QA Fix Pass 5
 
 Branch: `feat/1.1-gallery-interaction`
 
-## Freeze
+## Real-device state
 
-User-confirmed working on real device:
-- Preview thumbnail duplication fix.
-- Safari login + Cookie helper + import/validation.
+Confirmed working — freeze unless a new regression is reported:
+- Preview thumbnail sprite fix.
+- Safari login / Cookie helper / import + validation.
+- Basic responsive split layout.
+- Gallery Detail two-column direction is acceptable.
 
-Do not reopen those areas without a new reported regression.
+Current user-reported problems:
 
-## Execute in order
+1. **P0 Cloud Favorites does not show real server favorites.**
+   - Device screenshot previously showed `Can't find variable: loadFavorites`.
+   - This wiring error has now been patched by importing `loadFavorites` / `FavoritesPage` into `LibraryScene.tsx`.
+   - After syncing latest DEV, verify the actual authenticated Favorites parser path. If it still shows zero while the webpage has 20+ items, continue the parser/request fix; do not blame login.
 
-Complete all four phases without asking between them:
+2. **P0 Torrent list returns no usable torrents.**
+   - Gallery Detail exposes the torrent entry, but the native torrent scene says the server returned no usable torrents.
 
-1. **P0 Cloud Favorites** — authenticated web has 20+ favorites while App shows zero.
-2. **P0 Category navigation** — Discover/Home → category → Back must return in one tap.
-3. **P1 EhViewer-style translated tag search** — Chinese/English suggestions, exact tag terms, multiple selected tags, plain text coexistence, existing advanced filters preserved.
-4. **P1 Responsive UI 2.0** — implement both the approved iPad and iPhone layouts in `UI_TARGET_IPAD.md` using existing data/actions.
+3. **P0 Archive options are read-only.**
+   - `Original / 800x / 1280x / 1920x` are shown, but there is no action that actually starts/resolves the archive download.
 
-Do not start another feature family.
+4. **P1 Information architecture is duplicated.**
+   - Discover already contains Search, but the old root sidebar also had Search.
+   - Library already contains Favorites / History / Downloads, but the old root sidebar repeated those items.
+   - Account is already logged in and belongs under Settings rather than another root destination.
 
-## Developer workflow
+Do not add unrelated features in this pass.
 
-- Inspect current code and narrow EhViewer behavior before editing.
-- Reuse existing network/session/parser/store/search/Reader/download code.
-- Root-cause fixes only; no speculative architecture rewrite.
-- TypeScript diagnostics after logical phases.
-- One focused deterministic check for non-trivial Favorites/search-expression logic.
-- No full regression ritual, release audit, screenshot-perfect automated acceptance, or repeated bootstrap loops.
-- Commit logical phases and push to this branch.
-- User performs real-device QA.
-- Final status: **Implemented · needs user test**.
+## Workflow
 
-## Phase 1 — Cloud Favorites
+- User real-device evidence is authoritative.
+- Inspect current latest branch before editing; do not assume older task state.
+- Reuse current session/network/parser/store/UI.
+- TypeScript diagnostics + focused parser/action checks only.
+- No broad regression ritual or screenshot-perfect self-acceptance.
+- Commit logical fixes, sync DEV once, then hand back to the user.
 
-Current flow:
-`FavoritesScene → loadFavorites() → favorites.php → parseFavoriteCategories() → parseSearchHtml()`
+---
 
-Use EhViewer `FavoritesParser.java`, `GalleryListParser.java`, `FavListUrlBuilder.java` as narrow references.
+# Fix A — Cloud Favorites
 
-Required:
-- all favorites uses `favorites.php`;
-- parse `.ido → .fp` positionally: first 10 slots = 0–9, count from child 0, name from child 2;
-- do not require `favcat` on each `.fp`;
-- parse Favorites `.itg` rows into existing `GallerySummary`;
-- preserve category/search/pagination/notes/mutations/E-Ex routing;
-- if structural gallery rows exist but parser returns zero, surface parser error rather than false empty state;
-- never log/save full authenticated HTML, Cookie, titles, gids/tokens or private URLs.
+## Immediate wiring
 
-Focused check: synthetic Favorites HTML with non-zero categories and at least two distinct gallery rows.
+`FavoritesScene` must import and call the real `loadFavorites()` implementation from `favorites.ts`; no runtime global/fallback hack.
 
-## Phase 2 — Category navigation
+Also fix any compile/runtime typo introduced around this file before handoff (for example an undefined saved-search delete symbol).
 
-Current issue: aggregate containers hold many unrelated navigation destinations.
+## Server/parser path
 
-Required:
-- `Discover → category results → Back → Discover` in one action;
-- no manual multi-dismiss/back-stack patch;
-- one semantic destination per ordinary List row;
-- for card/chip grids, use a proven navigation/state selection pattern rather than ambiguous nested `NavigationLink`s;
-- inspect immediate sibling root sections for the same anti-pattern only.
+After the wiring error is gone, trace:
 
-## Phase 3 — EhViewer-style translated tag search
+`Library → 收藏 → FavoritesScene → loadFavorites()`
+→ authenticated `favorites.php`
+→ Favorites categories
+→ `.itg` gallery list
+→ existing `GallerySummary` rows.
 
-Reuse existing `tagTranslation.ts`; no second tag DB and no remote autocomplete-per-keystroke.
-
-Reference: `EhTagDatabase.java`, `Tag.java`, `SearchBar.java`.
+EhViewer reference:
+- `FavoritesParser.java`
+- `GalleryListParser.java`
+- `FavListUrlBuilder.java`
 
 Required:
-- Chinese or English input matches local English tag + Chinese translation;
-- `汉语` can suggest `language:chinese / 汉语`;
-- `巨乳` can suggest `female:big breasts / 巨乳` and other real matching tags;
-- selecting a suggestion commits a known exact E-Hentai term, not the Chinese display text;
-- multiple selected tags append and are independently removable/de-duplicated;
-- remaining plain text may coexist;
-- reuse existing `GallerySearchState`, `rawQuery`, `displayQuery`, `buildGallerySearchUrl()` and `ResultsView`;
-- existing category/language/rating/page/torrent/expunged filters apply to the same composed query;
-- `+ / 高级筛选` reuses existing `FilterView` and preserves the composed query.
+- the account that shows 20+ items on the webpage must show those server favorites in App;
+- first 10 `.fp` entries map positionally to slots 0–9;
+- do not require `favcat` attribute on each `.fp`;
+- gallery rows come from Favorites `.itg`;
+- keep initial view as all Favorites;
+- category names/counts and items must come from server;
+- do not substitute local bookmarks for cloud Favorites.
 
-Examples:
-- `female:big breasts` → `f:"big breasts$"`
-- `language:chinese` → `l:"chinese$"`
-- combined → `f:"big breasts$" l:"chinese$"`
+If structural `/g/` rows exist but parsing returns zero, show a parser error rather than a false empty state.
 
-Focused checks: Chinese/English suggestion, exact query building, two-tag composition, duplicate prevention, selected tags + plain text.
+Focused check: synthetic Favorites HTML with non-zero categories + at least two gallery rows.
 
-## Phase 4 — Responsive UI 2.0
+---
 
-Read and follow `UI_TARGET_IPAD.md`. It now defines **both iPad and iPhone** target layouts.
+# Fix B — Torrent list
 
-This is UI reorganization, not a business/core rewrite.
+Current parser is too heuristic and can skip valid E-Hentai torrent forms.
 
-### iPad regular width
-- persistent sidebar: 发现 / 搜索 / 书库 / 收藏 / 下载 / 历史 / 设置;
-- root switching replaces root content rather than stacking pages;
-- Discover: Search Composer, discovery cards, category chips, Continue Reading, latest gallery cards;
-- Search: translated multi-tag composer + existing filters + adaptive results;
-- Library: aggregate 收藏 / 历史 / 书签 / 下载;
-- Gallery Detail: two-column identity/actions + tags/comments/previews/resources.
+Use EhViewer `TorrentParser.java` behavior as the narrow reference.
 
-### iPhone compact width
-Use the user-approved mobile mockups as hierarchy references.
+Relevant upstream structure:
+- each torrent is inside a `<form>...</form>` block;
+- posted date is typically `Posted:` span + value span;
+- torrent name/download URL come from the torrent row, notably the `<td colspan="5"> ... <a href="...">NAME</a>` structure;
+- strip the private `?p=` suffix from the download URL before exposing it.
 
-Root bottom tabs:
-- 发现
-- 搜索
-- 书库
-- 收藏
-- 设置
+Required:
+- parse the actual current torrent page structure, including harmless attribute/quote/whitespace variations;
+- do not require the anchor text to literally contain the word `Download`;
+- preserve torrent name, posted date and download URL;
+- each item has a clear native action to hand the real torrent URL to Safari/system download;
+- if parsing truly fails, keep the original torrent-page Safari fallback.
 
-Downloads and History remain in Library segments instead of adding more bottom tabs.
+Do not log private torrent URLs or page contents.
 
-#### Discover mobile
-- large title + full-width Search Composer + compact filter action;
-- 2×2 cards: 热门画廊 / 图片搜索 / 排行榜 / 最近更新;
-- horizontally scrolling category chips;
-- horizontal Continue Reading cards with real progress;
-- adaptive 2-column latest-gallery cards where readable.
+Focused check: synthetic torrent HTML modeled after EhViewer's parser structure with at least two forms and `?p=` stripping.
 
-#### Library mobile
-- top segmented control: 全部 / 收藏 / 历史 / 书签 / 下载;
-- horizontal Continue Reading cards;
-- adaptive 2-column content cards where readable;
-- preserve specialized management scenes for complex Favorite/download operations.
+---
 
-#### Gallery Detail mobile
-One vertical composition:
-1. navigation header;
-2. large full-width cover;
-3. title/Japanese title/uploader/category;
-4. compact summary cards using **real values only**;
-5. full-width 开始阅读 / 继续阅读;
-6. 云收藏 / 下载 / 本地书签;
-7. basic metadata card;
-8. translated tags;
-9. short comments preview + 查看全部;
-10. horizontal/compact page previews;
-11. related/resources below.
+# Fix C — Archive actual download flow
 
-Never invent mockup-only view/like/follower/notification data.
+Current implementation only parses labels/resolutions. That is incomplete.
 
-### Responsive implementation rules
-- use current Scripting size-class/environment APIs;
-- use native split/tab/root-selection APIs only when supported by current typings/runtime;
-- do not hardcode device model names;
-- iPad/iPhone share business state/actions; layout composition differs only;
-- native Scripting/iOS components only, no full-UI Canvas/web CSS;
-- no placeholder artwork/assets;
-- only small reusable UI components when genuinely reused;
-- do not one-shot rewrite `GalleryFlow.tsx`.
+Use EhViewer `ArchiveParser.java`, `EhEngine.downloadArchive(...)` and `EhUrl.getDownloadArchive(...)` as behavior references.
 
-Recommended UI order:
-1. responsive shell;
-2. shared SearchComposer/GalleryCard/ContinueReadingCard as needed;
-3. Discover regular + compact;
-4. Library regular + compact;
-5. Search regular + compact;
-6. Gallery Detail regular + compact;
-7. Favorites/Downloads/History/Settings root wiring;
-8. remove obsolete duplicate Home sections after replacements work.
+Required flow:
 
-## Final handoff
+1. GET the authenticated archive page from the current gallery.
+2. Parse the archive form parameter `or` from `hathdl_form` action.
+3. Parse available resolution choices from `do_hathdl('org' | numeric-resolution)`.
+4. When the user taps a choice, POST the authenticated request with:
+   - gallery `gid` / `token` from the current gallery;
+   - `or` from the archive form;
+   - form field `hathdl_xres=<selected resolution>`;
+   - current gallery as Referer and active E/Ex origin/session.
+5. Follow/parse the returned archiver flow until the real final download link is available (EhViewer looks for the `Click Here To Start Downloading` href in the later page).
+6. If Scripting should not own the binary download, hand the resolved final URL to Safari/system download. The native list must still perform the authenticated selection/request flow first.
 
-After all phases:
-- push logical commits;
-- sync isolated DEV once if needed;
-- do not run long final acceptance;
-- report Fix / Search / Responsive UI / commits / diagnostics + focused checks;
-- ask user to test only:
-  1. Cloud Favorites items/categories;
-  2. category one-tap Back;
-  3. two translated tags + advanced filter;
-  4. iPad sidebar + Discover/Search/Library/Detail;
-  5. iPhone bottom tabs + Discover/Library/Detail.
+The archive options must be tappable actions, not static labels.
+
+If the server returns insufficient funds/H@H/account restrictions, show the real safe user-facing reason rather than an empty list.
+
+Focused checks:
+- archive page parses `or` + options;
+- selected `org`/numeric resolution builds the expected POST contract;
+- final download-link parser extracts a synthetic `Click Here To Start Downloading` href.
+
+---
+
+# Fix D — Information architecture de-duplication
+
+The authoritative UI contract is now `UI_TARGET_IPAD.md` UI 2.1.
+
+## Root destinations
+
+Both regular iPad and compact iPhone should expose only these product roots:
+- **发现**
+- **书库**
+- **设置**
+
+### Discover owns
+- Search Composer;
+- advanced search/filter;
+- Popular / Image Search / ranking/subscription / latest;
+- categories;
+- Continue Reading / latest gallery browsing.
+
+Do not keep a second permanent Search root.
+
+### Library owns
+Segments/child management for:
+- 全部;
+- 收藏;
+- 历史;
+- 书签;
+- 下载.
+
+Do not keep separate Favorites / Downloads / History roots in sidebar/tab bar.
+
+### Settings owns
+- account/login status;
+- E/Ex site;
+- Reader/download/cache settings;
+- manual Cookie fallback.
+
+Do not add a separate Account root.
+
+## Navigation
+
+- root switching replaces root content;
+- child page pushes one level only;
+- Library segment selection should remain meaningful when returning from management scenes;
+- do not fix navigation using repeated manual dismiss calls.
+
+This pass is navigation cleanup, not another visual redesign.
+
+---
+
+# Preserve
+
+- current translated multi-tag search implementation;
+- working login/Cookie flow;
+- fixed preview thumbnails;
+- current Gallery Detail responsive direction;
+- Reader/download core;
+- comments/rating/local bookmark behavior.
+
+# Handoff
+
+After fixes:
+- push to current branch;
+- sync isolated DEV once;
+- no broad acceptance campaign;
+- report only:
+  - Cloud Favorites fix/result;
+  - Torrent parser/list fix;
+  - Archive actionable download flow;
+  - root-navigation de-duplication;
+  - commits + diagnostics/focused checks.
+
+Ask the user to test only:
+1. Library → 收藏 shows the real 20+ cloud favorites/categories;
+2. one gallery's torrent list shows real torrent entries;
+3. Archive choice can proceed to a real download handoff or a clear server restriction;
+4. root navigation now contains only 发现 / 书库 / 设置.
 
 Stop and wait for user feedback.
