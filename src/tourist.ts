@@ -51,7 +51,7 @@ const COMMON_TAG_ZH:Record<string,string>={
 }
 function normalize(value:string){return String(value||"").trim().toLowerCase().replace(/[_-]+/g," ").replace(/\s+/g," ")}
 const TAG_PREFIX_BY_NAMESPACE:Record<string,string>={rows:"n",artist:"a",cosplayer:"cos",character:"c",female:"f",group:"g",language:"l",male:"m",mixed:"x",other:"o",parody:"p",reclass:"r"}
-function normalizeTagPart(value:string){return normalize(value).replace(/:$/g,"")}
+function normalizeTagPart(value:string){return String(value||"").trim().toLowerCase().replace(/\s+/g," ").replace(/:$/g,"")}
 export function createGallerySearchTag(namespace:string,tag:string,display=""):GallerySearchTag|null{const ns=normalizeTagPart(namespace),value=normalizeTagPart(tag);if(!TAG_PREFIX_BY_NAMESPACE[ns]||!value)return null;return{namespace:ns,tag:value,display:String(display||"").trim()||value}}
 function gallerySearchTagKey(value:GallerySearchTag){return`${TAG_PREFIX_BY_NAMESPACE[value.namespace]||value.namespace}:${normalizeTagPart(value.tag)}`}
 export function galleryExactTagTerm(value:GallerySearchTag){const prefix=TAG_PREFIX_BY_NAMESPACE[normalizeTagPart(value.namespace)];if(!prefix)return"";const tag=normalizeTagPart(value.tag).replace(/\\/g,"\\\\").replace(/"/g,'\\"');return tag?`${prefix}:"${tag}$"`:""}
