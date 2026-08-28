@@ -1,13 +1,19 @@
-import { Button, EnvironmentValuesReader, Label, List, Navigation, NavigationLink, NavigationSplitView, NavigationStack, Section, Tab, TabView, Text, useState } from "scripting"
-import { AccountScene, HomeScene, SearchScene } from "./GalleryFlow"
-import { DownloadsScene, FavoritesScene, HistoryScene, LibraryScene, SettingsScene } from "./LibraryScene"
+import { Button, EnvironmentValuesReader, Label, List, Navigation, NavigationLink, NavigationSplitView, NavigationStack, Section, TabView, Text, useState } from "scripting"
+import { AccountScene, HomeScene } from "./GalleryFlow"
+import { LibraryScene, SettingsScene } from "./LibraryScene"
 import { recoverInterruptedDownloads } from "./libraryStore"
 
-type RootDestination="discover"|"search"|"library"|"favorites"|"downloads"|"history"|"settings"
-const ROOTS:Array<{key:RootDestination;title:string;icon:string}>=[{key:"discover",title:"发现",icon:"safari"},{key:"search",title:"搜索",icon:"magnifyingglass"},{key:"library",title:"书库",icon:"books.vertical"},{key:"favorites",title:"收藏",icon:"heart"},{key:"downloads",title:"下载",icon:"arrow.down.circle"},{key:"history",title:"历史",icon:"clock"},{key:"settings",title:"设置",icon:"gearshape"}]
-function RootScene({value}:{value:RootDestination}){if(value==="search")return <SearchScene/>;if(value==="library")return <LibraryScene/>;if(value==="favorites")return <FavoritesScene/>;if(value==="downloads")return <DownloadsScene/>;if(value==="history")return <HistoryScene/>;if(value==="settings")return <List navigationTitle="设置"><Section><NavigationLink destination={<AccountScene/>}><Text>账号与站点</Text></NavigationLink><NavigationLink destination={<SettingsScene/>}><Text>阅读、下载与缓存设置</Text></NavigationLink></Section></List>;return <HomeScene/>}
+type RootDestination="discover"|"library"|"settings"
+const ROOTS:Array<{key:RootDestination;title:string;icon:string}>=[
+  {key:"discover",title:"发现",icon:"safari"},
+  {key:"library",title:"书库",icon:"books.vertical"},
+  {key:"settings",title:"设置",icon:"gearshape"},
+]
+
+function SettingsRoot(){return <List navigationTitle="设置"><Section><NavigationLink destination={<AccountScene/>}><Text>账号与站点</Text></NavigationLink><NavigationLink destination={<SettingsScene/>}><Text>阅读、下载与缓存设置</Text></NavigationLink></Section></List>}
+function RootScene({value}:{value:RootDestination}){if(value==="library")return <LibraryScene/>;if(value==="settings")return <SettingsRoot/>;return <HomeScene/>}
 function RegularShell(){const[selected,setSelected]=useState<RootDestination>("discover");return <NavigationSplitView sidebar={<List navigationTitle="E-Hentai"><Section>{ROOTS.map(item=><Button key={item.key} action={()=>setSelected(item.key)} buttonStyle="plain"><Label title={item.title} systemImage={item.icon}/></Button>)}</Section></List>}><NavigationStack><RootScene value={selected}/></NavigationStack></NavigationSplitView>}
-function CompactShell(){return <TabView tabIndex={0}><NavigationStack tabItem={<Label title="发现" systemImage="safari"/>} tag={0}><HomeScene/></NavigationStack><NavigationStack tabItem={<Label title="搜索" systemImage="magnifyingglass"/>} tag={1}><SearchScene/></NavigationStack><NavigationStack tabItem={<Label title="书库" systemImage="books.vertical"/>} tag={2}><LibraryScene/></NavigationStack><NavigationStack tabItem={<Label title="收藏" systemImage="heart"/>} tag={3}><FavoritesScene/></NavigationStack><NavigationStack tabItem={<Label title="设置" systemImage="gearshape"/>} tag={4}><RootScene value="settings"/></NavigationStack></TabView>}
+function CompactShell(){return <TabView tabIndex={0}><NavigationStack tabItem={<Label title="发现" systemImage="safari"/>} tag={0}><HomeScene/></NavigationStack><NavigationStack tabItem={<Label title="书库" systemImage="books.vertical"/>} tag={1}><LibraryScene/></NavigationStack><NavigationStack tabItem={<Label title="设置" systemImage="gearshape"/>} tag={2}><SettingsRoot/></NavigationStack></TabView>}
 function ResponsiveShell(){return <EnvironmentValuesReader keys={["horizontalSizeClass"]}>{environment=>environment.horizontalSizeClass==="compact"?<CompactShell/>:<RegularShell/>}</EnvironmentValuesReader>}
 
 export async function runAppV2(){try{await recoverInterruptedDownloads()}catch(error){console.error(error)}await Navigation.present({element:<ResponsiveShell/>})}
