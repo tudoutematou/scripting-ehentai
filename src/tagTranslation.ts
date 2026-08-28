@@ -20,6 +20,13 @@ const PREFIX_BY_NAMESPACE: Record<string, string> = {
   reclass: "r",
 }
 
+const NAMESPACE_BY_PREFIX:Record<string,string>=Object.fromEntries(Object.entries(PREFIX_BY_NAMESPACE).map(([namespace,prefix])=>[prefix,namespace]))
+export type LocalTagSuggestion={namespace:string;tag:string;translated:string}
+const BUILTIN_SUGGESTIONS:LocalTagSuggestion[]=[{namespace:"language",tag:"chinese",translated:"汉语"},{namespace:"female",tag:"big breasts",translated:"巨乳"}]
+let suggestionIndex:LocalTagSuggestion[]=[...BUILTIN_SUGGESTIONS]
+function rebuildSuggestionIndex(){const values=[...BUILTIN_SUGGESTIONS],seen=new Set(values.map(item=>`${item.namespace}:${item.tag}`));for(const[key,translated]of translations){const split=key.indexOf(":");if(split<=0)continue;const namespace=NAMESPACE_BY_PREFIX[key.slice(0,split)],tag=key.slice(split+1).trim();if(!namespace||!tag||seen.has(`${namespace}:${tag}`))continue;seen.add(`${namespace}:${tag}`);values.push({namespace,tag,translated})}suggestionIndex=values}
+export function searchLocalTagSuggestions(input:string,limit=12):LocalTagSuggestion[]{const query=normalize(input);if(!query)return[];return suggestionIndex.map(item=>{const english=normalize(`${item.namespace}:${item.tag} ${item.tag}`),translated=normalize(item.translated),score=english===query||translated===query?0:english.startsWith(query)||translated.startsWith(query)?1:english.includes(query)||translated.includes(query)?2:99;return{item,score}}).filter(value=>value.score<99).sort((a,b)=>a.score-b.score||a.item.tag.localeCompare(b.item.tag)).slice(0,Math.max(1,limit)).map(value=>value.item)}
+
 let translations = new Map<string, string>()
 let loadTask: Promise<number> | null = null
 let source: "none" | "cache" | "network" = "none"
@@ -95,6 +102,7 @@ export async function ensureTagTranslations(forceRefresh = false): Promise<numbe
         const parsed = parseDatabase(cached)
         if (parsed.size > 100) {
           translations = parsed
+          rebuildSuggestionIndex()
           source = "cache"
           return translations.size
         }
@@ -106,6 +114,7 @@ export async function ensureTagTranslations(forceRefresh = false): Promise<numbe
       const parsed = parseDatabase(downloaded)
       if (parsed.size <= 100) throw new Error("标签翻译库格式无法识别")
       translations = parsed
+      rebuildSuggestionIndex()
       source = "network"
       await writeCache(downloaded)
       return translations.size
