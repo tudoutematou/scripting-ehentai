@@ -1,7 +1,7 @@
 import { loadFavorites } from "./favorites"
 import { historySummary, loadHistory } from "./libraryStore"
 import { getAccountSessionGeneration, getAccountStatus, getBaseUrl } from "./account"
-import { GallerySummary, loadGalleryDetailCore, searchGalleries } from "./ehentai"
+import { GallerySummary, loadGalleryDetail, searchGalleries } from "./ehentai"
 import { buildGallerySearchUrl, createHomeSearchState, type GalleryCategoryKey, type QuickFilterKey } from "./tourist"
 
 export type EhAction =
@@ -94,7 +94,7 @@ export async function runEhAction(action: EhAction): Promise<EhActionResult> {
     if (action.type === "gallery.detail") {
       const resolved = resolveGalleryRef(action.galleryRef)
       if (!resolved.ok) return resolved
-      const detail = await loadGalleryDetailCore(resolved.url)
+      const detail = await loadGalleryDetail(resolved.url)
       return { ok: true, type: action.type, detail: { title: detail.title, titleJpn: detail.titleJpn, category: detail.category, uploader: detail.uploader, rating: detail.rating, ratingCount: detail.ratingCount, previewPages: detail.previewPages, pageCount: detail.pageLinks.length, tags: detail.tags.map(group => ({ namespace: group.namespace, names: group.tags.map(tag => tag.name) })) } }
     }
     return failure("INVALID_ACTION", "validate", "不支持的操作。")
