@@ -1,67 +1,152 @@
-# EhViewer Feature Parity Map
+# EhViewer Feature Parity Map — refreshed 2026-08-30
 
 Reference: `xiaojieonly/Ehviewer_CN_SXJ`  
+Reference branch: `BiLi_PC_Gamer`  
+Reference head checked: `daa1510554c7109a586a20ee69ea348c63ffaa05` (2026-08-28)  
 Target: Scripting iOS/iPadOS client  
-Baseline: `main` after 1.0 promotion
+Active branch: `feat/1.1-gallery-interaction`
 
-This map tracks **code capability**, not real-device certification. A ✅ means the capability is implemented in the codebase; if behavior depends on Scripting/device/account/network state, the user may still test it on the real device and report bugs.
+This map tracks current code capability and meaningful behavioral parity. It does **not** claim the Android architecture should be copied. Runtime-dependent capabilities still require the real Scripting environment.
 
-Legend: ✅ implemented | 🟡 partial | 🔴 missing | ⚪ platform/deferred | 🔵 intentionally not copied
+Legend: ✅ implemented | 🟡 partial / active bug | 🔴 missing | ⚪ platform/deferred | 🔵 intentionally not copied
 
-| Area | Capability | Status | Current Scripting state | Priority |
-|---|---|---:|---|---:|
-| Browse | Home / latest galleries | ✅ | Native list + detail navigation | — |
-| Browse | Search | ✅ | Keyword + pagination | — |
-| Browse | Advanced search | ✅ | Category, language/quick filters, rating/pages/torrent/expunged filters | — |
-| Browse | Popular / Toplist | ✅ | Popular search + public toplist | — |
-| Browse | Watched | ✅ | Logged-in watched feed | — |
-| Account | Cookie login / E / Ex | ✅ | Safari/manual import, Keychain, validation, site switch | — |
-| Account | Account overview | 🟡 | Image limit/basic values only | 4 |
-| Detail | Core metadata | ✅ | Titles, cover, uploader, rating aggregate, metadata, tags | — |
-| Detail | Related galleries / uploader | ✅ | Native navigation | — |
-| Detail | Comments read | ✅ | Dedicated comments scene + compact Detail entry | — |
-| Detail | Comment post/edit | 🔴 | Not implemented | 2 |
-| Detail | Comment vote | 🔴 | Not implemented; may reuse the proven transient Gallery credential path later | 3 |
-| Detail | Gallery rating write | ✅ | `rategallery` via transient in-memory Gallery credentials; no persistence | — |
-| Detail | Torrent list | ✅ | Internal list + normalized URL + external fallback | — |
-| Detail | Archive options | 🟡 | External archive URL only | 3 |
-| Favorites | Cloud favorites | ✅ | 0–9 categories, note, add/change/remove with verification | — |
-| Library | Local bookmarks | ✅ | Local add/remove/list | — |
-| Library | History | ✅ | History + clear/delete | — |
-| Library | Reading progress | ✅ | Stored/resume from Gallery | — |
-| Library | Saved searches | ✅ | Local saved search list | — |
-| Tags | Tag translation | ✅ | Translation + localized common tags | — |
-| Tags | My Tags | ✅ | Logged-in My Tags list/search | — |
-| Reader | Single-page reader | ✅ | Prev/next/jump/original | — |
-| Reader | Continuous reader | 🟡 | Batched vertical reader, not full EhViewer parity | 2 |
-| Reader | Preload | 🟡 | Adjacent preload; limited controls | 2 |
-| Reader | Tap zones / immersive controls | 🔴 | Not implemented | 2 |
-| Reader | Reading direction / fit modes | 🔴 | Not implemented | 2 |
-| Reader | Thumbnail page navigator | 🟡 | Detail preview grid can enter Reader; no in-reader navigator | 3 |
-| Reader | Zoom gestures | ⚪ | Depends on current Scripting native image/gesture support | 3 |
-| Download | Offline gallery download | ✅ | Create/run/pause/resume/retry/delete | — |
-| Download | Queue / concurrency manager UX | 🟡 | Core exists; UI/state model is basic and foreground-bound | 2 |
-| Download | Background downloading | ⚪ | Platform capability must be verified before implementation; do not fake it | — |
-| Download | Integrity / recovery | ✅ | Atomic writes + reconcile checks | — |
-| Cache | Image cache | ✅ | Disk cache + clear/reconciliation support | — |
-| Settings | Reader preferences | 🟡 | Layout, original preference, preload count | 3 |
-| Settings | EhViewer-level power-user controls | 🔴 | Deferred until Reader/Download parity is stronger | 4 |
+## Browse / Search
 
-## Delivery order
+| Capability | Status | Current Scripting state | Priority |
+|---|---:|---|---:|
+| Home / latest galleries | ✅ | Native responsive gallery browsing | — |
+| Keyword search + paging | ✅ | Normal search core + paging | — |
+| Advanced search | ✅ | Category exclusion, language, rating/pages, torrent, expunged and related flags | — |
+| Translated multi-tag search | ✅ | Full EhTagTranslation-backed resolution and exact tag composition | — |
+| Popular / Toplist | ✅ | Popular + public Toplist | — |
+| Watched / subscriptions | ✅ | Logged-in Watched feed | — |
+| Image search | ✅ | Native image picker/search flow; race guard added in bug sweep | — |
+| Saved search / full-state restore | ✅ | Tags + exclusions + language + advanced state round-trip | — |
+| AI natural-language search | ✅ | Scripting Assistant -> validated normal SearchState -> normal search core | project extension |
 
-1. **1.1 Gallery Interaction** — implemented in code; user reports any real-device bugs directly.
-2. **1.2 Reader Parity** — reading direction, tap zones, immersive controls, navigation/fallback/preload improvements.
-3. **1.3 Download Manager** — queue/state UX, progress visibility, retry/detail management, platform-background feasibility.
-4. **1.4 Library Integration** — expose favorite/history/progress/download state coherently around the same gallery.
-5. **1.5 Discovery & Tags** — polish existing Watched/Toplist/My Tags/saved-search flows rather than rebuild them.
-6. **1.6 Settings / Power User** — only controls backed by real implemented behavior.
+## Account / Site
 
-Do not automatically start the next numbered milestone. The user authorizes the next milestone.
+| Capability | Status | Current Scripting state | Priority |
+|---|---:|---|---:|
+| E-Hentai Cookie login | 🟡 | Safari/manual import + Keychain + live validation; current import/navigation UI regression tracked as BS-11 | **0** |
+| ExHentai login/site switch | 🟡 | Real Ex-domain auth validation and explicit Ex sync exist, but ordinary E-page capture cannot be assumed to provide Ex host cookies; current real-device gap tracked as BS-12 | **0** |
+| Account overview / image limits | 🟡 | Stable basic values only | 4 |
+| UConfig / site account configuration | 🔴 | Not implemented as a native account-settings screen | 2 |
+| Identity Cookie management | 🟡 | Manual Cookie import exists; no EhViewer-style dedicated identity-cookie editor | 4 |
+| My Tags | ✅ | Logged-in My Tags list with translated display/search | — |
+
+## Gallery Detail / Interaction
+
+| Capability | Status | Current Scripting state | Priority |
+|---|---:|---|---:|
+| Core metadata / cover / tags | ✅ | Native Detail with translated tags | — |
+| Uploader navigation / related links | ✅ | Native navigation | — |
+| Explicit Similar-gallery action | 🟡 | Server-provided relations are shown, but no dedicated EhViewer-style Similar action/core yet | 3 |
+| Cover image search | ✅ | Native cover-search entry | — |
+| Cloud Favorites | ✅ | Named categories, note, add/change/remove, server verification; UI still receiving real-device QA | — |
+| Rating write | ✅ | `rategallery` using transient in-memory credentials only | — |
+| Comments read | ✅ | Detail preview + dedicated comments scene | — |
+| Comment post/edit | ✅ | Native confirmed mutations | — |
+| Comment vote | ✅ | Native up/down/cancel behavior via server response | — |
+| Torrent list | ✅ | Internal parser/list; known-positive real gallery fixed during Runtime Bug Sweep | — |
+| Archive choices | 🟡 | Internal archive option parsing/request works, but not EhViewer's newest managed archive-download service/progress/pause-resume UX | 2 |
+| Native share | 🔴 | No system Share action yet | 2 |
+| H@H action/client | ⚪ | Not implemented; low-value/platform-specific for this Scripting client | deferred |
+| Gallery newer-version/update detection | 🔴 | No EhViewer-style new-version/update flow identified in current Scripting code | 3 |
+| Open in browser | ✅ | Safe external Safari action | — |
+| Detail `问 AI` | ✅ | Safe metadata-only managed Assistant entry | project extension |
+
+## Reader
+
+| Capability | Status | Current Scripting state | Priority |
+|---|---:|---|---:|
+| Single-page reader | ✅ | Online/offline | — |
+| Continuous vertical reader | 🟡 | Implemented; recent progress-write regression fixed, still less mature than EhViewer | 2 |
+| Reading direction | ✅ | LTR / RTL page actions | — |
+| Fit modes | ✅ | Screen / width | — |
+| Tap zones / immersive overlays | ✅ | Left/right page zones + settings/progress overlays | — |
+| Pinch zoom + pan | ✅ | Native MagnifyGesture + DragGesture; gesture feel remains device QA | — |
+| Auto page | ✅ | Single-page timed auto advance | — |
+| Adjacent preload | ✅ | Configurable limited preload | — |
+| Original image preference | ✅ | Reader preference + per-page original action | — |
+| In-reader thumbnail page navigator | 🔴 | Detail/Preview Browser can jump into Reader, but Reader has no EhViewer-style thumbnail navigator | 2 |
+| Screen rotation/orientation preference | 🔴 | Not implemented | 3 |
+| Start-position preference | 🔴 | Not implemented | 3 |
+| Keep screen awake | 🔴 | Not implemented; verify Scripting API before promising | 3 |
+| Reader HUD toggles (clock/battery/page interval) | 🔴 | Not implemented; progress itself exists | 4 |
+| Custom brightness | ⚪ | Not implemented; platform/API feasibility first | deferred |
+| Volume-button page turn | ⚪ | Android-oriented; do not emulate unless Scripting exposes a clean supported API | deferred |
+
+## Download / Offline
+
+| Capability | Status | Current Scripting state | Priority |
+|---|---:|---|---:|
+| Offline gallery download | ✅ | Create/run/pause/resume/retry/delete | — |
+| Integrity / interrupted-state recovery | ✅ | Atomic writes + startup/reconcile recovery | — |
+| Queue / concurrency controls | 🟡 | Core queue and limited concurrency; management UI remains basic | 2 |
+| Background download | ⚪ | Current project is foreground-bound; must be proven possible before implementation | deferred |
+| Resolution controls | 🟡 | Standard/original only; no EhViewer-style richer resolution list | 3 |
+| Download timeout control | 🔴 | Not exposed | 4 |
+| Queue ordering / sort | 🔴 | No EhViewer-style ascending/order controls | 3 |
+| Sync/preload while reading | 🔴 | No dedicated download-while-reading pipeline | 3 |
+| Restore/clean redundant/invalid downloads | 🟡 | Core recovery/delete exists, but no full EhViewer maintenance UX | 3 |
+| Custom download location / media scan | ⚪ | Android filesystem/media behavior; not a direct parity target | deferred |
+
+## Library
+
+| Capability | Status | Current Scripting state | Priority |
+|---|---:|---|---:|
+| Cloud Favorites browser | ✅ | Category names/counts/search/paging | — |
+| Local bookmarks | ✅ | Add/remove/list | — |
+| History | ✅ | History + clear/delete/reset progress | — |
+| Reading progress / resume | ✅ | Online/offline, single/continuous paths | — |
+| Saved searches | ✅ | Local full-state bookmarks | — |
+| Download state integration | ✅ | Library shows download items/state | — |
+| Rich sorting/filtering of local library | 🔴 | No EhViewer-style broader list/power-user sorting/filter controls | 3 |
+
+## Settings / Power-user parity
+
+| Capability | Status | Current Scripting state | Priority |
+|---|---:|---|---:|
+| Core Reader preferences | ✅ | Layout/direction/fit/original/preload/auto-page | — |
+| Gallery site selector | 🟡 | Exists; current BS-11/BS-12 account-state UX must be fixed | **0** |
+| Tag translation toggle/source | 🟡 | Translation cache/source is implemented internally; no user-facing toggle/source selector | 3 |
+| Persistent filter / blacklist rules | 🔴 | Search filters exist, but no EhViewer-style persistent filter/blacklist engine | **2** |
+| UConfig | 🔴 | Missing | **2** |
+| Theme / automatic theme switch | 🔴 | No app-level EhViewer theme configuration | 4 |
+| Launch page preference | 🔴 | No user-selectable initial Discover/Library/etc. | 3 |
+| List/detail/thumb density/size controls | 🔴 | Responsive defaults only | 4 |
+| Show Japanese title / comments / rating toggles | 🔴 | Content is shown when available; no per-feature display switches | 4 |
+| Cache-size control | 🔴 | Clear cache exists; no size limit UI | 3 |
+| Export/import local data backup | 🔴 | No full settings/library backup package | **2** |
+| Proxy / custom hosts / DoH / domain fronting | ⚪ | Android/network-workaround features; only add if a concrete Scripting need appears | deferred |
+| Wi-Fi server/client transfer | 🔵 | Android-specific transfer workflow; not a current target | — |
+| Parse-body/crash-log diagnostic switches | 🔵 | Avoid copying broadly because this project has stricter privacy/no-raw-HTML rules | — |
+
+## Recommended next additions after current Bug Sweep
+
+Do not implement these until BS-11 / BS-12 and other active S0/S1 findings are closed.
+
+1. **Account parity:** make E/Ex login/site state trustworthy and understandable; then add UConfig if useful.
+2. **Persistent filter / blacklist:** high-value EhViewer behavior that normal one-off search filters do not replace.
+3. **Reader navigation polish:** in-reader thumbnail navigator, start-position and orientation/keep-awake only where Scripting supports them cleanly.
+4. **Download Manager parity:** better queue/order/progress, richer quality options, maintenance/restore; background behavior only if supported.
+5. **Data backup/import:** export local Library/History/Search Bookmarks/Reader preferences without credentials.
+6. **Small Detail actions:** native Share, explicit Similar flow, gallery newer-version handling where protocol behavior is clear.
+
+## Do not copy merely for parity
+
+- Android Activity/Fragment/SpiderQueen architecture.
+- H@H client unless a real iOS/Scripting use case appears.
+- Android media scan/download-folder semantics.
+- Volume-button paging without a supported Scripting API.
+- Custom hosts/DoH/domain-fronting/Wi-Fi transfer unless a concrete user problem requires them.
+- Raw parse-error body/crash logging that weakens current privacy boundaries.
 
 ## Rating credential rule
 
-EhViewer's `GalleryDetailParser` reads `apiuid` and `apikey` from the current Gallery page JavaScript and uses them for `rategallery`. The Scripting implementation mirrors that behavior only as transient in-memory Gallery data. Never persist, print, report, or include either value in diagnostics, sync manifests, errors, or repository fixtures.
+EhViewer's Gallery detail parser reads `apiuid` and `apikey` transiently from the current Gallery page and uses them for `rategallery`. The Scripting implementation keeps equivalent credentials transient/in-memory only. Never persist, print, report or include them in diagnostics/fixtures.
 
 ## Reference rule
 
-EhViewer defines expected behavior, not target architecture. Reuse the current Scripting network/account/parser/store/UI paths. Never port `SpiderQueen`, Android Activities/Fragments, managers, repositories, or Java abstractions just to resemble the reference source.
+EhViewer defines expected behavior, not target architecture. Reuse the current Scripting network/account/parser/store/UI paths. Never port Android managers/Activities/Fragments/SpiderQueen/repository layers merely to resemble the reference source.
