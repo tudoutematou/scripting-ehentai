@@ -3,6 +3,7 @@
 Branch: `feat/1.1-gallery-interaction`
 Primary spec: `BUG_SWEEP_1_1.md`
 Findings registry: `BUG_SWEEP_FINDINGS.md`
+Parity reference: `EHVIEWER_PARITY.md`
 
 ## Goal
 Freeze new feature work temporarily and run one bounded **autonomous bug-fix sweep** over the current DEV build.
@@ -17,6 +18,60 @@ The Agent is explicitly authorized to:
 The Agent is **not** authorized to redesign the app, start new EhViewer parity milestones, or add unrelated features during this sweep.
 
 Do not merge `main` automatically.
+
+## Immediate priority — BS-11 / BS-12 account login loop
+The user supplied fresh iPad real-device evidence on 2026-08-30. Treat it as authoritative and fix these before resuming lower-priority sweep items.
+
+### BS-11 — import should not throw the user out of Account; selected site must not look unavailable
+Current proven flow:
+- browser Cookie import validates E-Hentai successfully;
+- `saveAndValidateCookieDraft()` unconditionally calls `setActiveSite("e")`;
+- `setActiveSite()` invalidates account/session generation and triggers the global account-context callback;
+- `ResponsiveShell` remounts; on regular-width iPad `RegularShell.selected` defaults back to `discover`;
+- returning to Account shows E as `可用`, but the E button is grey because the UI disables the already-selected site; Ex is grey because it is genuinely unavailable. These two different states look identical.
+
+Required fix:
+1. importing/refreshing credentials must not change the selected root sidebar destination merely because account/session data changed;
+2. do not reset the active site to E unless the current site is no longer valid or the user explicitly chooses E;
+3. decouple shell refresh/cache invalidation from root-navigation selection state;
+4. render site states distinctly:
+   - current + available = visibly selected, not visually "unavailable";
+   - other + available = tappable;
+   - unavailable = disabled with a clear reason/status;
+5. after login import, remain on `账号与设置` and show the verified result there.
+
+Required real DEV runtime smoke:
+- Account -> Safari E login/capture -> return -> `导入并验证登录状态`;
+- Account remains visible after success;
+- E shows available/current distinctly rather than disabled-grey-as-error;
+- if Ex is unavailable, only Ex is visually unavailable;
+- repeat Refresh without root navigation jumping to Discover.
+
+### BS-12 — real ExHentai Cookie acquisition must be a complete flow
+Do not assume a normal E-Hentai page capture can read Ex cookies.
+
+Reference/current architecture facts:
+- browser helper's `document.cookie` is only same-origin reliable;
+- cross-domain E/Ex discovery currently depends on `GM.cookie.list({url})`, whose availability/behavior must be proven in this Scripting Safari environment;
+- Android EhViewer uses an OkHttp persistent CookieJar and receives cookies from actual network responses, so it does not rely on scraping one browser origin;
+- current app correctly requires real Ex-domain `ipb_member_id`, `ipb_pass_hash`, and structurally valid `igneous` before declaring Ex ready. Do not weaken that rule and do not clone E cookies into Ex as a fake solution.
+
+Required diagnosis/fix:
+1. with the current user's already-valid account, inspect only cookie-name/domain presence booleans — never values;
+2. while on an E page, determine whether `GM.cookie.list` can really see the required Ex-domain cookies;
+3. if not, make `同步里站登录` a clean guided second step:
+   - open real `https://exhentai.org/`;
+   - user confirms Safari can enter it;
+   - Cookie helper captures the actual Ex-origin session there;
+   - return to Account and import/merge without losing the working E cookies;
+   - validate Ex using the exact production request path;
+4. if current Scripting/Safari APIs can safely obtain Ex cookies automatically after E login, use that only when runtime evidence proves it; otherwise keep the explicit Ex sync flow truthful;
+5. successful Ex sync should leave the user on Account and make Ex available/tappable without requiring app restart.
+
+Required safe runtime result:
+Report only booleans such as `E member/pass present`, `Ex member/pass present`, `Ex igneous valid`, `Ex production validation passed`; never report cookie values or private URLs.
+
+Do not start new parity features (UConfig/blacklist/share/etc.) until BS-11 and BS-12 are fixed or have a genuine platform blocker.
 
 ## Read order for this task
 1. `AGENTS.md`
