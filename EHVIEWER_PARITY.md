@@ -43,7 +43,7 @@ Legend: ✅ implemented | 🟡 partial / active bug | 🔴 missing | ⚪ platfor
 | Uploader navigation / related links | ✅ | Native navigation | — |
 | Explicit Similar-gallery action | 🟡 | Server-provided relations are shown, but no dedicated EhViewer-style Similar action/core yet | 3 |
 | Cover image search | ✅ | Native cover-search entry | — |
-| Cloud Favorites | ✅ | Named categories, note, add/change/remove, server verification; UI still receiving real-device QA | — |
+| Cloud Favorites | 🟡 | Named categories/counts, note, add/change/remove and server verification work; category rename/default/sort and batch move/delete/download are not implemented | 2 |
 | Rating write | ✅ | `rategallery` using transient in-memory credentials only | — |
 | Comments read | ✅ | Detail preview + dedicated comments scene | — |
 | Comment post/edit | ✅ | Native confirmed mutations | — |
@@ -96,7 +96,9 @@ Legend: ✅ implemented | 🟡 partial / active bug | 🔴 missing | ⚪ platfor
 
 | Capability | Status | Current Scripting state | Priority |
 |---|---:|---|---:|
-| Cloud Favorites browser | ✅ | Category names/counts/search/paging | — |
+| Cloud Favorites browser | ✅ | Server category names/counts/search/paging; real account runtime confirmed `uconfig.php`, `favorites.php` and parser agree on custom names | — |
+| Favorite category rename / default / sorting | 🔴 | No native UConfig-backed category management yet | 2 |
+| Favorite batch move / delete / download | 🔴 | No multi-select cloud Favorite actions yet | 2 |
 | Local bookmarks | ✅ | Add/remove/list | — |
 | History | ✅ | History + clear/delete/reset progress | — |
 | Reading progress / resume | ✅ | Online/offline, single/continuous paths | — |
