@@ -3,7 +3,7 @@ import { GalleryDetail, GalleryPageLink, GallerySummary, loadAccountOverview, ha
 import { parseGalleryRef } from "./pure"
 import { changeFavorite, loadFavoriteState, type FavoriteState } from "./favorites"
 import { loadPreferences, type ReaderPreferences } from "./libraryStore"
-import { getAccountSessionGeneration, getAccountStatus, getBaseUrl, getCookieHeader, importAndValidateBrowserCookies, openSafariExSync, openSafariLogin, refreshAccountStatus, routeUrlForSite, saveAndValidateManualCookie, setActiveSite, signOut } from "./account"
+import { getAccountSessionGeneration, getAccountStatus, getBaseUrl, getCookieHeader, importAndValidateBrowserCookies, manualCookieSummary, openSafariExSync, openSafariLogin, refreshAccountStatus, routeUrlForSite, saveAndValidateManualCookie, setActiveSite, signOut } from "./account"
 import { reportDiagnostic } from "./githubBridge"
 import { GalleryCategoryKey, GallerySearchState, GallerySearchTag, GALLERY_CATEGORIES, QUICK_FILTERS, QuickFilterKey, buildGallerySearchUrl, categoryExclusionSummary, cloneSearchState, composeGallerySearchState, createGallerySearchTag, createHomeSearchState, createPopularSearchState, createTagSearchState, createUploaderSearchState, getQuickFilter, localizeCategory, localizeCommonTag, localizeMetadataKey, localizeTagNamespace, removeGallerySearchTag, searchRawQuery, searchTitle, toggleExcludedCategory } from "./tourist"
 import { GlassActionButton, GlassActionGroup, GlassSurface, PageBackground, ShelfHeader } from "./GlassUI"
@@ -130,8 +130,10 @@ function AccountSection({ account, onAccountContextChanged }: { account: ReturnT
     setBusy(true); setError(""); setNotice("")
     try {
       if (action === "manual") {
-        const text=await prompt({title:"手工导入 Cookie",message:"粘贴 ipb_member_id、ipb_pass_hash；如果还有 igneous，会自动按 ExHentai 导入并切换，否则按 E-Hentai 导入。支持每行 name: value 或 name=value，也支持 Cookie:/Set-Cookie:、JSON 与 Netscape 文件。",obscureText:true,placeholder:"ipb_member_id: …\nipb_pass_hash: …\nigneous: …（可选）",confirmLabel:"识别并验证"})
-        if(text){const result=await saveAndValidateManualCookie(text),status=result.status;updateContext(status);setNotice(result.target==="ex"?"已识别 igneous，并验证、切换到 ExHentai。":"未检测到 igneous，已按 E-Hentai 登录验证。")}
+        const text=String(await Pasteboard.getString()||"").trim();if(!text)throw new Error("剪贴板中没有文本。请先复制三行 Cookie；如系统询问粘贴权限请选择允许。")
+        const summary=manualCookieSummary(text);if(!summary.memberIdPresent||!summary.passHashPresent)throw new Error("剪贴板未同时识别到 ipb_member_id 和 ipb_pass_hash；不会保存任何内容。")
+        const targetName=summary.target==="ex"?"ExHentai":"E-Hentai",approved=await confirm({title:`从剪贴板导入 ${targetName}？`,message:`已识别：member id ✓ · pass hash ✓ · igneous ${summary.igneousStructurallyValid?"✓":"无"}。不会显示、记录或上传 Cookie 值；确认后执行真实登录验证。`,confirmLabel:"验证并保存",cancelLabel:"取消"});if(!approved)return
+        const result=await saveAndValidateManualCookie(text),status=result.status;updateContext(status);setNotice(result.target==="ex"?"已从剪贴板识别 igneous，并验证、切换到 ExHentai。":"剪贴板未包含 igneous，已按 E-Hentai 登录验证。")
       } else if (action === "safari") {
         await openSafariLogin();setNotice("已打开 Safari。登录后点击页面左下角 Cookie 助手，或在 Scripting 扩展菜单选择“获取 EH Cookie 并写入”，再返回此处导入。")
       } else if (action === "ex-sync") {
@@ -158,7 +160,7 @@ function AccountSection({ account, onAccountContextChanged }: { account: ReturnT
       {busy ? <ProgressView progressViewStyle="circular" /> : null}{notice?<Text font="caption" foregroundStyle="systemGreen">{notice}</Text>:null}{error?<ErrorText message={error}/>:null}
     </VStack></Section>
     {account.loggedIn?<Section header={<Text textCase={null}>站点</Text>}><VStack alignment="leading" spacing={7}><Text font="caption" foregroundStyle="secondaryLabel">当前站点以蓝色标记；灰色按钮仅表示尚未具备该站点可用凭据。</Text><HStack spacing={8}>{account.site === "e"?<Text font="caption" foregroundStyle="white" padding={{horizontal:10,vertical:7}} background="systemBlue" clipShape={{type:"capsule",style:"continuous"}}>✓ E-Hentai · 当前</Text>:<Button title="E-Hentai" buttonStyle="bordered" disabled={busy||account.eHentaiReachable!==true} action={() => { void run("e") }} />}{account.site === "ex"?<Text font="caption" foregroundStyle="white" padding={{horizontal:10,vertical:7}} background="systemBlue" clipShape={{type:"capsule",style:"continuous"}}>✓ ExHentai · 当前</Text>:account.exAvailable===true?<Button title="ExHentai" buttonStyle="bordered" disabled={busy} action={() => { void run("ex") }} />:<Button title="ExHentai · 未验证" buttonStyle="bordered" disabled action={()=>{}}/>}</HStack>{account.exAvailable!==true?<Text font="caption" foregroundStyle="secondaryLabel">ExHentai 尚无可验证的真实 Ex 域登录会话；请使用“同步里站登录”。</Text>:null}</VStack></Section>:null}
-    <Section header={<Text textCase={null}>高级账户操作</Text>}><VStack alignment="leading" spacing={9}><Button title="手工导入 Cookie" disabled={busy} action={() => { void run("manual") }} /><Text font="caption" foregroundStyle="secondaryLabel">自动判站：有有效 igneous → ExHentai；没有 igneous → E-Hentai。三行 `name: value` 与 `name=value` 都可直接识别。</Text><Button title="刷新登录状态" disabled={busy || !account.loggedIn} action={() => { void run("refresh") }} />{account.loggedIn?<Button title="退出登录" role="destructive" disabled={busy} action={() => { void run("logout") }} />:null}</VStack></Section>
+    <Section header={<Text textCase={null}>高级账户操作</Text>}><VStack alignment="leading" spacing={9}><Button title="从剪贴板导入 Cookie" disabled={busy} action={() => { void run("manual") }} /><Text font="caption" foregroundStyle="secondaryLabel">先在其他客户端复制 Cookie，再点此处直接读取原文。确认页只显示字段存在性：有有效 igneous → ExHentai；没有 igneous → E-Hentai。支持三行 `name: value` / `name=value`，也兼容换行被压平。</Text><Button title="刷新登录状态" disabled={busy || !account.loggedIn} action={() => { void run("refresh") }} />{account.loggedIn?<Button title="退出登录" role="destructive" disabled={busy} action={() => { void run("logout") }} />:null}</VStack></Section>
   </>
 }
 
