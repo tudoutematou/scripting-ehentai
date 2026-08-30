@@ -81,11 +81,11 @@ type BrowserCookie = {
     }).filter(Boolean) as BrowserCookie[];
   }
 
-  function mergeCookie(map: Record<string, BrowserCookie>, cookie: BrowserCookie, fallbackHost: string): void {
+  function mergeCookie(map: Record<string, BrowserCookie>, cookie: BrowserCookie, fallbackHost: string, overwrite = true): void {
     var normalized = normalizeBrowserCookie(cookie, fallbackHost);
     if (!normalized) return;
     var key = normalizeDomain(normalized.domain || fallbackHost) + "|" + (normalized.path || "/") + "|" + normalized.name;
-    map[key] = normalized;
+    if (overwrite || !map[key]) map[key] = normalized;
   }
 
   async function listCookies(url: string): Promise<BrowserCookie[]> {
@@ -104,7 +104,7 @@ type BrowserCookie = {
     for (var i = 0; i < COOKIE_URLS.length; i++) {
       var cookies = await listCookies(COOKIE_URLS[i]);
       var fallbackHost = new URL(COOKIE_URLS[i]).hostname;
-      for (var j = 0; j < cookies.length; j++) mergeCookie(map, cookies[j], fallbackHost);
+      for (var j = 0; j < cookies.length; j++) mergeCookie(map, cookies[j], fallbackHost, false);
     }
     cachedCookies = Object.keys(map).map(function (key) { return map[key]; });
     return cachedCookies;
@@ -135,14 +135,19 @@ type BrowserCookie = {
     return !!cookieByName(ex, "ipb_member_id") && !!cookieByName(ex, "ipb_pass_hash") && validIgneous((cookieByName(ex, "igneous") || {}).value || "");
   }
 
+  function isCapturableSession(cookies: BrowserCookie[]): boolean {
+    return isLoggedIn(cookies) || exReady(cookies);
+  }
+
   function loginStateText(cookies: BrowserCookie[]): string {
-    return (isLoggedIn(cookies) ? "已登录" : "未登录") + (exReady(cookies) ? " · 里站凭据已捕获" : "");
+    if (isLoggedIn(cookies)) return "E 已登录" + (exReady(cookies) ? " · 里站凭据已捕获" : "");
+    return exReady(cookies) ? "仅里站凭据已捕获" : "未登录";
   }
 
   function isValidCookieText(source: string): boolean {
     try {
       var parsed = JSON.parse(String(source || ""));
-      return Array.isArray(parsed) && isLoggedIn(parsed);
+      return Array.isArray(parsed) && isCapturableSession(parsed);
     } catch {
       return false;
     }
@@ -193,8 +198,8 @@ type BrowserCookie = {
 
   async function writeCookie(): Promise<{ ok: boolean; writtenTo: string[]; failed: string[]; gmOk: boolean }> {
     var cookies = await readBrowserCookies();
-    if (!isLoggedIn(cookies)) {
-      setButtonMessage("🔐 未登录，正在打开登录页…", "#6b4e9b");
+    if (!isCapturableSession(cookies)) {
+      setButtonMessage("🔐 未检测到可导入会话，正在打开 E 登录页…", "#6b4e9b");
       setTimeout(redirectToLogin, 120);
       return { ok: false, writtenTo: [], failed: [], gmOk: false };
     }
@@ -306,7 +311,7 @@ type BrowserCookie = {
   }
 
   function renderButtonState(cookies: BrowserCookie[]): void {
-    setButtonMessage("🍪 " + loginStateText(cookies) + " · 点此获取", isLoggedIn(cookies) ? "#1e7d32" : "#1a1a1c");
+    setButtonMessage("🍪 " + loginStateText(cookies) + " · 点此获取", isCapturableSession(cookies) ? "#1e7d32" : "#1a1a1c");
   }
 
   async function refreshButtonState(): Promise<void> {
@@ -398,13 +403,13 @@ type BrowserCookie = {
 
   GM.registerMenuCommand("🍪 获取 EH Cookie 并写入", async function () {
     var cookies = await readBrowserCookies();
-    if (!isLoggedIn(cookies)) {
+    if (!isCapturableSession(cookies)) {
       redirectToLogin();
       return;
     }
     var result = await writeCookie();
-    if (result.ok) alert("✅ Cookie 已写入，返回 E-Hentai 浏览器点击「导入并验证登录状态」");
-    else alert("❌ 未找到有效 Cookie 或候选路径无权限");
+    if (result.ok) alert("✅ Cookie 已写入。返回 E-Hentai 浏览器导入并验证；若仅同步 Ex，会与 App 内既有 E 会话合并。");
+    else alert("❌ 未找到可导入会话或候选路径无权限");
     await refreshButtonState();
   });
 
