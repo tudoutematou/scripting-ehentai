@@ -17,6 +17,8 @@ Do not include Cookie values, URLs/tokens, HTML, private paths, search text, fav
 | BS-08 | S2 | 从书库管理删除/重置本地记录后返回书库，根列表仍显示进入管理前快照 | Library 仅首次挂载 load，管理 destination 关闭时不刷新 | needs user gesture/visual test：返回回调已重载三个 store；导航生命周期需真机点击确认 |
 | BS-09 | S3 | 保存搜索/打开 Assistant 失败仍显示绿色成功提示；详情可同时显示旧 success 与新 error | success notice 与 error 共用/未互斥清理 | needs user gesture/visual test：状态已互斥；提示颜色需 UI 观察 |
 | BS-10 | S2 | 连续在线/离线 Reader 加载页面后不写入阅读进度，返回详情仍停在旧页 | 连续分支未调用共享 `updateReadingProgress()`，且离线 effect 显式排除 continuous | needs user gesture/visual test：连续页面接入共享进度提交；滚动可见性需真机确认 |
+| BS-11 | S1 | 浏览器 Cookie 导入并验证成功后账号页被踢回“发现”；返回账号页时 E-Hentai 明明显示可用却与不可用的 ExHentai 一样呈灰色、无法区分当前选中与真正不可用 | `saveAndValidateCookieDraft()` 无条件 `setActiveSite("e")`，触发全局 account generation 使 `ResponsiveShell` remount，iPad `RegularShell.selected` 重置为 `discover`；站点 UI 又把“当前选中”通过 `disabled` 表达，和真正不可用共用灰态 | open：用户 2026-08-30 iPad 实机截图/复现；需修后重跑 导入→仍留在账号页→E 可识别为当前站→切换行为 |
+| BS-12 | S1 | 同一账号在 Android EhViewer 可进入 ExHentai，但从普通 E-Hentai Safari 页面获取并导入 Cookie 后，本 App 只验证到 E 可用、Ex 不可用 | 当前 Browser Cookie 助手只有当前页面 `document.cookie` 是可靠同域来源；跨 E/Ex 的读取依赖 `GM.cookie.list({url})`。若该能力在当前 Safari/Scripting 环境不可用或不能返回 Ex host Cookie，则一次 E 页面捕获不会得到真实 Ex 域 `ipb_member_id`/`ipb_pass_hash`/有效 `igneous`；现有“同步里站登录”是第二段流程但用户路径仍未闭环 | open：用户 2026-08-30 实机确认 Android 账号可进 Ex、Scripting 导入后 Ex 不可用；必须在真实 Safari Ex 页面/GM Cookie 能力上诊断，禁止跨域伪造 Cookie |
 
 Status values:
 - `open`
