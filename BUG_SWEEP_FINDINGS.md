@@ -19,6 +19,7 @@ Do not include Cookie values, URLs/tokens, HTML, private paths, search text, fav
 | BS-10 | S2 | 连续在线/离线 Reader 加载页面后不写入阅读进度，返回详情仍停在旧页 | 连续分支未调用共享 `updateReadingProgress()`，且离线 effect 显式排除 continuous | needs user gesture/visual test：连续页面接入共享进度提交；滚动可见性需真机确认 |
 | BS-11 | S1 | 浏览器 Cookie 导入并验证成功后账号页被踢回“发现”；返回账号页时 E-Hentai 明明显示可用却与不可用的 ExHentai 一样呈灰色、无法区分当前选中与真正不可用 | account generation 刷新与根导航选中状态耦合；站点 UI 用 disabled 同时表达当前与不可用 | needs user gesture/visual test：导入/切站保留 root，当前站显示蓝色“当前”，未验证 Ex 单独灰显；需真机点按确认 |
 | BS-12 | S1 | 同一账号在 Android EhViewer 可进入 ExHentai，但从普通 E-Hentai Safari 页面获取并导入 Cookie 后，本 App 只验证到 E 可用、Ex 不可用 | 实测真实 Safari Ex 页可写入捕获，但当前捕获 Ex `igneous` 仍无效；GM 跨域结果不可当作真实 Ex 会话。现支持真实 Ex 当前页优先捕获、优先导入 Ex 草稿，以及按 Ex 域手工粘贴并与现有 E 会话合并验证 | needs user test：Safari Ex 页仍白屏；请从已登录客户端使用“手工导入 ExHentai Cookie”粘贴真实 Ex Cookie，生产验证成功后再启用切换；不跨域伪造 Cookie |
+| BS-13 | S1 | Agent 真实 `loadFavorites()` 报告当前 E 会话分类为“性转·20 / 生肉·0 / 图集·1”（总 21），但用户随后同一设备可见书库仍显示 `Favorites 0·6 / Favorites 1·0 / Favorites 2·1`（总 7） | 已证明 Agent 的底层 Runtime Check 与用户可见 `CloudFavoritesContent` 不是同一有效 UI/session 状态；当前收藏组件只在挂载/分类变化时 load，且此前验收只直调 `loadFavorites()`，没有从实际书库界面确认账号/session/site 与渲染 page 一致。需区分 stale mounted page、DEV/稳定脚本会话差异或错误运行上下文，而不是再次只测 parser | open：用户 2026-08-30 iPad 实机截图与 Agent 报告数值直接冲突；必须从用户实际打开的 DEV 书库路径复现，输出仅 build/session generation/site/category counts，不得凭单独 `loadFavorites()` 宣布通过 |
 
 Status values:
 - `open`
