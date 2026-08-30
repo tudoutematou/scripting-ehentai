@@ -19,7 +19,7 @@ Do not include Cookie values, URLs/tokens, HTML, private paths, search text, fav
 | BS-10 | S2 | 连续在线/离线 Reader 加载页面后不写入阅读进度，返回详情仍停在旧页 | 连续分支未调用共享 `updateReadingProgress()`，且离线 effect 显式排除 continuous | needs user gesture/visual test：连续页面接入共享进度提交；滚动可见性需真机确认 |
 | BS-11 | S1 | 浏览器 Cookie 导入并验证成功后账号页被踢回“发现”；返回账号页时 E-Hentai 明明显示可用却与不可用的 ExHentai 一样呈灰色、无法区分当前选中与真正不可用 | account generation 刷新与根导航选中状态耦合；站点 UI 用 disabled 同时表达当前与不可用 | needs user gesture/visual test：导入/切站保留 root，当前站显示蓝色“当前”，未验证 Ex 单独灰显；需真机点按确认 |
 | BS-12 | S1 | 同一账号在 Android EhViewer 可进入 ExHentai，但从普通 E-Hentai Safari 页面获取并导入 Cookie 后，本 App 只验证到 E 可用、Ex 不可用 | 实测真实 Safari Ex 页可写入捕获，但当前捕获 Ex `igneous` 仍无效；GM 跨域结果不可当作真实 Ex 会话。现支持真实 Ex 当前页优先捕获、优先导入 Ex 草稿，以及按 Ex 域手工粘贴并与现有 E 会话合并验证 | needs user test：Safari Ex 页仍白屏；请从已登录客户端使用“手工导入 ExHentai Cookie”粘贴真实 Ex Cookie，生产验证成功后再启用切换；不跨域伪造 Cookie |
-| BS-13 | S1 | Agent 独立脚本曾报告“性转·20 / 生肉·0 / 图集·1”（总 21），但真实 DEV 书库显示 `Favorites 0·6 / Favorites 1·0 / Favorites 2·1`（总 7） | 21 条证据来自独立 `.ts` 的隔离 Keychain scope，不是 `E-Hentai 浏览器 DEV` 项目会话；同时收藏组件只按分类 reload，缺少 EhViewer `isCurrentTask` 等价的 site/session 请求边界 | runtime checked：真实 DEV build `b899e7f` 项目作用域中，生产 `CloudFavoritesContent` 与同次 `loadFavorites()` 在 Ex generation 25、E generation 26 均一致显示默认分类和总 7 条；现按 epoch + site + session generation 拒绝旧响应，会话变化清空旧页并重载，UI 标明实际 E/Ex 来源 |
+| BS-13 | S1 | 独立脚本曾显示自定义分类 21 条，但用户真实 DEV 书库持续显示默认分类 7 条 | 真实项目核对证明两者是不同账号身份：standalone 与 DEV 的不可逆身份指纹不同；DEV 内 E/Ex 身份相同，且两站 uconfig.php、favorites.php 均明确返回默认分类和总 7 条。另补齐 EhViewer 等价统一 CookieJar、响应 Cookie 回写、AbortController 和当前任务提交检查 | blocked by account state：代码无法把另一个隔离脚本账号的服务器收藏伪装到 DEV；需在 DEV 重新导入拥有自定义分类的正确账号 Cookie。当前 DEV 服务端/UI 均一致为 7 条；统一会话架构与旧任务取消已实现 |
 
 Status values:
 - `open`
