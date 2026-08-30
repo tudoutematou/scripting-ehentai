@@ -6,158 +6,101 @@ Findings registry: `BUG_SWEEP_FINDINGS.md`
 Parity reference: `EHVIEWER_PARITY.md`
 
 ## Goal
-Freeze new feature work temporarily and run one bounded **autonomous bug-fix sweep** over the current DEV build.
-
-The Agent is explicitly authorized to:
-- inspect historical bug records for regression clues;
-- reproduce bugs using the real `E-Hentai 浏览器 DEV` runtime when possible;
-- create `BS-xx` findings only for reproduced/proven failures;
-- fix those findings at the shared root cause;
-- rerun the exact failing runtime path until it passes or a real blocker is identified.
-
-The Agent is **not** authorized to redesign the app, start new EhViewer parity milestones, or add unrelated features during this sweep.
+Freeze feature expansion and finish the current real-device stabilization sweep. User-reported runtime behavior is authoritative.
 
 Do not merge `main` automatically.
+Do not add new EhViewer parity features until the current S1 regressions below are resolved.
 
-## Immediate priority — BS-11 / BS-12 account login loop
-The user supplied fresh iPad real-device evidence on 2026-08-30. Treat it as authoritative and fix these before resuming lower-priority sweep items.
+## Immediate priority 1 — BS-14 systemic navigation stacking
+The user supplied a real iPad recording showing one search-result tap followed by more than ten Back presses through different Gallery Detail pages.
 
-### BS-11 — import should not throw the user out of Account; selected site must not look unavailable
-Current proven flow:
-- browser Cookie import validates E-Hentai successfully;
-- `saveAndValidateCookieDraft()` unconditionally calls `setActiveSite("e")`;
-- `setActiveSite()` invalidates account/session generation and triggers the global account-context callback;
-- `ResponsiveShell` remounts; on regular-width iPad `RegularShell.selected` defaults back to `discover`;
-- returning to Account shows E as `可用`, but the E button is grey because the UI disables the already-selected site; Ex is grey because it is genuinely unavailable. These two different states look identical.
+Do not patch only one search screen.
+Audit every dynamic collection where an item/tag/relation/record directly owns its own `NavigationLink` or destination-style action.
+Prefer one controlled navigation state per collection:
+
+`Button -> selected item/state -> one navigationDestination`
+
+Reuse the safe pattern already used by `LibraryGalleryGrid`.
+
+Required target paths include at minimum:
+- ordinary gallery search/results;
+- image search;
+- cover search;
+- continue reading;
+- Discovery/watched/toplist;
+- History;
+- My Tags -> results;
+- saved searches;
+- local bookmarks;
+- Gallery Detail tags;
+- Gallery Detail relations/similar destinations.
+
+Static settings/menu links do not need to be rewritten merely for style.
+
+Acceptance rule for each exercised path:
+**one user tap = one push; one Back = original list/page.**
+If a second Back is needed to undo one item selection, the finding is not closed.
+
+## Immediate priority 2 — BS-15 selected tag must be an exact-tag search
+Real user reproduction:
+1. type a Chinese concept such as a translated tag name in the search box;
+2. local tag suggestions appear;
+3. select the intended tag suggestion;
+4. press Search;
+5. result set is only dozens and is biased toward galleries whose title contains the Chinese draft text;
+6. opening a gallery and tapping the same tag directly produces tens of thousands of tag results.
+
+Current proven cause:
+- `SearchComposer.select()` converts the suggestion into a `GallerySearchTag`, but builds the next state with `inputRef.current` as `plainText` before/while clearing the visible field;
+- `composeGallerySearchState()` correctly combines `plainText + exact tags`, so the hidden state can become `Chinese draft + exact E-Hentai tag` even though the text field visually becomes empty;
+- the bug is the suggestion-selection semantics, not the general compose helper.
 
 Required fix:
-1. importing/refreshing credentials must not change the selected root sidebar destination merely because account/session data changed;
-2. do not reset the active site to E unless the current site is no longer valid or the user explicitly chooses E;
-3. decouple shell refresh/cache invalidation from root-navigation selection state;
-4. render site states distinctly:
-   - current + available = visibly selected, not visually "unavailable";
-   - other + available = tappable;
-   - unavailable = disabled with a clear reason/status;
-5. after login import, remain on `账号与设置` and show the verified result there.
+1. Selecting a tag suggestion must **consume the current suggestion draft**.
+2. The next state must explicitly use empty plain text for the consumed draft and preserve/add the selected exact tag.
+3. Do not depend on mutable-ref timing. Do not pass `inputRef.current` into the state updater and then clear the ref afterward.
+4. The resulting `rawQuery` for a default one-tag search must contain only the exact E-Hentai tag term (plus any explicitly selected quick/advanced filters), not the Chinese suggestion text.
+5. If the user selects a tag and then intentionally types new free text afterward, that later text may combine with the selected exact tag. That is valid behavior.
+6. Removing the tag must not resurrect the already-consumed Chinese suggestion draft.
+7. Saved search/bookmark must preserve the corrected exact-tag state.
 
-Required real DEV runtime smoke:
-- Account -> Safari E login/capture -> return -> `导入并验证登录状态`;
-- Account remains visible after success;
-- E shows available/current distinctly rather than disabled-grey-as-error;
-- if Ex is unavailable, only Ex is visually unavailable;
-- repeat Refresh without root navigation jumping to Discover.
+Required focused regression:
+- input Chinese translated concept -> choose suggestion -> assert `keyword === ""`;
+- assert `rawQuery` contains the chosen `galleryExactTagTerm()` and not the consumed Chinese draft;
+- then type a new plain term -> assert new term + exact tag are both present;
+- remove the tag -> assert only the newly typed plain term remains.
 
-### BS-12 — real ExHentai Cookie acquisition must be a complete flow
-Do not assume a normal E-Hentai page capture can read Ex cookies.
+Required real DEV comparison:
+Under the same site/category/language/advanced filters:
+- Path A: search box Chinese concept -> choose the exact tag suggestion -> Search;
+- Path B: Gallery Detail -> tap that same tag.
+Both must generate equivalent exact-tag search semantics and return the same order-of-magnitude/result family. Compare the built safe query structure, not private gallery URLs.
 
-Reference/current architecture facts:
-- browser helper's `document.cookie` is only same-origin reliable;
-- cross-domain E/Ex discovery currently depends on `GM.cookie.list({url})`, whose availability/behavior must be proven in this Scripting Safari environment;
-- Android EhViewer uses an OkHttp persistent CookieJar and receives cookies from actual network responses, so it does not rely on scraping one browser origin;
-- current app correctly requires real Ex-domain `ipb_member_id`, `ipb_pass_hash`, and structurally valid `igneous` before declaring Ex ready. Do not weaken that rule and do not clone E cookies into Ex as a fake solution.
+Do not close BS-15 from a pure URL unit test alone; run the real DEV search path if technically possible.
 
-Required diagnosis/fix:
-1. with the current user's already-valid account, inspect only cookie-name/domain presence booleans — never values;
-2. while on an E page, determine whether `GM.cookie.list` can really see the required Ex-domain cookies;
-3. if not, make `同步里站登录` a clean guided second step:
-   - open real `https://exhentai.org/`;
-   - user confirms Safari can enter it;
-   - Cookie helper captures the actual Ex-origin session there;
-   - return to Account and import/merge without losing the working E cookies;
-   - validate Ex using the exact production request path;
-4. if current Scripting/Safari APIs can safely obtain Ex cookies automatically after E login, use that only when runtime evidence proves it; otherwise keep the explicit Ex sync flow truthful;
-5. successful Ex sync should leave the user on Account and make Ex available/tappable without requiring app restart.
+## Other open/blocked findings
+Continue using `BUG_SWEEP_FINDINGS.md` as the registry. Do not erase previous evidence.
+After BS-14 and BS-15 are resolved, resume the remaining defined Runtime Bug Sweep families in `BUG_SWEEP_1_1.md`.
 
-Required safe runtime result:
-Report only booleans such as `E member/pass present`, `Ex member/pass present`, `Ex igneous valid`, `Ex production validation passed`; never report cookie values or private URLs.
+## Verification policy
+For each fix:
+1. confirm current DEV build/head;
+2. trace the production state/navigation path;
+3. smallest root-cause fix;
+4. TypeScript diagnostics;
+5. focused deterministic regression;
+6. targeted real DEV runtime smoke when automatable;
+7. update `BUG_SWEEP_FINDINGS.md` truthfully;
+8. sync isolated `E-Hentai 浏览器 DEV` once at the logical checkpoint.
 
-Do not start new parity features (UConfig/blacklist/share/etc.) until BS-11 and BS-12 are fixed or have a genuine platform blocker.
+Do not use fixture/self-test success as a substitute for the user-visible path.
+Do not perform a long whole-product acceptance ritual.
+Do not expose cookies, private URLs/tokens, raw HTML, favorite notes, AI credentials or local private paths.
 
-## Read order for this task
-1. `AGENTS.md`
-2. this `CURRENT_TASK.md`
-3. `BUG_SWEEP_1_1.md`
-4. `BUG_SWEEP_FINDINGS.md`
-5. current relevant source files
-6. historical records below only as regression clues:
-   - `STABILIZATION_AUDIT.md`
-   - `DEV_PROGRESS.md`
-   - `RELEASE_CHECKLIST.md`
-7. narrow EhViewer/current Scripting docs only when a reproduced bug requires reference behavior/API confirmation.
-
-For this task only, reading the archived historical records above is explicitly authorized. They are **not** acceptance checklists and must not trigger a ceremonial whole-repo audit by themselves.
-
-## First gate — prove the DEV build under test
-Before debugging behavior:
-- resolve the current remote head of `feat/1.1-gallery-interaction`;
-- confirm the isolated DEV sync/build marker corresponds to the intended head;
-- if the DEV build is stale, fix/sync that first and do not misdiagnose old code as a current bug.
-
-Historical branch/bootstrap mismatch has happened before, so this is mandatory.
-
-## Sweep mode
-Follow `BUG_SWEEP_1_1.md` in its defined runtime order.
-
-Prioritize:
-1. S0 privacy/data-loss/credential issues;
-2. S1 broken core flows;
-3. S2 state/navigation/recovery regressions;
-4. S3 only when it is a clear functional UX defect, not subjective styling.
-
-Recent/new code deserves extra attention because regressions often cluster there:
-- E/Ex session and site switching;
-- Liquid Glass action wrappers only for runtime breakage, not visual taste;
-- Reader state/zoom/navigation;
-- cloud Favorite state;
-- AI Search / managed Assistant / Assistant Tool;
-- Library/navigation changes.
-
-## Autonomous fix contract
-For each real finding:
-1. create/update one row in `BUG_SWEEP_FINDINGS.md` as `BS-xx`;
-2. record only a short non-sensitive reproduction;
-3. trace the actual production path;
-4. fix the smallest shared root cause;
-5. TypeScript diagnostics;
-6. one focused deterministic regression check when meaningful;
-7. rerun the exact real DEV runtime path when automatable;
-8. do not mark fixed if runtime still fails;
-9. update the row to `runtime checked`, `blocked`, or `needs user gesture/visual test`;
-10. continue to the next defined sweep family.
-
-If one symptom survives two attempted fixes, stop adding local guards and re-trace the full end-to-end flow/reference behavior.
-
-## Runtime QA rules
-Real runtime is preferred over fixtures whenever the affected path can be executed safely.
-
-Use:
-- current real E/Ex session for account/network bugs;
-- real search/detail/favorite production cores;
-- current configured Scripting AI provider for AI bugs;
-- actual Assistant Tool wrapper, not only direct `runEhAction()`;
-- small/reversible state checks for Library/Download/Offline.
-
-Do not perform destructive operations merely for QA.
-Do not expose Cookie values, gid/token, private URLs, raw HTML, favorite notes, AI credentials, filesystem paths or rating credentials.
-
-Visual quality and gesture feel remain user QA when reliable automation is unavailable.
-
-## Stop conditions
-Stop the sweep when:
-- all S0/S1 findings discovered by the defined sweep are fixed or genuinely blocked;
-- discovered S2 findings on exercised paths are fixed or clearly recorded;
-- one final rerun of the affected runtime paths produces no new actionable finding;
-- remaining issues are only subjective visual/gesture/device-specific observations that the Agent cannot reliably automate.
-
-Do not claim the application is bug-free.
-Report only that the **defined Runtime Bug Sweep passed on the exercised paths**.
-
-## Final handoff
-Keep it short:
-- **Findings:** `BS-xx` + severity + symptom.
-- **Fixed:** IDs + root-cause summary + commit(s).
-- **Runtime checked:** exact real DEV paths actually executed.
-- **Blocked:** exact external/runtime limitation.
-- **Needs user test:** only visual/gesture/subjective checks.
-
-Sync isolated DEV once at the final sweep head, then stop.
+## Handoff
+Report only:
+- finding IDs fixed;
+- root cause;
+- commit SHA;
+- exact runtime paths actually exercised;
+- 1–3 remaining user gestures if UI automation cannot verify them.
