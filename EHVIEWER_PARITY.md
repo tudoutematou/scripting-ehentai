@@ -96,7 +96,7 @@ Legend: ✅ implemented | 🟡 partial / active bug | 🔴 missing | ⚪ platfor
 
 | Capability | Status | Current Scripting state | Priority |
 |---|---:|---|---:|
-| Cloud Favorites browser | ✅ | Server category names/counts/search/paging; real account runtime confirmed `uconfig.php`, `favorites.php` and parser agree on custom names | — |
+| Cloud Favorites browser | ✅ | Server category names/counts/search/paging; production UI is bound to the active site and account session, and stale responses cannot overwrite the current page | — |
 | Favorite category rename / default / sorting | 🔴 | No native UConfig-backed category management yet | 2 |
 | Favorite batch move / delete / download | 🔴 | No multi-select cloud Favorite actions yet | 2 |
 | Local bookmarks | ✅ | Add/remove/list | — |
