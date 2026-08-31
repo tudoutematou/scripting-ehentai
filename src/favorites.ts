@@ -1,7 +1,7 @@
 import { GallerySummary } from "./extractors"
 import { parseSearchHtml } from "./searchHtml"
 import { fetchHtml, invalidateGalleryCaches, postForm } from "./ehentai"
-import { getBaseUrl, getAccountStatus } from "./account"
+import { getActiveSite, getAccountSessionGeneration, getBaseUrl, getAccountStatus } from "./account"
 import { reportDiagnostic } from "./githubBridge"
 import { parseGalleryRef } from "./pure"
 
@@ -9,8 +9,74 @@ export type FavoriteCategory = { index: number; name: string; count: number }
 export type FavoriteSearch = { query?: string; searchName?: boolean; searchTags?: boolean; searchNote?: boolean }
 export type FavoritesPage = { categories: FavoriteCategory[]; items: GallerySummary[]; resultCount: string; prevHref: string; nextHref: string; url: string }
 export type FavoriteState = { category: number | null; note: string; categories: FavoriteCategory[] }
+type UConfigSnapshot = { url: string; categories: FavoriteCategory[]; fields: Record<string, string> }
+
+let categoryRevision = 0
+const categoryListeners = new Set<() => void>()
+export function favoriteCategoryRevision() { return categoryRevision }
+export function subscribeFavoriteCategoryChanges(listener: () => void) { categoryListeners.add(listener); return () => categoryListeners.delete(listener) }
+function notifyFavoriteCategoryChanges() { categoryRevision += 1; for (const listener of [...categoryListeners]) listener() }
 export function isFavoriteRequestContextCurrent(site:string,generation:number,currentSite:string,currentGeneration:number){return site===currentSite&&generation===currentGeneration}
 const clean = (value: string) => String(value || "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/gi, " ").replace(/\s+/g, " ").trim()
+const decode = (value: string) => String(value || "").replace(/&nbsp;/gi, " ").replace(/&quot;/gi, '"').replace(/&#39;|&apos;/gi, "'").replace(/&amp;/gi, "&").replace(/&#(x[\da-f]+|\d+);/gi, (_, code) => { const value = String(code).toLowerCase(); const number = value.startsWith("x") ? Number.parseInt(value.slice(1), 16) : Number.parseInt(value, 10); return Number.isFinite(number) ? String.fromCodePoint(number) : _ })
+function attr(source: string, name: string) { const quoted = source.match(new RegExp(`\\b${name}\\s*=\\s*(["'])([\\s\\S]*?)\\1`, "i")); if (quoted) return decode(quoted[2]); return decode(source.match(new RegExp(`\\b${name}\\s*=\\s*([^\\s>]+)`, "i"))?.[1] || "") }
+function disabled(source: string) { return /\bdisabled(?:\s|=|>|$)/i.test(source) }
+function selected(source: string) { return /\bselected(?:\s|=|>|$)/i.test(source) }
+function checked(source: string) { return /\bchecked(?:\s|=|>|$)/i.test(source) }
+function uconfigForms(html: string) { return [...String(html || "").matchAll(/<form\b([^>]*)>([\s\S]*?)<\/form>/gi)].map(match => ({ header: match[1], body: match[2] })).filter(form => /\bname\s*=\s*(["'])favorite_0\1/i.test(form.body)) }
+export function parseUConfigFavoriteCategories(html: string): FavoriteCategory[] {
+  const form = uconfigForms(html)[0]
+  if (!form) throw new Error("未在服务器 UConfig 中识别到收藏分类表单。")
+  const values = new Map<number, string>()
+  for (const match of form.body.matchAll(/<input\b([^>]*)>/gi)) { const source = match[1], name = attr(source, "name"), index = Number(name.match(/^favorite_([0-9])$/)?.[1]); if (disabled(source) || !Number.isInteger(index) || index < 0 || index > 9) continue; const value = attr(source, "value").trim(); if (!value) throw new Error(`服务器返回的收藏分类 ${index} 为空。`); if (value.length > 20) throw new Error(`服务器返回的收藏分类 ${index} 超出允许长度。`); values.set(index, value) }
+  if (values.size !== 10) throw new Error("服务器 UConfig 未返回完整的 10 个收藏分类名称。")
+  return Array.from({ length: 10 }, (_, index) => ({ index, name: values.get(index) || "", count: 0 }))
+}
+function parseUConfigFields(html: string): Record<string, string> {
+  const form = uconfigForms(html)[0]
+  if (!form) throw new Error("未在服务器 UConfig 中识别到可提交的设置表单。")
+  const fields: Record<string, string> = {}
+  for (const match of form.body.matchAll(/<input\b([^>]*)>/gi)) {
+    const source = match[1], name = attr(source, "name"), type = attr(source, "type").toLowerCase() || "text"
+    if (!name || disabled(source) || /^(?:submit|button|image|reset|file)$/i.test(type) || ((type === "radio" || type === "checkbox") && !checked(source))) continue
+    fields[name] = attr(source, "value")
+  }
+  for (const match of form.body.matchAll(/<select\b([^>]*)>([\s\S]*?)<\/select>/gi)) {
+    const source = match[1], name = attr(source, "name")
+    if (!name || disabled(source)) continue
+    const options = [...match[2].matchAll(/<option\b([^>]*)>([\s\S]*?)<\/option>/gi)].filter(option => !disabled(option[1]))
+    const option = options.find(option => selected(option[1])) || options[0]
+    if (!option) throw new Error(`服务器 UConfig 的 ${name} 缺少可提交选项。`)
+    fields[name] = attr(option[1], "value") || clean(decode(option[2]))
+  }
+  for (const match of form.body.matchAll(/<textarea\b([^>]*)>([\s\S]*?)<\/textarea>/gi)) { const source = match[1], name = attr(source, "name"); if (name && !disabled(source)) fields[name] = decode(match[2]) }
+  if (Object.keys(fields).length < 10) throw new Error("服务器 UConfig 表单不完整，未提交任何更改。")
+  return fields
+}
+export function validateFavoriteCategoryNames(names: readonly string[]) { if (names.length !== 10) throw new Error("必须提供完整的 10 个收藏分类名称。")
+  return names.map((input, index) => { const name = String(input || "").trim(); if (!name) throw new Error(`收藏分类 ${index} 不能为空。`); if (name.length > 20) throw new Error(`收藏分类 ${index} 最多 20 个字符。`); if(/[\r\n\u0000]/.test(name)) throw new Error(`收藏分类 ${index} 包含无效字符。`); return name }) }
+async function loadUConfigSnapshot(): Promise<UConfigSnapshot> { if (!getAccountStatus().loggedIn) throw new Error("请先登录后管理收藏分类。")
+  const result = await fetchHtml(new URL("uconfig.php", getBaseUrl()).toString(), "favorites.uconfig.read")
+  if (favoriteLoginError(result.html)) throw new Error("收藏分类管理需要登录。")
+  return { url: result.finalUrl, categories: parseUConfigFavoriteCategories(result.html), fields: parseUConfigFields(result.html) }
+}
+export async function loadFavoriteCategoryManagement(): Promise<FavoriteCategory[]> { const [config, page] = await Promise.all([loadUConfigSnapshot(), loadFavorites().catch(() => null)])
+  return config.categories.map(category => ({ ...category, count: page?.categories.find(item => item.index === category.index)?.count || 0 }))
+}
+export function buildUConfigRenameSubmission(html: string, names: readonly string[]) { const expected = validateFavoriteCategoryNames(names); return { ...parseUConfigFields(html), ...Object.fromEntries(expected.map((name, index) => [`favorite_${index}`, name])), apply: "Apply" } }
+export async function renameFavoriteCategories(names: readonly string[]): Promise<FavoriteCategory[]> {
+  const expected = validateFavoriteCategoryNames(names), site = getActiveSite(), generation = getAccountSessionGeneration(), before = await loadUConfigSnapshot()
+  if (!isFavoriteRequestContextCurrent(site, generation, getActiveSite(), getAccountSessionGeneration())) throw new Error("账号或站点已切换，未提交收藏分类更改。")
+  if (before.categories.every((category, index) => category.name === expected[index])) return before.categories
+  const fields = { ...before.fields, ...Object.fromEntries(expected.map((name, index) => [`favorite_${index}`, name])), apply: "Apply" }
+  await postForm(before.url, fields, "favorites.uconfig.rename")
+  if (!isFavoriteRequestContextCurrent(site, generation, getActiveSite(), getAccountSessionGeneration())) throw new Error("账号或站点已切换，无法确认收藏分类更改。")
+  const verified = await loadUConfigSnapshot()
+  if (!verified.categories.every((category, index) => category.name === expected[index])) throw new Error("服务器返回的收藏分类名称与请求不一致，未更新本地显示。")
+  const page = await loadFavorites().catch(() => null)
+  const categories = verified.categories.map(category => ({ ...category, count: page?.categories.find(item => item.index === category.index)?.count || 0 }))
+  invalidateGalleryCaches(); notifyFavoriteCategoryChanges(); return categories
+}
 export function buildFavoritesUrl(baseUrl: string, category?: number, search: FavoriteSearch = {}): string { const url = new URL("favorites.php", baseUrl); if (category != null) url.searchParams.set("favcat", String(category)); const query = String(search.query || "").trim(); if (query) { url.searchParams.set("f_search", query); url.searchParams.set("sn", "on"); url.searchParams.set("st", "on"); url.searchParams.set("sf", "on") } return url.toString() }
 export function parseFavoriteCategories(html: string): FavoriteCategory[] { const scope=html.match(/<[^>]*\bclass\s*=\s*(["'])[^"']*\bido\b[^"']*\1[^>]*>[\s\S]*/i)?.[0]||html;const matches=[...scope.matchAll(/<[^>]*\bclass\s*=\s*(["'])[^"']*\bfp\b[^"']*\1[^>]*>/gi)].slice(0,10);return Array.from({length:10},(_,index)=>{const match=matches[index];if(!match)return{index,name:`收藏夹 ${index}`,count:0};const start=(match.index||0)+match[0].length,end=index+1<matches.length?(matches[index+1].index||scope.length):scope.length,segment=scope.slice(start,end),fields=[...segment.matchAll(/<div\b[^>]*>([\s\S]*?)<\/div>/gi)].map(value=>clean(value[1]));const count=Number(String(fields[0]||"0").replace(/[^\d,]/g,"").replace(/,/g,""))||0,name=String(fields[2]||"").trim()||`收藏夹 ${index}`;return{index,name,count}}) }
 export function parseFavoriteState(metadata: Record<string, string>): FavoriteState { const value = String(metadata.Favorited || metadata.favorited || ""); const category = Number(value.match(/(?:category|favcat)\s*(\d)/i)?.[1]); return { category: Number.isInteger(category) && category >= 0 && category <= 9 ? category : null, note: "", categories:[] } }
