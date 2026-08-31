@@ -9,11 +9,10 @@ import { getBaseUrl, getCookieHeader, productionRequestAuth, storeResponseCookie
 
 export type { GalleryPageLink, GallerySummary }
 export type SearchPage = SearchExtractData & { url: string }
-export type GalleryDetail = Omit<ReturnType<typeof parseDetailHtml>, "pageLinks"> & { pageLinks: GalleryPageLink[]; sourceUrl: string; truncatedPreviewPages: boolean; failedPreviewPages: number[] }
-export type PreviewLoadResult = { pageLinks: GalleryPageLink[]; failedPreviewPages: number[]; elapsedMs: number }
+export type GalleryDetail = Omit<ReturnType<typeof parseDetailHtml>, "pageLinks"> & { pageLinks: GalleryPageLink[]; sourceUrl: string; loadedPreviewPages: number[]; truncatedPreviewPages: boolean; failedPreviewPages: number[] }
+export type PreviewLoadResult = { pageLinks: GalleryPageLink[]; loadedPreviewPages: number[]; failedPreviewPages: number[]; elapsedMs: number }
 export type ResolvedImagePage = PageExtractData & { pageUrl: string }
 
-const MAX_PREVIEW_LIST_PAGES = 50
 const detailCoreCache = new Map<string, GalleryDetail>()
 const previewPageCache = new Map<string, GalleryPageLink[]>()
 const imagePageCache = new Map<string, Promise<ResolvedImagePage>>()
@@ -71,27 +70,27 @@ export async function loadGalleryDetailCore(url: string): Promise<GalleryDetail>
     const { html, finalUrl, response } = await fetchHtml(url, "detail-core")
     let parsed: ReturnType<typeof parseDetailHtml>; try { parsed = parseDetailHtml(html, finalUrl) } catch (error) { throw stageError("detail.parseDetailHtml", error) }
     if (parsed.error) { const error = httpError(parsed.error, response, finalUrl); (error as any).responseLength = html.length; throw error }
-    const detail: GalleryDetail = { ...parsed, pageLinks: dedupeAndSortPageLinks(normalizePageLinks(parsed.pageLinks || [], 0)), sourceUrl: finalUrl, truncatedPreviewPages: Number(parsed.previewPages || 1) > MAX_PREVIEW_LIST_PAGES, failedPreviewPages: [] }
+    const detail: GalleryDetail = { ...parsed, pageLinks: dedupeAndSortPageLinks(normalizePageLinks(parsed.pageLinks || [], 0)), sourceUrl: finalUrl, loadedPreviewPages: [0], truncatedPreviewPages: false, failedPreviewPages: [] }
     detailCoreCache.set(url, detail); detailCoreCache.set(finalUrl, detail)
     await reportSafely({ stage: "gallery-detail-core", ok: true, request: { url: finalUrl, status: Number(response?.status || 0), statusText: String(response?.statusText || "") }, notes: `coreMs=${Date.now() - started}; previewPages=${detail.previewPages}; loadedImages=${detail.pageLinks.length}` })
     return detail
   } catch (error) { const value = error as any; await reportSafely({ stage: "gallery-detail-core", ok: false, error, request: { url: String(value?.url || url), status: Number(value?.status || 0), statusText: String(value?.statusText || "") } }); throw error }
 }
 
-export async function loadRemainingPreviewPages(detail: GalleryDetail, onProgress?: (links: GalleryPageLink[], failed: number[]) => void): Promise<PreviewLoadResult> {
-  const started = Date.now(); const previewPages = Math.max(1, Number(detail.previewPages || 1)); const pagesToLoad = Math.min(previewPages, MAX_PREVIEW_LIST_PAGES)
-  let allLinks = [...detail.pageLinks]; const failed: number[] = []; const pending: number[] = []; for (let p = 1; p < pagesToLoad; p += 1) pending.push(p)
-  const worker = async () => { while (pending.length) { const p = pending.shift(); if (p == null) return; try { const links = await fetchPreviewPage(withPreviewPage(detail.sourceUrl, p), p); allLinks = dedupeAndSortPageLinks([...allLinks, ...links]) } catch { failed.push(p) } onProgress?.(allLinks, [...failed]) } }
-  await Promise.all(Array.from({ length: Math.min(3, pending.length) }, () => worker()))
-  const result = { pageLinks: dedupeAndSortPageLinks(allLinks), failedPreviewPages: failed.sort((a,b) => a-b), elapsedMs: Date.now() - started }
-  await reportSafely({ stage: "gallery-detail-previews", ok: failed.length === 0, request: { url: detail.sourceUrl, status: 0, statusText: "" }, notes: `previewMs=${result.elapsedMs}; previewPages=${previewPages}; loadedImages=${result.pageLinks.length}; failedPreviewPages=${failed.join(",") || "none"}` })
-  return result
+export function galleryPageCount(detail: Pick<GalleryDetail, "metadata" | "pageLinks">): number { const length = Object.entries(detail.metadata || {}).find(([key]) => key.trim().toLowerCase() === "length")?.[1] || ""; return Number(String(length).replace(/[^\d]/g, "")) || Math.max(0, ...detail.pageLinks.map(page => page.index)) }
+export function nextPreviewPageIndex(detail: Pick<GalleryDetail, "previewPages" | "loadedPreviewPages">): number | null { const loaded = new Set(detail.loadedPreviewPages || []); for (let page = 0; page < Math.max(1, Number(detail.previewPages || 1)); page += 1) if (!loaded.has(page)) return page; return null }
+export async function loadPreviewPageBatch(detail: GalleryDetail, startPage?: number, count = 2): Promise<PreviewLoadResult> {
+  const started = Date.now(), previewPages = Math.max(1, Number(detail.previewPages || 1)); startPage ??= nextPreviewPageIndex(detail); if (startPage == null) return { pageLinks: detail.pageLinks, loadedPreviewPages: detail.loadedPreviewPages, failedPreviewPages: detail.failedPreviewPages, elapsedMs: 0 }
+  let allLinks = [...detail.pageLinks]; const loaded = new Set(detail.loadedPreviewPages || [0]), failed = new Set(detail.failedPreviewPages || []); const pending = Array.from({ length: Math.max(0, Math.min(count, previewPages - startPage)) }, (_, offset) => startPage + offset)
+  const worker = async () => { while (pending.length) { const page = pending.shift(); if (page == null) return; try { allLinks = dedupeAndSortPageLinks([...allLinks, ...await fetchPreviewPage(withPreviewPage(detail.sourceUrl, page), page)]); loaded.add(page); failed.delete(page) } catch { failed.add(page) } } }
+  await Promise.all(Array.from({ length: Math.min(2, pending.length) }, worker)); const result = { pageLinks: dedupeAndSortPageLinks(allLinks), loadedPreviewPages: [...loaded].sort((a,b) => a-b), failedPreviewPages: [...failed].sort((a,b) => a-b), elapsedMs: Date.now() - started }
+  await reportSafely({ stage: "gallery-detail-preview-batch", ok: result.failedPreviewPages.length === 0, request: { url: detail.sourceUrl, status: 0, statusText: "" }, notes: `previewMs=${result.elapsedMs}; loadedPreviewPages=${result.loadedPreviewPages.length}/${previewPages}; loadedImages=${result.pageLinks.length}` }); return result
 }
-
-export function applyPreviewLoadResult(core: GalleryDetail, previews: PreviewLoadResult): GalleryDetail { return { ...core, pageLinks: previews.pageLinks, failedPreviewPages: previews.failedPreviewPages } }
-export function hasCompletePreviewInventory(detail: Pick<GalleryDetail, "pageLinks" | "failedPreviewPages" | "truncatedPreviewPages">): boolean { return detail.pageLinks.length > 0 && !detail.truncatedPreviewPages && detail.failedPreviewPages.length === 0 }
-export function assertCompletePreviewInventory(detail: Pick<GalleryDetail, "pageLinks" | "failedPreviewPages" | "truncatedPreviewPages">): void { if (!hasCompletePreviewInventory(detail)) throw new Error("页面库存不完整，请重试预览加载后再下载。") }
-export async function loadGalleryDetail(url: string): Promise<GalleryDetail> { const core = await loadGalleryDetailCore(url); return applyPreviewLoadResult(core, await loadRemainingPreviewPages(core)) }
+export async function loadRemainingPreviewPages(detail: GalleryDetail, onProgress?: (links: GalleryPageLink[], failed: number[]) => void): Promise<PreviewLoadResult> { const started = Date.now(); let current = detail; for (let page = 1; page < Math.max(1, Number(detail.previewPages || 1)); page += 2) { current = applyPreviewLoadResult(current, await loadPreviewPageBatch(current, page, 2)); onProgress?.(current.pageLinks, current.failedPreviewPages) } return { pageLinks: current.pageLinks, loadedPreviewPages: current.loadedPreviewPages, failedPreviewPages: current.failedPreviewPages, elapsedMs: Date.now() - started } }
+export function applyPreviewLoadResult(core: GalleryDetail, previews: PreviewLoadResult): GalleryDetail { return { ...core, pageLinks: previews.pageLinks, loadedPreviewPages: previews.loadedPreviewPages, failedPreviewPages: previews.failedPreviewPages } }
+export function hasCompletePreviewInventory(detail: Pick<GalleryDetail, "pageLinks" | "previewPages" | "loadedPreviewPages" | "failedPreviewPages">): boolean { return detail.pageLinks.length > 0 && (detail.loadedPreviewPages || []).length >= Math.max(1, Number(detail.previewPages || 1)) && detail.failedPreviewPages.length === 0 }
+export function assertCompletePreviewInventory(detail: Pick<GalleryDetail, "pageLinks" | "previewPages" | "loadedPreviewPages" | "failedPreviewPages">): void { if (!hasCompletePreviewInventory(detail)) throw new Error("页面库存不完整，请重试预览加载后再下载。") }
+export async function loadGalleryDetail(url: string, onProgress?: (loadedPages: number, totalPages: number) => void): Promise<GalleryDetail> { const core = await loadGalleryDetailCore(url); let current = core; for (let page = 1; page < Math.max(1, Number(core.previewPages || 1)); page += 2) { current = applyPreviewLoadResult(current, await loadPreviewPageBatch(current, page, 2)); onProgress?.(current.loadedPreviewPages.length, Math.max(1, Number(core.previewPages || 1))) } return current }
 
 async function resolveImagePageFresh(pageUrl:string):Promise<ResolvedImagePage>{try { const { html, finalUrl, response } = await fetchHtml(pageUrl, "image-page"); let parsed: PageExtractData; try { parsed = parseImagePageHtml(html, finalUrl) } catch (error) { throw stageError("image-page.parse", error) }; if (parsed.error) throw httpError(parsed.error, response, finalUrl); const resolved = { ...parsed, pageUrl: finalUrl }; await reportSafely({ stage: "gallery-image-page", ok: true, request: { url: finalUrl, status: Number(response?.status || 0), statusText: String(response?.statusText || "") }, notes: `imageUrl=${resolved.imageUrl ? "yes" : "no"}; originalUrl=${resolved.originalUrl ? "yes" : "no"}` }); return resolved } catch (error) { const value = error as any; await reportSafely({ stage: "gallery-image-page", ok: false, error, request: { url: String(value?.url || pageUrl), status: Number(value?.status || 0), statusText: String(value?.statusText || "") } }); throw error }}
 export function resolveImagePage(pageUrl: string, refresh=false): Promise<ResolvedImagePage> {
