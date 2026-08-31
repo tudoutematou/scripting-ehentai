@@ -6,10 +6,10 @@ Findings registry: `BUG_SWEEP_FINDINGS.md`
 Parity reference: `EHVIEWER_PARITY.md`
 
 ## Goal
-Freeze feature expansion and finish the current real-device stabilization sweep. User-reported runtime behavior is authoritative.
+Freeze unrelated feature expansion and finish the current real-device stabilization sweep. User-reported runtime behavior is authoritative.
 
 Do not merge `main` automatically.
-Do not add new EhViewer parity features until the current S1 regressions below are resolved.
+Do not add unrelated EhViewer parity features until the current S1 regressions below are resolved.
 
 ## Immediate priority 1 — BS-14 systemic navigation stacking
 The user supplied a real iPad recording showing one search-result tap followed by more than ten Back presses through different Gallery Detail pages.
@@ -119,9 +119,73 @@ Use the user's 1323-page gallery or another known 1000+ gallery:
 
 Do not solve this by merely raising `MAX_PREVIEW_LIST_PAGES`; that would preserve the wrong eager architecture and only move the freeze point.
 
+## Immediate priority 4 — BS-17 replace generic chat Assistant with real AI recommendations
+Real user evidence: the in-app `💬 AI 助手` was asked to find/recommend VR-related galleries. It returned generic suggested keywords/tags and did not perform an E-Hentai search or present any real gallery candidates.
+
+Current proven architecture problem:
+- `presentManagedAssistant()` only opens Scripting's managed Conversation;
+- whether the model calls `ehentai_browser` Assistant Tool is optional/model-controlled;
+- the tool itself exposes only basic `search(query/category/language)` plus detail/favorites/history, not the app's full validated SearchState;
+- therefore the visible app entry behaves like a generic chatbot and cannot guarantee the user's required `search -> inspect -> recommend` workflow.
+
+Decision:
+**Remove the generic in-app chat Assistant as a primary UX. Do not try to solve this by prompt wording alone.**
+Keep `assistant_tool.tsx/json` as a compatibility surface for users who intentionally use Scripting's Agent/Assistant interface, but do not advertise that generic conversation as the app's recommendation feature.
+
+### Required front-end behavior
+1. Remove/hide the Search-page `💬 AI 助手` button.
+2. Replace it with a deterministic `✨ AI 推荐` entry.
+3. Replace generic Gallery Detail `✨ 问 AI` with a focused action such as `✨ 找类似` only if it can use the same real recommendation pipeline; otherwise remove the generic action for this release.
+4. Keep existing `✨ AI 搜索` if it continues to produce a validated normal SearchState and real search results.
+
+### Required AI recommendation pipeline
+The script owns the workflow. The model may help plan/rank, but **cannot choose to skip the real search**.
+
+1. User enters a natural-language preference/request.
+2. Ask Scripting Assistant for a small structured recommendation plan, preferably 1–3 search plans when useful for fuzzy concepts/synonyms. Plans may contain only fields the app can validate: plain text, include/exclude tag concepts, category/language, rating/page constraints, and other already-supported advanced filters.
+3. Resolve every tag concept through the local EhTagTranslation database and existing exact-tag machinery. Never let model-produced raw E-Hentai syntax/URL bypass local validation.
+4. Execute the resulting real `searchGalleries()` queries against the active E/Ex site. If multiple plans are used, merge/dedupe by gallery identity. Cap the candidate pool to a bounded size (for example 20–30) and stop early when enough useful candidates exist.
+5. For a bounded subset (recommended 8–12 candidates), load only **lightweight detail/core metadata** needed for recommendation: title/titleJpn, category, uploader, authoritative page count, rating/ratingCount, tags, and optionally a very small safe comment summary. Do **not** call an API that enumerates the complete preview inventory merely for recommendation; this must remain compatible with BS-16.
+6. Send only those safe candidate records plus the user's original preference to Scripting Assistant for ranking. No Cookie, raw URLs, gid/token, rating credentials, preview/page tokens, raw HTML, local paths or private notes.
+7. Require structured ranking output referencing only candidate IDs/indices from the supplied candidate list. The model cannot invent a gallery.
+8. Render 3–5 actual recommendation cards in native UI. Each card should show the real cover/summary already owned by the app plus a short reason such as `符合 VRMMO/游戏世界标签 · 评分较高 · 52 页`.
+9. Tapping a recommendation opens the existing `GalleryDetailView` through the single controlled navigation pattern from BS-14.
+10. If the real searches produce no candidates, show a truthful `没有找到符合条件的结果` and optionally offer one explicit `放宽条件重试` action. **Never fall back to a pure-text list of suggested search keywords and call that a recommendation.**
+
+### Recommendation planning for fuzzy concepts
+For concepts such as `VR`, `进入虚拟世界`, `全沉浸`, the planner may propose multiple *validated* search plans using synonyms/title terms and resolvable tags. Example shape only:
+- exact/resolved tag-oriented plan;
+- title/plain-text synonym plan such as VRMMO/full-dive equivalents;
+- broader related plan if the first two produce too few candidates.
+
+The app executes and merges these searches. The planner never directly returns final gallery recommendations.
+
+### Gallery Detail `找类似`
+If implemented in this pass:
+- seed the recommendation plan from the current gallery's safe tags/category/uploader/rating/page count;
+- let the user optionally add a constraint like `不要 AI generated`;
+- execute real searches and rank real candidates;
+- exclude the current gallery itself;
+- show actual cards, not a chat transcript.
+
+### Verification
+Focused checks:
+- planner output cannot contain/use raw URL or E-Hentai query syntax;
+- ranking cannot select an unknown candidate ID;
+- dedupe candidate merge is stable;
+- recommendation detail enrichment uses core/lightweight detail and does not enumerate whole preview inventory;
+- no recommendation result leaks sensitive fields.
+
+Required real DEV smoke:
+- input a fuzzy request similar to `帮我找带设备进入虚拟世界/VRMMO 设定的本子，标题不一定有 VR`;
+- observe at least one actual E/Ex search request executed;
+- final UI must contain actual gallery cards from those searches, or a truthful no-results state;
+- it is a failure if the final result is only generic keyword/tag advice;
+- tap one recommendation -> one Gallery Detail push -> one Back returns to recommendation list.
+
 ## Other open/blocked findings
 Continue using `BUG_SWEEP_FINDINGS.md` as the registry. Do not erase previous evidence.
-After BS-14, BS-15 and BS-16 are resolved, resume the remaining defined Runtime Bug Sweep families in `BUG_SWEEP_1_1.md`.
+After BS-14, BS-15, BS-16 and BS-17 are resolved, resume the remaining defined Runtime Bug Sweep families in `BUG_SWEEP_1_1.md`.
 
 ## Verification policy
 For each fix:
