@@ -78,9 +78,50 @@ Both must generate equivalent exact-tag search semantics and return the same ord
 
 Do not close BS-15 from a pure URL unit test alone; run the real DEV search path if technically possible.
 
+## Immediate priority 3 — BS-16 preview inventory must be incremental/on-demand
+Real user recording shows a 1323-page gallery whose Detail preview stays in background loading and stops at 1000 pages.
+
+Current proven cause:
+- `loadGalleryDetailCore()` sets `truncatedPreviewPages` when server preview pagination exceeds `MAX_PREVIEW_LIST_PAGES`;
+- `MAX_PREVIEW_LIST_PAGES` is currently 50;
+- `loadRemainingPreviewPages()` eagerly queues every preview-list page from 1 up to that cap as soon as Gallery Detail mounts;
+- on the observed server layout this becomes about 1000 page links;
+- `inventoryReady` also waits for `!previewsLoading` and `hasCompletePreviewInventory()`, while `hasCompletePreviewInventory()` rejects every truncated gallery;
+- as a result ordinary preview/Reader UX is incorrectly coupled to full-gallery inventory enumeration.
+
+Required architecture/behavior:
+1. Gallery Detail must render immediately from the first/core preview page. Do **not** enumerate the complete gallery merely because Detail opened.
+2. The displayed total page count must come from the authoritative server/detail metadata/summary count, not from `pageLinks.length`.
+3. Detail preview summary should show only the first small set already available (currently about 18 is fine) and remain usable while more links are absent.
+4. `查看全部` must open an incremental preview browser immediately; it must not be disabled until the complete inventory is known.
+5. The all-preview browser should fetch the next preview-list page only when the user approaches the end of the currently loaded window. Small look-ahead/prefetch (for example next 1–2 preview-list pages) is fine; whole-gallery eager enumeration is not.
+6. A known target page should be loadable by its corresponding preview-list page when practical. Do not require loading pages 1..N sequentially just to reach a distant page.
+7. Reader must not require the entire page-link inventory before starting. It should start from currently known links and request the next required preview-list page as the reading cursor approaches or crosses the loaded boundary. If a robust direct page-index mapping is available from E-Hentai preview pagination, use it.
+8. Remove the current 50-preview-page cap as a user-visible functional ceiling. Keep only bounded concurrency/cache/memory windows.
+9. Download may keep a stronger completeness requirement, but full inventory enumeration must start only after the user explicitly starts a download. Download should fetch inventory incrementally with visible progress; its completeness requirement must not block normal preview or Reader.
+10. Keep request/site/session generation guards so late preview loads cannot overwrite a newer gallery/account/site.
+
+Focused regression:
+- 100+ page gallery: Detail first previews available without waiting for all preview pages;
+- 1000+ page gallery: first preview summary available quickly and `查看全部` can open before full inventory;
+- simulated/real pagination beyond preview-list page 50 is reachable and not truncated at 1000 gallery pages;
+- scrolling the preview browser near the loaded tail triggers only the next bounded batch;
+- total page label remains the server total even while only a subset of page links is loaded;
+- Reader start is not gated on whole-gallery inventory.
+
+Required real DEV smoke:
+Use the user's 1323-page gallery or another known 1000+ gallery:
+- Detail opens and first previews appear quickly;
+- no prolonged whole-gallery background enumeration before preview is usable;
+- `查看全部` opens immediately;
+- scrolling progressively loads beyond 1000 and can ultimately reach the real tail (1323 in the recorded case);
+- ordinary reading can start without first loading all 1323 preview links.
+
+Do not solve this by merely raising `MAX_PREVIEW_LIST_PAGES`; that would preserve the wrong eager architecture and only move the freeze point.
+
 ## Other open/blocked findings
 Continue using `BUG_SWEEP_FINDINGS.md` as the registry. Do not erase previous evidence.
-After BS-14 and BS-15 are resolved, resume the remaining defined Runtime Bug Sweep families in `BUG_SWEEP_1_1.md`.
+After BS-14, BS-15 and BS-16 are resolved, resume the remaining defined Runtime Bug Sweep families in `BUG_SWEEP_1_1.md`.
 
 ## Verification policy
 For each fix:
