@@ -3,7 +3,7 @@ import type { GallerySummary } from "./extractors"
 import { parseGalleryRef } from "./pure"
 import { getBaseUrl, getCookieHeader } from "./account"
 import { composeGallerySearchState, createHomeSearchState, createPopularSearchState, createUploaderSearchState, normalizeAdvancedSearch, normalizeExcludedCategoryMask, type AdvancedSearchOptions, type GallerySearchMode, type GallerySearchState, type GallerySearchTag, type QuickFilterKey } from "./tourist"
-import { assertCompletePreviewInventory, loadGalleryDetail, resolveImagePage } from "./ehentai"
+import { assertCompletePreviewInventory, galleryPageCount, loadGalleryDetail, resolveImagePage } from "./ehentai"
 export type HistoryRecordV1={gid:string;token:string;site:"e"|"ex";title:string;thumb?:string;category?:string;uploader?:string;pages?:number;lastPageIndex?:number;viewedAt:number;updatedAt:number}
 type Db={schemaVersion:1;history:HistoryRecordV1[]};export type HistoryStore={read():Promise<string|null>;write(value:string):Promise<void>;readBackup?():Promise<string|null>}
 export type ReaderPreferences={version:2;layout:"single"|"continuous";direction:"ltr"|"rtl";fit:"width"|"screen";preload:number;preferOriginal:boolean;autoPageSeconds:number;downloadConcurrency:number;downloadQuality:"standard"|"original"}
