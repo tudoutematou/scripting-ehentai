@@ -1,6 +1,6 @@
 import { loadFavorites } from "./favorites"
 import { historySummary, loadHistory } from "./libraryStore"
-import { getAccountSessionGeneration, getAccountStatus, getBaseUrl } from "./account"
+import { getAccountSessionGeneration, getAccountStatus, getActiveSite, getBaseUrl } from "./account"
 import { GallerySummary, loadGalleryDetail, searchGalleries } from "./ehentai"
 import { buildGallerySearchUrl, createHomeSearchState, type GalleryCategoryKey, type QuickFilterKey } from "./tourist"
 
@@ -11,7 +11,7 @@ export type EhAction =
   | { type: "favorites.list"; category?: number; query?: string }
   | { type: "history.list"; limit?: number }
 
-type ActionErrorCode = "INVALID_ACTION" | "INVALID_GALLERY_REF" | "GALLERY_REF_EXPIRED" | "REQUEST_FAILED"
+type ActionErrorCode = "INVALID_ACTION" | "INVALID_GALLERY_REF" | "GALLERY_REF_EXPIRED" | "CONTEXT_CHANGED" | "REQUEST_FAILED"
 type ActionStage = "validate" | "gallery-ref" | "core"
 export type EhActionFailure = { ok: false; code: ActionErrorCode; stage: ActionStage; message: string }
 export type GallerySearchItem = { galleryRef: string; title: string; category: string; pages: number; uploader: string }
@@ -54,11 +54,11 @@ function pruneGalleryRefs(now = Date.now()) {
 }
 
 export function isGalleryRefSessionCurrent(entryGeneration:number,currentGeneration=getAccountSessionGeneration()){return entryGeneration===currentGeneration}
-function createGalleryRef(url: string): string {
+function createGalleryRef(url:string,generation=getAccountSessionGeneration()):string {
   pruneGalleryRefs()
   let ref = ""
   do { ref = `gallery_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}` } while (galleryRefs.has(ref))
-  galleryRefs.set(ref, { url, expiresAt: Date.now() + GALLERY_REF_TTL_MS,sessionGeneration:getAccountSessionGeneration() });writeStoredGalleryRefs()
+  galleryRefs.set(ref, { url, expiresAt: Date.now() + GALLERY_REF_TTL_MS,sessionGeneration:generation });writeStoredGalleryRefs()
   return ref
 }
 
@@ -76,29 +76,43 @@ function resolveGalleryRef(galleryRef: unknown): { ok: true; url: string } | EhA
 export function mapGalleryActionItem(item: Pick<GallerySummary, "url" | "title" | "category" | "pages" | "uploader">, createRef: (url: string) => string): GallerySearchItem { return { galleryRef: createRef(item.url), title: item.title, category: item.category, pages: item.pages, uploader: item.uploader } }
 
 /** Typed AI boundary: opaque search references keep gallery URLs and tokens inside this dispatcher. */
-export async function runEhAction(action: EhAction): Promise<EhActionResult> {
-  if (!action || typeof action.type !== "string") return failure("INVALID_ACTION", "validate", "不支持的操作。")
-  try {
-    if (action.type === "account.status") return { ok: true, type: action.type, account: getAccountStatus() }
-    if (action.type === "search") {
-      const query = String(action.query || "").trim()
-      if (!query) return failure("INVALID_ACTION", "validate", "搜索词不能为空。")
-      const state = createHomeSearchState(query, action.category || "all", action.language || "none")
-      const page = await searchGalleries(query, buildGallerySearchUrl(getBaseUrl(), state))
-      return { ok: true, type: action.type, resultCount: page.resultCount, items: page.items.slice(0, 20).map(item => mapGalleryActionItem(item, createGalleryRef)) }
+function actionContextCurrent(context:{site:"e"|"ex";generation:number}){return context.site===getActiveSite()&&context.generation===getAccountSessionGeneration()}
+function contextChanged(){return failure("CONTEXT_CHANGED","core","账号或站点已切换，请重新执行操作。")}
+export async function runEhAction(action:EhAction):Promise<EhActionResult>{
+  if(!action||typeof action.type!=="string")return failure("INVALID_ACTION","validate","不支持的操作。")
+  const context={site:getActiveSite(),generation:getAccountSessionGeneration()}
+  const createRef=(url:string)=>createGalleryRef(url,context.generation)
+  try{
+    if(action.type==="account.status")return{ok:true,type:action.type,account:getAccountStatus()}
+    if(action.type==="search"){
+      const query=String(action.query||"").trim()
+      if(!query)return failure("INVALID_ACTION","validate","搜索词不能为空。")
+      const state=createHomeSearchState(query,action.category||"all",action.language||"none"),page=await searchGalleries(query,buildGallerySearchUrl(getBaseUrl(context.site),state))
+      if(!actionContextCurrent(context))return contextChanged()
+      return{ok:true,type:action.type,resultCount:page.resultCount,items:page.items.slice(0,20).map(item=>mapGalleryActionItem(item,createRef))}
     }
-    if (action.type === "favorites.list") { const category = action.category; const query = String(action.query || "").trim(); if (category != null && (!Number.isInteger(category) || category < 0 || category > 9)) return failure("INVALID_ACTION", "validate", "收藏分类必须为 0 到 9。") ; if (query.length > 200) return failure("INVALID_ACTION", "validate", "搜索词过长。") ; const page = await loadFavorites(category, { query }); return { ok: true, type: action.type, categories: page.categories.map(x => ({ index: x.index, name: x.name, count: x.count })), resultCount: page.resultCount, items: page.items.slice(0, 20).map(item => mapGalleryActionItem(item, createGalleryRef)) }
+    if(action.type==="favorites.list"){
+      const category=action.category,query=String(action.query||"").trim()
+      if(category!=null&&(!Number.isInteger(category)||category<0||category>9))return failure("INVALID_ACTION","validate","收藏分类必须为 0 到 9。")
+      if(query.length>200)return failure("INVALID_ACTION","validate","搜索词过长。")
+      const page=await loadFavorites(category,{query})
+      if(!actionContextCurrent(context))return contextChanged()
+      return{ok:true,type:action.type,categories:page.categories.map(x=>({index:x.index,name:x.name,count:x.count})),resultCount:page.resultCount,items:page.items.slice(0,20).map(item=>mapGalleryActionItem(item,createRef))}
     }
-    if (action.type === "history.list") { const limit = action.limit == null ? 20 : Number(action.limit); if (!Number.isInteger(limit) || limit < 1 || limit > 50) return failure("INVALID_ACTION", "validate", "历史记录数量必须为 1 到 50。") ; return { ok: true, type: action.type, items: (await loadHistory()).slice(0, limit).map(record => mapGalleryActionItem(historySummary(record), createGalleryRef)) }
+    if(action.type==="history.list"){
+      const limit=action.limit==null?20:Number(action.limit)
+      if(!Number.isInteger(limit)||limit<1||limit>50)return failure("INVALID_ACTION","validate","历史记录数量必须为 1 到 50。")
+      if(!actionContextCurrent(context))return contextChanged()
+      return{ok:true,type:action.type,items:(await loadHistory()).slice(0,limit).map(record=>mapGalleryActionItem(historySummary(record),createRef))}
     }
-    if (action.type === "gallery.detail") {
-      const resolved = resolveGalleryRef(action.galleryRef)
-      if (!resolved.ok) return resolved
-      const detail = await loadGalleryDetail(resolved.url)
-      return { ok: true, type: action.type, detail: { title: detail.title, titleJpn: detail.titleJpn, category: detail.category, uploader: detail.uploader, rating: detail.rating, ratingCount: detail.ratingCount, previewPages: detail.previewPages, pageCount: detail.pageLinks.length, tags: detail.tags.map(group => ({ namespace: group.namespace, names: group.tags.map(tag => tag.name) })) } }
+    if(action.type==="gallery.detail"){
+      const resolved=resolveGalleryRef(action.galleryRef)
+      if(!resolved.ok)return resolved
+      if(!actionContextCurrent(context))return contextChanged()
+      const detail=await loadGalleryDetail(resolved.url)
+      if(!actionContextCurrent(context))return contextChanged()
+      return{ok:true,type:action.type,detail:{title:detail.title,titleJpn:detail.titleJpn,category:detail.category,uploader:detail.uploader,rating:detail.rating,ratingCount:detail.ratingCount,previewPages:detail.previewPages,pageCount:detail.pageLinks.length,tags:detail.tags.map(group=>({namespace:group.namespace,names:group.tags.map(tag=>tag.name)}))}}
     }
-    return failure("INVALID_ACTION", "validate", "不支持的操作。")
-  } catch (error) {
-    return failure("REQUEST_FAILED", "core", safeMessage(error))
-  }
+    return failure("INVALID_ACTION","validate","不支持的操作。")
+  }catch(error){return failure("REQUEST_FAILED","core",safeMessage(error))}
 }
