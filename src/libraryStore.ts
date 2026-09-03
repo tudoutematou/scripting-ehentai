@@ -101,7 +101,41 @@ function normalizeDownload(value:any,version:number):OfflineDownload|null{if(!va
 export function parseDownloads(raw:string|null):OfflineDownload[]{if(!raw)return[];const value=JSON.parse(raw),version=Number(value?.schemaVersion);if(![1,2,3,4,5].includes(version)||!Array.isArray(value.items))throw new Error("离线下载数据无法读取；原文件未被覆盖。");const items=value.items.map((item:any)=>normalizeDownload(item,version));if(items.some((item:any)=>!item))throw new Error("离线下载数据无法读取；原文件未被覆盖。");return items as OfflineDownload[]}
 async function readDownloadsUnlocked(s:DownloadStore){try{return parseDownloads(await s.read()).sort((a,b)=>b.updatedAt-a.updatedAt)}catch{throw new Error("离线下载数据无法读取；原文件未被覆盖。")}}
 export async function recoverInterruptedDownloads(s:DownloadStore=downloadStore()){return serialDownload(async()=>{const items=await readDownloadsUnlocked(s);let changed=false;const recovered=items.map(item=>{if(item.status!=="downloading")return item;changed=true;if(item.photosPending.length)return{...item,status:"failed" as const,photoError:"图库保存结果未知；为避免重复保存，请手动确认后重试。",updatedAt:Date.now()};return{...item,status:"paused" as const,updatedAt:Date.now()}});if(changed)await saveDownloads(recovered,s);return recovered})}
-export async function recoverDownloadsOnStartup(s:DownloadStore=downloadStore()){return serialDownload(async()=>{const items=await readDownloadsUnlocked(s),known=new Set(items.map(item=>item.id));let entries:any[]=[];try{entries=await fm.readDirectory(offlineRoot())}catch{}for(const entry of entries){const name=String(entry?.path||entry?.url||entry?.filename||entry?.name||entry).split("/").pop()||"",suffix=".deleting";if(!name.startsWith(".")||!name.endsWith(suffix))continue;const id=name.slice(1,-suffix.length);if(!DOWNLOAD_ID.test(id))continue;const live=`${offlineRoot()}/${id}`,trash=`${offlineRoot()}/${name}`;try{const hasLive=await fm.exists(live),hasTrash=await fm.exists(trash);if(!hasTrash)continue;if(!known.has(id)){await fm.remove(trash);continue}if(!hasLive){await fm.rename(trash,live);continue}const task=items.find(item=>item.id===id);if(!task)continue;for(const page of task.pages){const target=offlinePagePath(id,page.index),source=`${trash}/${String(page.index).padStart(4,"0")}.img`;if(!(await fm.exists(target))&&await fm.exists(source))await fm.rename(source,target)}await fm.remove(trash)}catch(error){console.error("[downloads recovery]",id,error)}}let changed=false;const recovered=items.map(item=>{if(item.status!=="downloading")return item;changed=true;if(item.photosPending.length)return{...item,status:"failed" as const,photoError:"图库保存结果未知；为避免重复保存，请手动确认后重试。",updatedAt:Date.now()};return{...item,status:"paused" as const,updatedAt:Date.now()}});if(changed)await saveDownloads(recovered,s);return recovered})}
+export type DownloadRecoveryFileOps={readDirectory(path:string):Promise<any[]>;exists(path:string):Promise<boolean>;remove(path:string):Promise<void>;rename(from:string,to:string):Promise<void>}
+export async function recoverDeletingDirectories(items:ReadonlyArray<OfflineDownload>,ops:DownloadRecoveryFileOps,root:string){
+  const known=new Set(items.map(item=>item.id));let entries:any[]=[]
+  try{entries=await ops.readDirectory(root)}catch{return}
+  for(const entry of entries){
+    const name=String(entry?.path||entry?.url||entry?.filename||entry?.name||entry).split("/").pop()||"",suffix=".deleting"
+    if(!name.startsWith(".")||!name.endsWith(suffix))continue
+    const id=name.slice(1,-suffix.length)
+    if(!DOWNLOAD_ID.test(id))continue
+    const live=`${root}/${id}`,trash=`${root}/${name}`
+    try{
+      const hasLive=await ops.exists(live),hasTrash=await ops.exists(trash)
+      if(!hasTrash)continue
+      if(!known.has(id)){await ops.remove(trash);continue}
+      if(!hasLive){await ops.rename(trash,live);continue}
+      const task=items.find(item=>item.id===id)
+      if(!task)continue
+      for(const page of task.pages){
+        const target=`${live}/${String(page.index).padStart(4,"0")}.img`,source=`${trash}/${String(page.index).padStart(4,"0")}.img`
+        if(!(await ops.exists(target))&&await ops.exists(source))await ops.rename(source,target)
+      }
+      await ops.remove(trash)
+    }catch(error){console.error("[downloads recovery]",id,error)}
+  }
+}
+export async function recoverDownloadsOnStartup(s:DownloadStore=downloadStore()){
+  return serialDownload(async()=>{
+    const items=await readDownloadsUnlocked(s)
+    await recoverDeletingDirectories(items,{readDirectory:(path:string)=>fm.readDirectory(path),exists:(path:string)=>fm.exists(path),remove:(path:string)=>fm.remove(path),rename:(from:string,to:string)=>fm.rename(from,to)},offlineRoot())
+    let changed=false
+    const recovered=items.map(item=>{if(item.status!=="downloading")return item;changed=true;if(item.photosPending.length)return{...item,status:"failed" as const,photoError:"图库保存结果未知；为避免重复保存，请手动确认后重试。",updatedAt:Date.now()};return{...item,status:"paused" as const,updatedAt:Date.now()}})
+    if(changed)await saveDownloads(recovered,s)
+    return recovered
+  })
+}
 export function loadDownloads(s:DownloadStore=downloadStore()){return serialDownload(()=>readDownloadsUnlocked(s))}
 export function assertDownloadCapacity(items:ReadonlyArray<OfflineDownload>){if(items.length>=MAX_DOWNLOADS)throw new Error(`离线下载最多保留 ${MAX_DOWNLOADS} 项，请删除一个任务后再试。`)}
 async function saveDownloads(items:OfflineDownload[],s:DownloadStore=downloadStore()){await s.write(JSON.stringify({schemaVersion:5,items}));publishDownloads(items)}
