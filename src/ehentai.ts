@@ -5,7 +5,7 @@ import { parseSearchHtml } from "./searchHtml"
 import { parseDetailHtml, parsePreviewPageHtml, parseTorrentListHtml, buildGalleryRatingRequest, parseRatingResponse, parseCommentMutationHtml, parseEditableCommentResponse, parseCommentVoteResponse, parseArchiveOptionsHtml, buildArchiveDownloadRequest, parseArchiveDownloadHtml, type RatingResult, type TorrentItem, type GalleryComment, type CommentVoteResult, type ArchiveOption } from "./detailHtml"
 import { parseImagePageHtml } from "./pageHtml"
 import { reportDiagnostic } from "./githubBridge"
-import { getBaseUrl, getCookieHeader, productionRequestAuth, storeResponseCookies } from "./account"
+import { captureAccountRequestContext, getBaseUrl, getCookieHeader, isAccountRequestContextCurrent, productionRequestAuth, storeResponseCookies, type AccountRequestContext } from "./account"
 
 export type { GalleryPageLink, GallerySummary }
 export type SearchPage = SearchExtractData & { url: string }
@@ -16,6 +16,7 @@ export type ResolvedImagePage = PageExtractData & { pageUrl: string }
 const detailCoreCache = new Map<string, GalleryDetail>()
 const previewPageCache = new Map<string, GalleryPageLink[]>()
 const imagePageCache = new Map<string, Promise<ResolvedImagePage>>()
+function galleryCacheKey(url:string,context:Pick<AccountRequestContext,"site"|"generation">){return `${context.site}|${context.generation}|${url}`}
 export function invalidateGalleryCaches(){detailCoreCache.clear();previewPageCache.clear();imagePageCache.clear()}
 ;(globalThis as any).__ehentaiInvalidateGalleryCaches=invalidateGalleryCaches
 
@@ -28,77 +29,134 @@ function stageError(stage: string, error: unknown): Error { const value = error 
 async function reportSafely(input: Parameters<typeof reportDiagnostic>[0]) { try { await reportDiagnostic(input) } catch {} }
 const HTML_REQUEST_TIMEOUT_MS = 20_000
 
-function requestOptions(url: string): Record<string, any> { const context=productionRequestAuth(url); return { ...(Object.keys(context.headers).length ? { headers: context.headers } : {}), signal: AbortSignal.timeout(HTML_REQUEST_TIMEOUT_MS) } }
-export async function authenticatedFetch(url:string,init:Record<string,any>={}):Promise<Response>{const cookie=getCookieHeader(url),headers={...(init.headers||{}),...(cookie?{Cookie:cookie}:{})},response=await fetch(url,{...init,headers});try{storeResponseCookies(Array.from((response as any).cookies||[]))}catch{}return response}
-export async function fetchHtml(url: string, stagePrefix: string, referer = "", signal?:AbortSignal): Promise<{ html: string; finalUrl: string; response: Response }> {
-  let response: Response; try { const options=requestOptions(url); response = await authenticatedFetch(url, { ...options, ...(signal?{signal}:{}), ...(referer ? { headers: { ...(options.headers || {}), Referer: referer } } : {}) }) } catch (error) { throw stageError(`${stagePrefix}.fetch`, error) }
-  const finalUrl = String(response?.url || url); const status = Number(response?.status || 0); const statusText = String(response?.statusText || "")
-  let html = ""; try { html = await response.text() } catch (error) { throw stageError(`${stagePrefix}.response.text`, error) }
-  if (!response.ok) throw httpError(`E-Hentai 请求失败：HTTP ${status}${statusText ? ` ${statusText}` : ""}`, response, finalUrl)
-  return { html, finalUrl, response }
+function requestOptions(url:string,context:AccountRequestContext=captureAccountRequestContext()):Record<string,any>{const auth=productionRequestAuth(url,context.cookies);return{...(Object.keys(auth.headers).length?{headers:auth.headers}:{})}}
+export async function authenticatedFetch(url:string,init:Record<string,any>={},context:AccountRequestContext=captureAccountRequestContext()):Promise<Response>{const headers={...(init.headers||{}),...productionRequestAuth(url,context.cookies).headers},response=await fetch(url,{...init,headers});try{storeResponseCookies(Array.from((response as any).cookies||[]),undefined,context)}catch{}return response}
+function requestSignal(signal?:AbortSignal){const controller=new AbortController(),timeout=setTimeout(()=>controller.abort(),HTML_REQUEST_TIMEOUT_MS),abort=()=>controller.abort();signal?.addEventListener?.("abort",abort,{once:true});if(signal?.aborted)controller.abort();return{signal:controller.signal,dispose:()=>{clearTimeout(timeout);signal?.removeEventListener?.("abort",abort)}}}
+export async function fetchHtml(url:string,stagePrefix:string,referer="",signal?:AbortSignal,context:AccountRequestContext=captureAccountRequestContext()):Promise<{html:string;finalUrl:string;response:Response}>{
+  const request=requestSignal(signal)
+  try{
+    const options=requestOptions(url,context),response=await authenticatedFetch(url,{...options,signal:request.signal,...(referer?{headers:{...(options.headers||{}),Referer:referer}}:{})},context),finalUrl=String(response?.url||url),status=Number(response?.status||0),statusText=String(response?.statusText||"")
+    let html="";try{html=await response.text()}catch(error){throw stageError(`${stagePrefix}.response.text`,error)}
+    if(!response.ok)throw httpError(`E-Hentai 请求失败：HTTP ${status}${statusText?` ${statusText}`:""}`,response,finalUrl)
+    return{html,finalUrl,response}
+  }catch(error){throw stageError(`${stagePrefix}.fetch`,error)}finally{request.dispose()}
 }
 
-export async function postForm(url: string, fields: Record<string, string>, stagePrefix: string): Promise<{ html: string; finalUrl: string; response: Response }> {
-  const body = new URLSearchParams(fields).toString()
-  let response: Response
-  try { response = await authenticatedFetch(url, { ...requestOptions(url), method: "POST", headers: { ...(requestOptions(url).headers || {}), "Content-Type": "application/x-www-form-urlencoded", Origin: new URL(url).origin, Referer: url }, body }) } catch (error) { throw stageError(`${stagePrefix}.fetch`, error) }
-  const finalUrl = String(response?.url || url); const status = Number(response?.status || 0); const statusText = String(response?.statusText || "")
-  let html = ""; try { html = await response.text() } catch (error) { throw stageError(`${stagePrefix}.response.text`, error) }
-  if (!response.ok) throw httpError(`E-Hentai 请求失败：HTTP ${status}${statusText ? ` ${statusText}` : ""}`, response, finalUrl)
-  return { html, finalUrl, response }
+export async function postForm(url:string,fields:Record<string,string>,stagePrefix:string,context:AccountRequestContext=captureAccountRequestContext()):Promise<{html:string;finalUrl:string;response:Response}>{
+  const body=new URLSearchParams(fields).toString()
+  let response:Response
+  try{const options=requestOptions(url,context);response=await authenticatedFetch(url,{...options,signal:AbortSignal.timeout(HTML_REQUEST_TIMEOUT_MS),method:"POST",headers:{...(options.headers||{}),"Content-Type":"application/x-www-form-urlencoded",Origin:new URL(url).origin,Referer:url},body},context)}catch(error){throw stageError(`${stagePrefix}.fetch`,error)}
+  const finalUrl=String(response?.url||url),status=Number(response?.status||0),statusText=String(response?.statusText||"")
+  let html="";try{html=await response.text()}catch(error){throw stageError(`${stagePrefix}.response.text`,error)}
+  if(!response.ok)throw httpError(`E-Hentai 请求失败：HTTP ${status}${statusText?` ${statusText}`:""}`,response,finalUrl)
+  return{html,finalUrl,response}
 }
 
 export function imageSearchEndpoint(baseUrl=getBaseUrl()){const host=new URL(baseUrl).hostname;return host==="exhentai.org"?"https://upld.exhentai.org/upld/image_lookup.php":"https://upld.e-hentai.org/image_lookup.php"}
 export type ImageSearchSource = Data | string
 export function imageSearchData(source:ImageSearchSource):Data|null{return typeof source==="string"?Data.fromFile(source):source}
 export async function imageSearch(source:ImageSearchSource,options:{similar?:boolean;coversOnly?:boolean;showExpunged?:boolean}={}):Promise<SearchPage>{const path=typeof source==="string"?source:"",data=imageSearchData(source);if(!data)throw new Error("无法读取要搜索的图片。");const endpoint=imageSearchEndpoint(),form=new FormData(),fileName=path.split("/").pop()||"search.jpg",contentType=path?String((globalThis as any).FileManager?.mimeType?.(path)||"image/jpeg"):"image/jpeg";form.append("sfile",data,contentType,fileName);if(options.similar)form.append("fs_similar","on");if(options.coversOnly)form.append("fs_covers","on");if(options.showExpunged)form.append("fs_exp","on");form.append("f_sfile","File Search");const cookie=getCookieHeader(endpoint);let response:Response;try{response=await authenticatedFetch(endpoint,{method:"POST",headers:{Referer:`${getBaseUrl().replace(/\/$/,"")}/`,Origin:new URL(getBaseUrl()).origin,...(cookie?{Cookie:cookie}:{})},body:form,signal:AbortSignal.timeout(HTML_REQUEST_TIMEOUT_MS)})}catch(error){throw stageError("image-search.fetch",error)}const html=await response.text(),finalUrl=String(response.url||endpoint);if(!response.ok)throw httpError(`图片搜索失败：HTTP ${response.status}`,response,finalUrl);const page=parseSearchHtml(html,finalUrl);if(page.error)throw new Error(page.error);return{...page,url:finalUrl}}
-export async function searchGalleries(keyword: string, directUrl?: string): Promise<SearchPage> {
-  const url = directUrl || buildSearchUrl(keyword, getBaseUrl()); const { html, finalUrl, response } = await fetchHtml(url, "search")
+export async function searchGalleries(keyword:string,directUrl?:string,signal?:AbortSignal):Promise<SearchPage>{
+  const context=captureAccountRequestContext(),url=directUrl||buildSearchUrl(keyword,getBaseUrl(context.site)),{html,finalUrl,response}=await fetchHtml(url,"search","",signal,context)
+  if(!isAccountRequestContextCurrent(context))throw new Error("账号或站点已切换，搜索结果已失效。")
   let page: SearchExtractData; try { page = parseSearchHtml(html, finalUrl) } catch (error) { throw stageError("search.parseSearchHtml", error) }
   if (page.error) { const error = httpError(page.error, response, finalUrl); (error as any).responseLength = html.length; throw error }
   return { ...page, url: finalUrl }
 }
 
-async function fetchPreviewPage(url: string, previewPageIndex: number, signal?:AbortSignal): Promise<GalleryPageLink[]> {
-  const cached = previewPageCache.get(url); if (cached) return cached
-  const { html, finalUrl } = await fetchHtml(url, `preview[${previewPageIndex}]`, "", signal)
-  try { const links = normalizePageLinks(parsePreviewPageHtml(html, finalUrl), previewPageIndex); previewPageCache.set(url, links); return links } catch (error) { throw stageError(`preview[${previewPageIndex}].parse`, error) }
+async function fetchPreviewPage(url:string,previewPageIndex:number,signal?:AbortSignal,context:AccountRequestContext=captureAccountRequestContext()):Promise<GalleryPageLink[]>{
+  const key=galleryCacheKey(url,context),cached=previewPageCache.get(key)
+  if(cached)return cached
+  const {html,finalUrl}=await fetchHtml(url,`preview[${previewPageIndex}]`,"",signal,context)
+  try{
+    const links=normalizePageLinks(parsePreviewPageHtml(html,finalUrl),previewPageIndex)
+    if(isAccountRequestContextCurrent(context)){
+      previewPageCache.set(key,links)
+      previewPageCache.set(galleryCacheKey(finalUrl,context),links)
+    }
+    return links
+  }catch(error){throw stageError(`preview[${previewPageIndex}].parse`,error)}
 }
 
-export async function loadGalleryDetailCore(url: string): Promise<GalleryDetail> {
-  const cached = detailCoreCache.get(url); if (cached) return cached
-  const started = Date.now()
-  try {
-    const { html, finalUrl, response } = await fetchHtml(url, "detail-core")
-    let parsed: ReturnType<typeof parseDetailHtml>; try { parsed = parseDetailHtml(html, finalUrl) } catch (error) { throw stageError("detail.parseDetailHtml", error) }
-    if (parsed.error) { const error = httpError(parsed.error, response, finalUrl); (error as any).responseLength = html.length; throw error }
-    const detail: GalleryDetail = { ...parsed, pageLinks: dedupeAndSortPageLinks(normalizePageLinks(parsed.pageLinks || [], 0)), sourceUrl: finalUrl, loadedPreviewPages: [0], truncatedPreviewPages: false, failedPreviewPages: [] }
-    detailCoreCache.set(url, detail); detailCoreCache.set(finalUrl, detail)
-    await reportSafely({ stage: "gallery-detail-core", ok: true, request: { url: finalUrl, status: Number(response?.status || 0), statusText: String(response?.statusText || "") }, notes: `coreMs=${Date.now() - started}; previewPages=${detail.previewPages}; loadedImages=${detail.pageLinks.length}` })
+export async function loadGalleryDetailCore(url:string,context:AccountRequestContext=captureAccountRequestContext()):Promise<GalleryDetail>{
+  const key=galleryCacheKey(url,context),cached=detailCoreCache.get(key)
+  if(cached)return cached
+  const started=Date.now()
+  try{
+    const {html,finalUrl,response}=await fetchHtml(url,"detail-core","",undefined,context)
+    let parsed:ReturnType<typeof parseDetailHtml>
+    try{parsed=parseDetailHtml(html,finalUrl)}catch(error){throw stageError("detail.parseDetailHtml",error)}
+    if(parsed.error){const error=httpError(parsed.error,response,finalUrl);(error as any).responseLength=html.length;throw error}
+    const detail:GalleryDetail={...parsed,pageLinks:dedupeAndSortPageLinks(normalizePageLinks(parsed.pageLinks||[],0)),sourceUrl:finalUrl,loadedPreviewPages:[0],truncatedPreviewPages:false,failedPreviewPages:[]}
+    if(isAccountRequestContextCurrent(context)){
+      detailCoreCache.set(key,detail)
+      detailCoreCache.set(galleryCacheKey(finalUrl,context),detail)
+    }
+    await reportSafely({stage:"gallery-detail-core",ok:true,request:{url:finalUrl,status:Number(response?.status||0),statusText:String(response?.statusText||"")},notes:`coreMs=${Date.now()-started}; previewPages=${detail.previewPages}; loadedImages=${detail.pageLinks.length}`})
     return detail
-  } catch (error) { const value = error as any; await reportSafely({ stage: "gallery-detail-core", ok: false, error, request: { url: String(value?.url || url), status: Number(value?.status || 0), statusText: String(value?.statusText || "") } }); throw error }
+  }catch(error){
+    const value=error as any
+    await reportSafely({stage:"gallery-detail-core",ok:false,error,request:{url:String(value?.url||url),status:Number(value?.status||0),statusText:String(value?.statusText||"")}})
+    throw error
+  }
 }
 
 export function galleryPageCount(detail: Pick<GalleryDetail, "metadata" | "pageLinks">): number { const length = Object.entries(detail.metadata || {}).find(([key]) => key.trim().toLowerCase() === "length")?.[1] || ""; return Number(String(length).replace(/[^\d]/g, "")) || Math.max(0, ...detail.pageLinks.map(page => page.index)) }
 export function nextPreviewPageIndex(detail: Pick<GalleryDetail, "previewPages" | "loadedPreviewPages">): number | null { const loaded = new Set(detail.loadedPreviewPages || []); for (let page = 0; page < Math.max(1, Number(detail.previewPages || 1)); page += 1) if (!loaded.has(page)) return page; return null }
-export async function loadPreviewPageBatch(detail: GalleryDetail, startPage?: number, count = 2, signal?:AbortSignal): Promise<PreviewLoadResult> {
+export async function loadPreviewPageBatch(detail:GalleryDetail,startPage?:number,count=2,signal?:AbortSignal,context:AccountRequestContext=captureAccountRequestContext()):Promise<PreviewLoadResult>{
   const started = Date.now(), previewPages = Math.max(1, Number(detail.previewPages || 1)); startPage ??= nextPreviewPageIndex(detail); if (startPage == null) return { pageLinks: detail.pageLinks, loadedPreviewPages: detail.loadedPreviewPages, failedPreviewPages: detail.failedPreviewPages, elapsedMs: 0 }
   const loaded = new Set(detail.loadedPreviewPages || [0]), failed = new Set(detail.failedPreviewPages || []), results = new Map<number, GalleryPageLink[]>(); const pending = Array.from({ length: Math.max(0, Math.min(count, previewPages - startPage)) }, (_, offset) => startPage + offset)
-  const worker = async () => { while (pending.length) { const page = pending.shift(); if (page == null) return; try { results.set(page, await fetchPreviewPage(withPreviewPage(detail.sourceUrl, page), page, signal)); loaded.add(page); failed.delete(page) } catch { failed.add(page) } } }
+  const worker = async () => { while (pending.length) { const page = pending.shift(); if (page == null) return; try { results.set(page, await fetchPreviewPage(withPreviewPage(detail.sourceUrl,page),page,signal,context)); loaded.add(page); failed.delete(page) } catch { failed.add(page) } } }
   await Promise.all(Array.from({ length: Math.min(2, pending.length) }, worker)); const result = { pageLinks: dedupeAndSortPageLinks([...detail.pageLinks, ...[...results.values()].flat()]), loadedPreviewPages: [...loaded].sort((a,b) => a-b), failedPreviewPages: [...failed].sort((a,b) => a-b), elapsedMs: Date.now() - started }
   await reportSafely({ stage: "gallery-detail-preview-batch", ok: result.failedPreviewPages.length === 0, request: { url: detail.sourceUrl, status: 0, statusText: "" }, notes: `previewMs=${result.elapsedMs}; loadedPreviewPages=${result.loadedPreviewPages.length}/${previewPages}; loadedImages=${result.pageLinks.length}` }); return result
 }
-export async function loadPreviewPageRange(detail: GalleryDetail, firstPage: number, lastPage: number, signal?:AbortSignal): Promise<PreviewLoadResult> { const total = Math.max(1, Number(detail.previewPages || 1)), first = Math.floor(firstPage), last = Math.floor(lastPage); if (!Number.isInteger(first) || !Number.isInteger(last) || first < 0 || last < first || last >= total) throw new Error("预览分页范围无效。"); return loadPreviewPageBatch(detail, first, last - first + 1, signal) }
-export async function loadRemainingPreviewPages(detail: GalleryDetail, onProgress?: (links: GalleryPageLink[], failed: number[]) => void): Promise<PreviewLoadResult> { const started = Date.now(); let current = detail; for (let page = 1; page < Math.max(1, Number(detail.previewPages || 1)); page += 2) { current = applyPreviewLoadResult(current, await loadPreviewPageBatch(current, page, 2)); onProgress?.(current.pageLinks, current.failedPreviewPages) } return { pageLinks: current.pageLinks, loadedPreviewPages: current.loadedPreviewPages, failedPreviewPages: current.failedPreviewPages, elapsedMs: Date.now() - started } }
+export async function loadPreviewPageRange(detail:GalleryDetail,firstPage:number,lastPage:number,signal?:AbortSignal,context:AccountRequestContext=captureAccountRequestContext()):Promise<PreviewLoadResult>{const total=Math.max(1,Number(detail.previewPages||1)),first=Math.floor(firstPage),last=Math.floor(lastPage);if(!Number.isInteger(first)||!Number.isInteger(last)||first<0||last<first||last>=total)throw new Error("预览分页范围无效。");return loadPreviewPageBatch(detail,first,last-first+1,signal,context)}
+export async function loadRemainingPreviewPages(detail:GalleryDetail,onProgress?:(links:GalleryPageLink[],failed:number[])=>void):Promise<PreviewLoadResult>{
+  const context=captureAccountRequestContext(),started=Date.now();let current=detail
+  for(let page=1;page<Math.max(1,Number(detail.previewPages||1));page+=2){
+    current=applyPreviewLoadResult(current,await loadPreviewPageBatch(current,page,2,undefined,context))
+    if(!isAccountRequestContextCurrent(context))throw new Error("账号或站点已切换，预览库存已失效。")
+    onProgress?.(current.pageLinks,current.failedPreviewPages)
+  }
+  return{pageLinks:current.pageLinks,loadedPreviewPages:current.loadedPreviewPages,failedPreviewPages:current.failedPreviewPages,elapsedMs:Date.now()-started}
+}
 export function applyPreviewLoadResult(core: GalleryDetail, previews: PreviewLoadResult): GalleryDetail { return { ...core, pageLinks: previews.pageLinks, loadedPreviewPages: previews.loadedPreviewPages, failedPreviewPages: previews.failedPreviewPages } }
 export function hasCompletePreviewInventory(detail: Pick<GalleryDetail, "metadata" | "pageLinks" | "previewPages" | "loadedPreviewPages" | "failedPreviewPages">): boolean { const total=galleryPageCount(detail),indexes=new Set(detail.pageLinks.map(page=>page.index)); return total>0 && detail.pageLinks.length===total && indexes.size===total && Array.from({length:total},(_,index)=>index+1).every(index=>indexes.has(index)) && (detail.loadedPreviewPages || []).length >= Math.max(1, Number(detail.previewPages || 1)) && detail.failedPreviewPages.length === 0 }
 export function assertCompletePreviewInventory(detail: Pick<GalleryDetail, "metadata" | "pageLinks" | "previewPages" | "loadedPreviewPages" | "failedPreviewPages">): void { if (!hasCompletePreviewInventory(detail)) throw new Error("页面库存不完整，请重试预览加载后再下载。") }
-export async function loadGalleryDetail(url: string, onProgress?: (loadedImages: number, totalImages: number) => void): Promise<GalleryDetail> { const core = await loadGalleryDetailCore(url); let current = core; onProgress?.(current.pageLinks.length, galleryPageCount(current)); for (let page = 1; page < Math.max(1, Number(core.previewPages || 1)); page += 2) { current = applyPreviewLoadResult(current, await loadPreviewPageBatch(current, page, 2)); onProgress?.(current.pageLinks.length, galleryPageCount(current)) } return current }
+export async function loadGalleryDetail(url:string,onProgress?:(loadedImages:number,totalImages:number)=>void):Promise<GalleryDetail>{
+  const context=captureAccountRequestContext(),core=await loadGalleryDetailCore(url,context);let current=core
+  onProgress?.(current.pageLinks.length,galleryPageCount(current))
+  for(let page=1;page<Math.max(1,Number(core.previewPages||1));page+=2){
+    current=applyPreviewLoadResult(current,await loadPreviewPageBatch(current,page,2,undefined,context))
+    if(!isAccountRequestContextCurrent(context))throw new Error("账号或站点已切换，详情已失效。")
+    onProgress?.(current.pageLinks.length,galleryPageCount(current))
+  }
+  return current
+}
 
-async function resolveImagePageFresh(pageUrl:string):Promise<ResolvedImagePage>{try { const { html, finalUrl, response } = await fetchHtml(pageUrl, "image-page"); let parsed: PageExtractData; try { parsed = parseImagePageHtml(html, finalUrl) } catch (error) { throw stageError("image-page.parse", error) }; if (parsed.error) throw httpError(parsed.error, response, finalUrl); const resolved = { ...parsed, pageUrl: finalUrl }; await reportSafely({ stage: "gallery-image-page", ok: true, request: { url: finalUrl, status: Number(response?.status || 0), statusText: String(response?.statusText || "") }, notes: `imageUrl=${resolved.imageUrl ? "yes" : "no"}; originalUrl=${resolved.originalUrl ? "yes" : "no"}` }); return resolved } catch (error) { const value = error as any; await reportSafely({ stage: "gallery-image-page", ok: false, error, request: { url: String(value?.url || pageUrl), status: Number(value?.status || 0), statusText: String(value?.statusText || "") } }); throw error }}
-export function resolveImagePage(pageUrl: string, refresh=false): Promise<ResolvedImagePage> {
-  if(refresh)imagePageCache.delete(pageUrl);const existing=imagePageCache.get(pageUrl);if(existing)return existing
-  const task=resolveImagePageFresh(pageUrl).catch(error=>{imagePageCache.delete(pageUrl);throw error});imagePageCache.set(pageUrl,task);return task
+async function resolveImagePageFresh(pageUrl:string,context:AccountRequestContext):Promise<ResolvedImagePage>{
+  try{
+    const {html,finalUrl,response}=await fetchHtml(pageUrl,"image-page","",undefined,context)
+    let parsed:PageExtractData
+    try{parsed=parseImagePageHtml(html,finalUrl)}catch(error){throw stageError("image-page.parse",error)}
+    if(parsed.error)throw httpError(parsed.error,response,finalUrl)
+    const resolved={...parsed,pageUrl:finalUrl}
+    await reportSafely({stage:"gallery-image-page",ok:true,request:{url:finalUrl,status:Number(response?.status||0),statusText:String(response?.statusText||"")},notes:`imageUrl=${resolved.imageUrl?"yes":"no"}; originalUrl=${resolved.originalUrl?"yes":"no"}`})
+    return resolved
+  }catch(error){
+    const value=error as any
+    await reportSafely({stage:"gallery-image-page",ok:false,error,request:{url:String(value?.url||pageUrl),status:Number(value?.status||0),statusText:String(value?.statusText||"")}})
+    throw error
+  }
+}
+export function resolveImagePage(pageUrl:string,refresh=false):Promise<ResolvedImagePage>{
+  const context=captureAccountRequestContext(),key=galleryCacheKey(pageUrl,context)
+  if(refresh)imagePageCache.delete(key)
+  const existing=imagePageCache.get(key)
+  if(existing)return existing
+  const task=resolveImagePageFresh(pageUrl,context).catch(error=>{if(imagePageCache.get(key)===task)imagePageCache.delete(key);throw error})
+  imagePageCache.set(key,task)
+  return task
 }
 
 export async function loadTorrentList(torrentUrl:string,sourceUrl:string):Promise<TorrentItem[]>{let target:URL;let source:URL;try{target=new URL(torrentUrl);source=new URL(sourceUrl)}catch{throw new Error("种子入口无效。")}if(target.protocol!=="https:"||target.hostname!==source.hostname||!/(?:^|\.)e-hentai\.org$|(?:^|\.)exhentai\.org$/i.test(target.hostname))throw new Error("种子入口无效。");const result=await fetchHtml(target.toString(),"torrent-list",source.toString());return parseTorrentListHtml(result.html,result.finalUrl)}
