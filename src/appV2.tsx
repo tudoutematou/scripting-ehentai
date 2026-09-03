@@ -1,7 +1,7 @@
 import { Button, EnvironmentValuesReader, Label, List, Navigation, NavigationLink, NavigationSplitView, NavigationStack, Section, TabView, Text, useEffect, useState } from "scripting"
 import { AccountScene, HomeScene } from "./GalleryFlow"
 import { LibraryScene, SettingsScene } from "./LibraryScene"
-import { recoverInterruptedDownloads } from "./libraryStore"
+import { recoverDownloadsOnStartup } from "./libraryStore"
 import { getAccountSessionGeneration } from "./account"
 
 type RootDestination="discover"|"library"|"settings"
@@ -17,4 +17,4 @@ function RegularShell({selected,onSelectedChanged}:{selected:RootDestination;onS
 function CompactShell({selected,onSelectedChanged,generation}:{selected:RootDestination;onSelectedChanged:(value:RootDestination)=>void;generation:number}){const tabIndex=ROOTS.findIndex(item=>item.key===selected);return <TabView tabIndex={Math.max(0,tabIndex)} onTabIndexChanged={index=>{const next=ROOTS[index];if(next)onSelectedChanged(next.key)}}><NavigationStack tabItem={<Label title="发现" systemImage="safari"/>} tag={0}><HomeScene/></NavigationStack><NavigationStack tabItem={<Label title="书库" systemImage="books.vertical"/>} tag={1}><LibraryScene sessionGeneration={generation}/></NavigationStack><NavigationStack tabItem={<Label title="设置" systemImage="gearshape"/>} tag={2}><SettingsRoot/></NavigationStack></TabView>}
 function ResponsiveShell(){const[generation,setGeneration]=useState(0),[selected,setSelected]=useState<RootDestination>("discover");useEffect(()=>{const previous=(globalThis as any).__ehAccountContextChanged;(globalThis as any).__ehAccountContextChanged=(value:number)=>{setGeneration(Number(value)||Date.now())};return()=>{(globalThis as any).__ehAccountContextChanged=previous}},[]);return <EnvironmentValuesReader key={generation} keys={["horizontalSizeClass"]}>{environment=>environment.horizontalSizeClass==="compact"?<CompactShell selected={selected} onSelectedChanged={setSelected} generation={generation}/>:<RegularShell selected={selected} onSelectedChanged={setSelected}/>}</EnvironmentValuesReader>}
 
-export async function runAppV2(){try{await recoverInterruptedDownloads()}catch(error){console.error(error)}await Navigation.present({element:<ResponsiveShell/>})}
+export async function runAppV2(){try{await recoverDownloadsOnStartup()}catch(error){console.error(error)}await Navigation.present({element:<ResponsiveShell/>})}
