@@ -1,4 +1,8 @@
-// Adapted from Zerolost/SEhViewer under the MIT License.n// Copyright (c) 2024 Gandum2077 (JSEhViewer)n// Copyright (c) 2026 Zerolost (SEhViewer modifications)n// Full license: https://github.com/Zerolost/SEhViewer/blob/main/LICENSEn// ==UserScript==
+// Adapted from Zerolost/SEhViewer under the MIT License.
+// Copyright (c) 2024 Gandum2077 (JSEhViewer)
+// Copyright (c) 2026 Zerolost (SEhViewer modifications)
+// Full license: https://github.com/Zerolost/SEhViewer/blob/main/LICENSE
+// ==UserScript==
 // @name E-Hentai 浏览器 Cookie 助手
 // @namespace scripting-ehentai
 // @description 在 E-Hentai / ExHentai 页面一键获取登录 Cookie，写入 Scripting 存储供 E-Hentai 浏览器导入；自动识别登录状态
