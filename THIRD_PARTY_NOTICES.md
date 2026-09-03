@@ -12,6 +12,18 @@
 
 该文件保留来源和版权说明。其余 `scripting-ehentai` 代码不复制 EhViewer 的 Android 架构；项目与 EhViewer 没有隶属或合作关系。
 
+## EhTagTranslation 运行时数据
+
+`src/tagTranslation.ts` 是独立编写的 TypeScript 读取、校验、缓存和建议索引实现；它不包含或复制 `xiaojieonly/EhTagTranslation` 的 Python 生成器源码。
+
+该模块在用户启用标签翻译时，会从下列公开上游地址按需下载中文标签翻译数据并仅在本地缓存：
+
+- 数据分发仓库：<https://github.com/xiaojieonly/EhTagTranslation>
+- 数据原始来源：<https://github.com/EhTagTranslation/Database>
+- 数据许可证：<https://creativecommons.org/licenses/by-nc-sa/3.0/>
+
+上游 README 明确说明该 `tag-translations-zh-rCN` 数据修改自 `EhTagTranslation/Database`，适用 **CC BY-NC-SA 3.0**；它不是 Apache-2.0 或本项目 MIT License 的一部分。本仓库未提交、打包或再分发该数据库。任何未来将该数据纳入源码包、发行附件或内置资源的变更，必须先按 CC BY-NC-SA 3.0 单独履行署名、非商业和相同方式共享要求，并更新本 Notice。
+
 ### 上游 MIT License
 
 ```text
@@ -45,4 +57,4 @@ Scripting、E-Hentai、ExHentai、EhViewer 及其相关名称、商标和服务�
 
 ## 本项目许可证
 
-`scripting-ehentai` 自有代码以仓库根目录的 [MIT License](LICENSE) 发布。若未来引入新的第三方代码、素材或依赖，应在发布前更新本文件并保留其要求的许可证文本与版权声明。
+`scripting-ehentai` 自有代码及本 Notice 所列 MIT 许可适配代码以仓库根目录的 [MIT License](LICENSE) 发布。第三方运行时数据仍按其单独许可证提供；MIT License 不会重新授权该数据。若未来引入新的第三方代码、素材或依赖，应在发布前更新本文件并保留其要求的许可证文本与版权声明。
