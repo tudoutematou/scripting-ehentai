@@ -1,23 +1,107 @@
-# CURRENT_TASK — 1.0 Reference Alignment Pass
+# CURRENT_TASK — Cloud Favorites Management / UConfig Phase 1
 
-Branch: `release/1.0`  
-Starting immutable head: `ad91b2e2232ef51f2e40172e1184dfe9c051cd72`  
-PR #29 remains Draft; do not merge.
+Branch: `feat/1.1-gallery-interaction`
+Parity reference: `EHVIEWER_PARITY.md`
 
-## Evidence and acceptance
+## Goal
+Add native management for E-Hentai cloud favorite categories now that the Runtime Bug Sweep is stable enough for normal use.
 
-- 用户已提供真实 iPad 运行证据；A-30 不再是 evidence-deferred，现有 Detail 的 `maxWidth: 760`、metadata 纵向布局与 adaptive 标签网格必须保留。
-- 实现后必须从最终 immutable `release/1.0` head 重新 bootstrap DEV；除 `script.json` 的 Scripting 自动投影字段外，逐文件源码必须一致。
-- Account/Settings 必须显示 `1.0.0-rc · <short SHA>` build marker 后才允许实机验收。
+Do not merge `main` automatically.
+Do not reopen unrelated bug-sweep work unless a regression is directly caused by this task.
 
-## Allowed scope
+## Required scope
 
-- 以 Zerolost/SEhViewer 为只读参考，简化 Safari Cookie 获取与改善视觉层级。
-- Cookie 流程：Safari 显式获取 → App 导入草稿 → 保存并验证 → 现有 sanitize / Keychain / session invalidation。
-- 可新增最小 `GlassUI.tsx`，仅含真正跨页面复用的视觉 primitive。
+### 1. Favorite category rename
+Add a native `收藏分类管理` entry under Library/Favorites management.
 
-## Frozen scope
+Load the authoritative current 10 cloud favorite categories from the active logged-in site/account.
+Show each category with:
+- index 0–9;
+- current server name;
+- current item count when available.
 
-- 不替换或移植 `ehentai` 网络层、parser、`libraryStore`、下载核心、Reader、GitHub sync、Config 或 TabView 架构。
-- 不覆盖稳定 `E-Hentai 浏览器`，不 merge、不更新 `main`、不 tag/release、不 rewrite history。
-- 若直接采用 substantial SEhViewer source，加入 MIT attribution：Copyright (c) 2024 Gandum2077；Copyright (c) 2026 Zerolost。
+Allow the user to edit the display name of each category.
+
+Rules:
+- changes must be submitted to E-Hentai server-side UConfig/My Settings, not stored as a local-only alias;
+- never silently replace server names with `Favorites 0..9` because parsing failed;
+- do not write anything until the user explicitly saves;
+- after save, re-fetch authoritative server state and only report success if returned names match the requested values;
+- validation errors/server rejection must keep the old truthful state;
+- no Cookie/raw HTML/private URL logging.
+
+### 2. Default favorite category
+If current server UConfig exposes a clear default-favorite-category field and EhViewer behavior is unambiguous, add a native picker in the same management scene.
+
+Requirements:
+- show current server value;
+- submit through the same UConfig mutation path;
+- verify by re-fetching after save.
+
+If protocol/field semantics are unclear, implement rename first and leave default-category as a documented follow-up instead of guessing.
+
+### 3. Favorite category ordering
+Inspect current EhViewer/default server behavior first.
+Only implement category ordering if the server actually supports persistent ordering independently of category index and the behavior is clearly reproducible.
+Do not fake reordering locally while server categories remain fixed 0–9.
+
+### 4. UI behavior
+Use the current app visual language:
+- one compact management card/list for the 10 categories;
+- editable text fields or a simple edit sheet;
+- one explicit `保存` action;
+- disabled/busy state while submitting;
+- concise success/error notice;
+- on iPhone use a single-column readable list;
+- on iPad keep it compact, not a huge settings form.
+
+After successful save:
+- Library → Favorites category chips/names refresh immediately;
+- Gallery Detail favorite chooser uses the new names immediately;
+- no app restart required.
+
+### 5. Shared state / cache invalidation
+Reuse the existing favorites/account/network layer.
+Do not create a second local source of truth for category names.
+
+After a successful server mutation:
+- invalidate/reload any cached favorites category metadata;
+- refresh visible Library/Favorites state;
+- refresh any Detail favorite chooser/category label that is already mounted when technically safe;
+- respect account/session/site generation guards so late responses from another account/site cannot overwrite current state.
+
+### 6. Verification
+Focused deterministic checks:
+- parse current UConfig favorite category names;
+- build a valid rename submission without dropping unrelated required UConfig fields;
+- reject malformed/empty invalid submissions according to actual server behavior;
+- post-save verification detects mismatch;
+- no local fallback overwrites verified server names.
+
+Required real DEV runtime smoke with the current real account:
+1. open `收藏分类管理`;
+2. read current 10 server names;
+3. rename one currently-default category (for example a `Favorites N` slot) to a temporary harmless test name;
+4. submit and verify server returns the new name;
+5. confirm Library Favorites and Gallery Detail chooser display the new name;
+6. rename it back to its original value and verify again, unless the user intentionally wants to keep the new name.
+
+Do not modify the user's already-custom category names merely for testing.
+Do not perform broad destructive batch changes.
+
+## Preserve
+- current cloud Favorites browsing/search/paging;
+- add/change/remove favorite for individual galleries;
+- favorite notes;
+- account/session separation;
+- E/Ex site switching;
+- AI recommendation/search;
+- Reader/preview/download behavior;
+- navigation fixes from the Runtime Bug Sweep.
+
+## Handoff
+Report only:
+- what was implemented;
+- commit SHA;
+- exact real DEV rename/verify/restore runtime result;
+- whether default category and ordering were implemented or deferred, with one-line reason.

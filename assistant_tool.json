@@ -1,13 +1,17 @@
 {
-  "displayName": "搜索 E-Hentai 画廊",
-  "id": "ehentai_gallery_search",
-  "description": "Searches E-Hentai or ExHentai galleries and returns opaque gallery references for follow-up details.",
-  "icon": "magnifyingglass",
+  "displayName": "E-Hentai 浏览器",
+  "id": "ehentai_browser",
+  "description": "Safely checks account status, searches E-Hentai or ExHentai, inspects opaque gallery references, and reads Cloud Favorites or local history without exposing private URLs or credentials.",
+  "icon": "books.vertical.fill",
   "color": "systemIndigo",
   "parameters": [
-    { "name": "query", "type": "string", "description": "Search keywords.", "required": true },
-    { "name": "category", "type": "string", "description": "Optional gallery category key.", "required": false },
-    { "name": "language", "type": "string", "description": "Optional language filter key.", "required": false }
+    { "name": "action", "type": "string", "description": "Required action enum: account.status, search, gallery.detail, favorites.list, history.list.", "required": true },
+    { "name": "query", "type": "string", "description": "Search text for search or favorites.list.", "required": false },
+    { "name": "category", "type": "string", "description": "Optional gallery category key for search.", "required": false },
+    { "name": "language", "type": "string", "description": "Optional language key for search.", "required": false },
+    { "name": "galleryRef", "type": "string", "description": "Opaque short-lived reference returned by search/favorites/history.", "required": false },
+    { "name": "favoritesCategory", "type": "number", "description": "Optional Cloud Favorite category 0-9.", "required": false },
+    { "name": "limit", "type": "number", "description": "Optional history limit 1-50.", "required": false }
   ],
   "requireApproval": true,
   "autoApprove": false,

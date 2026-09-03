@@ -1,3 +1,9 @@
+# ARCHIVED — HISTORICAL PROGRESS ONLY
+
+This file records old 1.0 work. It is **not a current task, checklist, or verification requirement**. Normal Agent sessions must not read or execute it. Use it only when the user explicitly asks about historical 1.0 decisions or debugging history.
+
+The active development contract lives in `AGENTS.md` and `CURRENT_TASK.md`.
+
 # DEV_PROGRESS — 1.0 Release Prep
 
 Branch: `release/1.0`
@@ -21,9 +27,7 @@ Branch: `release/1.0`
 - “账号与设置”底部显示只读构建标记；实机测试前必须与同步清单/远端 head 一致。
 - 修复后重新同步并逐项验证 `script.json`、`GalleryFlow.tsx`、`browser.tsx`、`libraryStore.ts` marker；未验证前不得把功能测试结果归因于 release/1.0。
 
-
 ## Real-device Hotfix Pass — 2026-08-26
-
 
 - **Safari Login Bridge：**不再强制 `safariBrowserStorageDirectory`。候选共享 root 逐个进行目录创建、写入、存在性与读回 probe；单个 `pathDenied` 会被记录并继续探测。通过的 root 才用于 login/status 写入。
 - **显式捕获：**Bridge 只在“在 Safari 登录”生成的 `scripting_eh_capture=1` 短期 URL 中启用；普通 Home 的“论坛”外部入口不会显示 badge、自动跳转 E-Hentai 或写入捕获。捕获成功、错误或过期后会关闭。
@@ -31,7 +35,7 @@ Branch: `release/1.0`
 - **iPad 横屏 Detail：**根据真实设备证据重新打开并修复 A-30：详情内容最大宽度为 760pt 并居中；metadata 采用垂直 label/value；tags 使用 adaptive `LazyVGrid` 包装。阅读、收藏、离线和资源顺序未改变。
 - **反馈语义：**账户正常说明/成功提示使用普通辅助文字或绿色 notice；真正错误才使用 `ErrorText`。删除本地书签改为 notice。
 
-## Hotfix verification
+## Historical verification record
 
 - TypeScript diagnostics: **0**.
 - `src/runSelfTests.ts`: **all executed checks passed**，含 `browser.bridge-root-fallback`、`account.safari-explicit-capture` 和 `downloads.immediate-running-state`。
@@ -40,12 +44,12 @@ Branch: `release/1.0`
 - `src/runNetworkSelfTest.ts`: passed; live Search → Detail Core → Image Page.
 - Isolated `E-Hentai 浏览器 DEV` launch: 25-second persistent UI observation completed with no startup exception output.
 
-## Targeted real-device acceptance required
+## Historical real-device acceptance note
 
-DEV 已同步本轮代码，仍需在同一 iPad 上依次确认：普通论坛打开不触发 Bridge；“在 Safari 登录”后可捕获并导入；下载 resume 立即显示 downloading 且可 pause；横屏 Detail 的信息/标签不再横跨画面；正常提示不显示红色。此处不把 CLI 或 deterministic tests 误记为真实交互结论。
+The items below were old 1.0 follow-up notes. They are not current Agent tasks and must not trigger automated acceptance work:
+普通论坛打开不触发 Bridge；“在 Safari 登录”后可捕获并导入；下载 resume 立即显示 downloading 且可 pause；横屏 Detail 的信息/标签不再横跨画面；正常提示不显示红色。
 
 ## Preserve
 
-- Stable local `E-Hentai 浏览器` remains untouched.
-- No merge, main update, history rewrite, tag/release publication or stable-script overwrite.
-- A-28 remains post-1.0; A-30 is code-fixed from supplied iPad landscape evidence and is no longer evidence-deferred.
+- Stable local `E-Hentai 浏览器` remains untouched unless the user explicitly asks otherwise.
+- Historical 1.0 release decisions remain recorded here for reference only.

@@ -1,18 +1,24 @@
+# ARCHIVED — HISTORICAL AUDIT ONLY
+
+This is the retained 0.9/1.0 root-cause history. It is **not** part of the normal Agent read order and must not trigger a new whole-repository audit, regression campaign, screenshot request, or acceptance pass.
+
+Use it only when the user explicitly asks about an old finding, or when a new bug clearly points back to one of these historical root causes. The active rules are `AGENTS.md` and `CURRENT_TASK.md`.
+
 # STABILIZATION_AUDIT — 0.9 Whole-Repo Audit and S2 Consolidation
 
 Branch: `feat/0.9-stabilization`  
 DEV target: isolated `E-Hentai 浏览器 DEV` (`0.9.0-rc-dev`)  
 Audit opened: 2026-08-24 · status consolidated: 2026-08-26
 
-## Authoritative status
+## Authoritative historical status
 
-The detailed findings below are retained as the original root-cause record. This section is authoritative for their current status; it replaces the stale inline `open` markers from the first audit.
+The detailed findings below are retained as the original root-cause record. They describe past work only.
 
 - **S0:** A-01, A-02 — **fixed**.
-- **S1:** A-03 through A-08 — **fixed**. Final independent review additionally fixed online image-cache payload poisoning, unconfirmed Favorite mutations, and preview-inventory gate bypasses. **No known open S0/S1 remains.**
-- **S2 fixed:** A-10 through A-27, except A-28; A-09 is partially resolved as noted below.
+- **S1:** A-03 through A-08 — **fixed**. Final independent review additionally fixed online image-cache payload poisoning, unconfirmed Favorite mutations, and preview-inventory gate bypasses. **No known open S0/S1 remained at that historical checkpoint.**
+- **S2 fixed:** A-10 through A-27, except A-28; A-09 was partially resolved as noted below.
 - **S3 fixed:** A-29.
-- **Evidence-deferred:** A-28 and A-30 — `deferred-post-1.0`; no speculative layout rewrite was made without required device evidence.
+- **Historical evidence-deferred:** A-28 and A-30.
 
 ## Consolidated fixes and evidence
 
@@ -26,12 +32,12 @@ The detailed findings below are retained as the original root-cause record. This
 | A-06 | fixed | Search entries use real row/container boundaries. |
 | A-07 | fixed | Per-image timeout plus Content-Type and JPEG/PNG/WebP payload validation. |
 | A-08 | fixed | Account lifecycle and server-confirmed Favorite mutation invalidate gallery caches. |
-| A-09 | deferred-post-1.0 (partial) | Expired auth Cookies are excluded consistently from status and request headers. Stored credential presence is still intentionally separate from a failed/transient network probe; the requested explicit server-validated-session UI state needs product-level semantics/evidence. |
+| A-09 | deferred-post-1.0 (partial) | Expired auth Cookies are excluded consistently from status and request headers. Stored credential presence is still intentionally separate from a failed/transient network probe. |
 | A-10 | fixed | Opaque `galleryRef` is session-generation-bound and expires on logout/site change. |
 | A-11 | fixed | Account changes return to Home and trigger a fresh load. |
 | A-12 | fixed | Account overview uses an epoch and site-aware dependencies. |
 | A-13 | fixed | Home, Favorites and Discovery ignore stale request completions. |
-| A-14 | fixed | Dedicated Toplists parser preserves each Gallery Toplist identity (including its All-Time/Past-* range) and rank; Discovery renders both. Non-gallery leaderboard content remains explicitly unsupported/hidden. |
+| A-14 | fixed | Dedicated Toplists parser preserves each Gallery Toplist identity and rank; Discovery renders both. |
 | A-15 | fixed | Discovery preserves Watched previous/next navigation. |
 | A-16 | fixed | `.glink`/`.glname` title extraction precedes broad anchor text. |
 | A-17 | fixed | Detail relations inspect labeled rows before anchor fallback. |
@@ -46,19 +52,16 @@ The detailed findings below are retained as the original root-cause record. This
 | A-25 | fixed | Detail load error, action error and success notice are independent UI states. |
 | A-26 | fixed | Single History and Quick Search deletions use native confirmation. |
 | A-27 | fixed | Shared user-safe error mapping avoids propagating raw URL/Cookie/path text into UI. |
-| A-28 | deferred-post-1.0 | Requires 320/375/430pt and larger Dynamic Type runtime screenshots before any local adaptive-layout patch. |
+| A-28 | historical deferred | Narrow iPhone / larger Dynamic Type evidence was not available at that checkpoint. |
 | A-29 | fixed | Results failure clears stale result count and paging controls. |
-| A-30 | deferred-post-1.0 | Requires iPad portrait/landscape/split-view screenshots before deciding whether a readable-width constraint is necessary. |
+| A-30 | historical deferred then addressed | Later iPad evidence led to the retained readable-width/detail layout fix. |
 
-## Regression coverage
+## Historical regression coverage
 
-The deterministic suite covers each parser/store/security boundary amenable to fixture testing, including expired cookies, session-bound gallery references, title isolation, relation identity, Toplist list/rank preservation, image payload validation, Favorite confirmation, complete-preview inventory gates, monotonic Reader progress, download capacity/delete/restart/reconciliation, serialized saved searches, backup recovery, and safe error mapping. UI lifecycle changes retain focused code-path verification plus the full runtime smoke chain.
+The deterministic suite at that checkpoint covered parser/store/security boundaries including expired cookies, session-bound gallery references, title isolation, relation identity, Toplist rank preservation, image payload validation, Favorite confirmation, complete-preview inventory gates, Reader progress, download recovery, saved-search serialization, backup recovery, and safe error mapping.
 
-## Final independent S1 review
+This section is evidence about past work, **not an instruction to rerun the suite**.
 
-- **Result:** no remaining known open S0/S1.
-- **Additional fixes:** cache rejects non-image/empty/invalid-signature HTTP 200 responses; Reader retry replaces the old cached response; Favorite UI success follows popup-state confirmation; complete preview inventory is now enforced by both every Reader entrance and download creation; concurrent Reader completions cannot regress saved progress.
+## Current handling of related bugs
 
-## UI evidence boundary
-
-A-28/A-30 stay deferred rather than claimed fixed. Required future evidence: narrow iPhone and larger Dynamic Type for high-density action rows, and iPad portrait/landscape/split view for Detail and Library. This does not block the code-backed S0/S1 and practical S2 consolidation above.
+If the user now reports a symptom related to one of these findings, treat the user's real-device report as current truth. Inspect the present code, fix the root cause, run only the focused check needed for that change, commit, and hand it back for user testing. Do not reopen the whole historical audit unless the user explicitly requests it.
