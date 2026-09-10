@@ -111,28 +111,9 @@ export async function loadPreviewPageBatch(detail:GalleryDetail,startPage?:numbe
   await reportSafely({ stage: "gallery-detail-preview-batch", ok: result.failedPreviewPages.length === 0, request: { url: detail.sourceUrl, status: 0, statusText: "" }, notes: `previewMs=${result.elapsedMs}; loadedPreviewPages=${result.loadedPreviewPages.length}/${previewPages}; loadedImages=${result.pageLinks.length}` }); return result
 }
 export async function loadPreviewPageRange(detail:GalleryDetail,firstPage:number,lastPage:number,signal?:AbortSignal,context:AccountRequestContext=captureAccountRequestContext()):Promise<PreviewLoadResult>{const total=Math.max(1,Number(detail.previewPages||1)),first=Math.floor(firstPage),last=Math.floor(lastPage);if(!Number.isInteger(first)||!Number.isInteger(last)||first<0||last<first||last>=total)throw new Error("预览分页范围无效。");return loadPreviewPageBatch(detail,first,last-first+1,signal,context)}
-export async function loadRemainingPreviewPages(detail:GalleryDetail,onProgress?:(links:GalleryPageLink[],failed:number[])=>void):Promise<PreviewLoadResult>{
-  const context=captureAccountRequestContext(),started=Date.now();let current=detail
-  for(let page=1;page<Math.max(1,Number(detail.previewPages||1));page+=2){
-    current=applyPreviewLoadResult(current,await loadPreviewPageBatch(current,page,2,undefined,context))
-    if(!isAccountRequestContextCurrent(context))throw new Error("账号或站点已切换，预览库存已失效。")
-    onProgress?.(current.pageLinks,current.failedPreviewPages)
-  }
-  return{pageLinks:current.pageLinks,loadedPreviewPages:current.loadedPreviewPages,failedPreviewPages:current.failedPreviewPages,elapsedMs:Date.now()-started}
-}
 export function applyPreviewLoadResult(core: GalleryDetail, previews: PreviewLoadResult): GalleryDetail { return { ...core, pageLinks: previews.pageLinks, loadedPreviewPages: previews.loadedPreviewPages, failedPreviewPages: previews.failedPreviewPages } }
 export function hasCompletePreviewInventory(detail: Pick<GalleryDetail, "metadata" | "pageLinks" | "previewPages" | "loadedPreviewPages" | "failedPreviewPages">): boolean { const total=galleryPageCount(detail),indexes=new Set(detail.pageLinks.map(page=>page.index)); return total>0 && detail.pageLinks.length===total && indexes.size===total && Array.from({length:total},(_,index)=>index+1).every(index=>indexes.has(index)) && (detail.loadedPreviewPages || []).length >= Math.max(1, Number(detail.previewPages || 1)) && detail.failedPreviewPages.length === 0 }
 export function assertCompletePreviewInventory(detail: Pick<GalleryDetail, "metadata" | "pageLinks" | "previewPages" | "loadedPreviewPages" | "failedPreviewPages">): void { if (!hasCompletePreviewInventory(detail)) throw new Error("页面库存不完整，请重试预览加载后再下载。") }
-export async function loadGalleryDetail(url:string,onProgress?:(loadedImages:number,totalImages:number)=>void):Promise<GalleryDetail>{
-  const context=captureAccountRequestContext(),core=await loadGalleryDetailCore(url,context);let current=core
-  onProgress?.(current.pageLinks.length,galleryPageCount(current))
-  for(let page=1;page<Math.max(1,Number(core.previewPages||1));page+=2){
-    current=applyPreviewLoadResult(current,await loadPreviewPageBatch(current,page,2,undefined,context))
-    if(!isAccountRequestContextCurrent(context))throw new Error("账号或站点已切换，详情已失效。")
-    onProgress?.(current.pageLinks.length,galleryPageCount(current))
-  }
-  return current
-}
 
 async function resolveImagePageFresh(pageUrl:string,context:AccountRequestContext):Promise<ResolvedImagePage>{
   try{
