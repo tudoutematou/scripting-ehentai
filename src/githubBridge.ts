@@ -38,7 +38,9 @@ function safeRequestUrl(value?: string) {
 function safeText(value?: unknown) {
   return String(value || "")
     .replace(/https?:\/\/[^\s"')]+/gi, "[redacted-url]")
-    .replace(/\b(?:ipb_member_id|ipb_pass_hash|igneous|Cookie|apiuid|apikey)\s*[=:]\s*[^;\s,]+/gi, "$1=[redacted]")
+    .replace(/\/g\/\d+\/[a-f0-9]+/gi, "/g/[redacted]")
+    .replace(/\/var\/mobile\/[^\s"']+/gi, "[redacted-path]")
+    .replace(/\b(?:ipb_member_id|ipb_pass_hash|ipb_session_id|igneous|sk|hath_perks|Cookie|apiuid|apikey|ghp_[A-Za-z0-9]+|github_pat_[A-Za-z0-9_]+)\b\s*[=:]?\s*[^;\s,]*/gi, "[redacted]")
     .slice(0, 500)
 }
 
@@ -48,7 +50,7 @@ function safeError(error: unknown) {
   return {
     name: safeText(value.name || "Error"),
     message: safeText(value.message || error),
-    stack: safeText(value.stack || "").slice(0, 1200),
+    stack: "",
   }
 }
 
@@ -121,15 +123,8 @@ export async function readSetupRules(branch: string) {
 }
 
 /** 仅供明确指定的临时分支使用；生产入口不调用此函数。 */
-export async function pushSourceToGitHub(branch: string) {
-  if (!branch || branch === "main") throw new Error("源码同步必须显式指定非 main 的临时分支。")
-  await ensureGitHubPermissions()
-  const files = await listLocalSource()
-  for (const relativePath of files) {
-    const content = await fileManager.readAsString(joinPath(scriptDirectory, relativePath))
-    await putTextContent(branch, joinPath(SOURCE_ROOT, relativePath), `sync: ${relativePath}`, content)
-  }
-  return files
+export async function pushSourceToGitHub(_branch: string) {
+  throw new Error("生产诊断包已禁用运行时源码推送。请使用 Scripting GitHub API 在开发脚本中提交。")
 }
 
 export async function pullSourceFromGitHub() {
