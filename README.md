@@ -104,3 +104,10 @@ ExHentai 需要有效账户权限和 ExHentai 域名下可用的会话。若 E-H
 ## 许可证与致谢
 
 本项目以 [MIT License](LICENSE) 发布。`browser.tsx` 的 Cookie 助手基于 MIT 许可的 JSEhViewer / SEhViewer 进行适配；完整的版权与第三方声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。
+
+## 排障
+
+- **导入后出现 commitPackage / bootstrapFromRemote：** 你导入了仓库根目录。请只导入发布包里的 `src/` 文件夹。
+- **ExHentai 仍不可用：** 普通 E-Hentai Cookie 不够。请在已登录的 ExHentai 会话中再次运行 Cookie 助手，或用账户页手工导入真实 Ex Cookie。
+- **系统图库出现重复图：** 保存中途被中断后，重试前会要求确认。不要在保存进行中再次点重试。已写入的照片请在“照片”App 中删除。
+- **发现页两个标题 / 搜索卡空白：** 请确认运行的是本分支最新源码；该布局已改为单标题和按内容高度的搜索卡。
