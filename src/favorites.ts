@@ -65,6 +65,7 @@ export async function loadFavoriteCategoryManagement(): Promise<FavoriteCategory
   return config.categories.map(category => ({ ...category, count: page?.categories.find(item => item.index === category.index)?.count || 0 }))
 }
 export function buildUConfigRenameSubmission(html: string, names: readonly string[]) { const expected = validateFavoriteCategoryNames(names); return { ...parseUConfigFields(html), ...Object.fromEntries(expected.map((name, index) => [`favorite_${index}`, name])), apply: "Apply" } }
+export function verifiedFavoriteCategories(actual:FavoriteCategory[],expected:readonly string[]){if(actual.length!==expected.length||!actual.every((category,index)=>category.name===expected[index]))throw new Error("服务器返回的收藏分类名称与请求不一致，未更新本地显示。");return actual}
 export async function renameFavoriteCategories(names:readonly string[]):Promise<FavoriteCategory[]>{
   const expected=validateFavoriteCategoryNames(names),context=captureAccountRequestContext(),before=await loadUConfigSnapshot(context)
   if(!isAccountRequestContextCurrent(context))throw new Error("账号或站点已切换，未提交收藏分类更改。")
@@ -74,7 +75,7 @@ export async function renameFavoriteCategories(names:readonly string[]):Promise<
   if(!isAccountRequestContextCurrent(context))throw new Error("账号或站点已切换，无法确认收藏分类更改。")
   const verified=await loadUConfigSnapshot(context)
   if(!isAccountRequestContextCurrent(context))throw new Error("账号或站点已切换，收藏分类结果已失效。")
-  if(!verified.categories.every((category,index)=>category.name===expected[index]))throw new Error("服务器返回的收藏分类名称与请求不一致，未更新本地显示。")
+  verifiedFavoriteCategories(verified.categories,expected)
   const page=await loadFavorites(undefined,{},undefined,undefined,context).catch(()=>null)
   if(!isAccountRequestContextCurrent(context))throw new Error("账号或站点已切换，收藏分类结果已失效。")
   const categories=verified.categories.map(category=>({...category,count:page?.categories.find(item=>item.index===category.index)?.count||0}))
