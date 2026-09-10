@@ -26,33 +26,8 @@
 
 ### `reportDiagnostic(payload)`
 
-将诊断信息用 `GitHub.createIssueComment(...)` 追加到 Issue #1。
-
-评论正文用 JSON code block，字段至少包含：
-
-- `time`
-- `scriptVersion`
-- `stage`
-- `ok`
-- `error.name`
-- `error.message`
-- `error.stack`
-- `request.url`
-- `request.status`
-- `request.statusText`
-- `notes`
-
-不得上传 Cookie、Authorization、GitHub token、密码、账户信息或完整 HTML。
-
-### `syncSourceSnapshot()`
-
-读取 `Script.directory` 下当前脚本的文本源码，将文件按原相对路径同步到本仓库 `src/` 下。
-
-优先同步：
-
-- `index.tsx`
-- `script.json`
-- 当前项目中业务相关 `.ts` / `.tsx` / `.json` 文件
+将诊断信息用 `GitHub.Diagnostics stay on-device via console.log. Do not recreate GitHub Issue comment upload.
+前项目中业务相关 `.ts` / `.tsx` / `.json` 文件
 
 跳过二进制资源、缓存、临时文件。
 
