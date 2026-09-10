@@ -1,7 +1,7 @@
 import { loadFavorites } from "./favorites"
 import { historySummary, loadHistory } from "./libraryStore"
 import { getAccountSessionGeneration, getAccountStatus, getActiveSite, getBaseUrl } from "./account"
-import { GallerySummary, loadGalleryDetail, searchGalleries } from "./ehentai"
+import { GallerySummary, galleryPageCount, loadGalleryDetailCore, searchGalleries } from "./ehentai"
 import { buildGallerySearchUrl, createHomeSearchState, type GalleryCategoryKey, type QuickFilterKey } from "./tourist"
 
 export type EhAction =
@@ -69,7 +69,7 @@ function resolveGalleryRef(galleryRef: unknown): { ok: true; url: string } | EhA
     galleryRefs.delete(galleryRef);writeStoredGalleryRefs()
     return failure("GALLERY_REF_EXPIRED", "gallery-ref", "画廊引用已过期，请重新搜索。")
   }
-  if(!isGalleryRefSessionCurrent(entry.sessionGeneration)){galleryRefs.delete(galleryRef);return failure("GALLERY_REF_EXPIRED", "gallery-ref", "画廊引用已因账号或站点变更失效，请重新搜索。")}
+  if(!isGalleryRefSessionCurrent(entry.sessionGeneration)){galleryRefs.delete(galleryRef);writeStoredGalleryRefs();return failure("GALLERY_REF_EXPIRED", "gallery-ref", "画廊引用已因账号或站点变更失效，请重新搜索。")}
   return { ok: true, url: entry.url }
 }
 
@@ -109,9 +109,9 @@ export async function runEhAction(action:EhAction):Promise<EhActionResult>{
       const resolved=resolveGalleryRef(action.galleryRef)
       if(!resolved.ok)return resolved
       if(!actionContextCurrent(context))return contextChanged()
-      const detail=await loadGalleryDetail(resolved.url)
+      const detail=await loadGalleryDetailCore(resolved.url)
       if(!actionContextCurrent(context))return contextChanged()
-      return{ok:true,type:action.type,detail:{title:detail.title,titleJpn:detail.titleJpn,category:detail.category,uploader:detail.uploader,rating:detail.rating,ratingCount:detail.ratingCount,previewPages:detail.previewPages,pageCount:detail.pageLinks.length,tags:detail.tags.map(group=>({namespace:group.namespace,names:group.tags.map(tag=>tag.name)}))}}
+      return{ok:true,type:action.type,detail:{title:detail.title,titleJpn:detail.titleJpn,category:detail.category,uploader:detail.uploader,rating:detail.rating,ratingCount:detail.ratingCount,previewPages:detail.previewPages,pageCount:galleryPageCount(detail),tags:detail.tags.map(group=>({namespace:group.namespace,names:group.tags.map(tag=>tag.name)}))}}
     }
     return failure("INVALID_ACTION","validate","不支持的操作。")
   }catch(error){return failure("REQUEST_FAILED","core",safeMessage(error))}
