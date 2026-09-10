@@ -28,7 +28,7 @@
 ## 安装
 
 1. 在 iPhone 或 iPad 安装并更新 **Scripting**。
-2. 从本仓库的发布页下载 v1.1.0 源码包并解压；在 Scripting 中导入其中的 **`src/` 文件夹**作为脚本项目。该文件夹包含项目所需的 `script.json` 和 `index.tsx`，不要将整个仓库根目录当作脚本项目导入。
+2. 从本仓库的发布页下载 v1.1.0 源码包并解压；在 Scripting 中导入其中的 **`src/` 文件夹**作为脚本项目。该文件夹包含项目所需的 `script.json` 和 `index.tsx`，不要将整个仓库根目录当作脚本项目导入。导入后的项目里不应出现 `commitPackage*.ts`、`bootstrapFromRemote.ts` 或 `readRemoteTask.ts`；若出现，说明导入了错误目录。
 3. 首次运行时按 Scripting 的系统提示授予所需权限。离线下载、系统图库保存、Safari 登录辅助与 AI 功能均只在你实际使用对应功能时需要相关能力。
 4. 如需 Safari 一键导入登录会话，请在 Scripting 的浏览器脚本中安装并启用 `src/browser.tsx`（显示名为“E-Hentai 浏览器 Cookie 助手”）。
 5. 从 Scripting 运行项目。建议先完成登录验证，再使用收藏、Watched、My Tags、ExHentai 或需要账户权限的功能。
@@ -36,6 +36,8 @@
 Scripting 的导入界面可能随版本变化；核心要求是：导入 `src/` 目录，并保留其文件结构。
 
 ## 登录 E-Hentai / ExHentai
+
+Cookie 助手只会把草稿写到本机 Scripting/App Group/Safari 扩展目录，**不会写入 iCloud Drive**。
 
 ### E-Hentai
 
