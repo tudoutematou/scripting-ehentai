@@ -54,7 +54,7 @@ Legend: ✅ implemented | 🟡 partial / active bug | 🔴 missing | ⚪ platfor
 | H@H action/client | ⚪ | Not implemented; low-value/platform-specific for this Scripting client | deferred |
 | Gallery newer-version/update detection | 🔴 | No EhViewer-style new-version/update flow identified in current Scripting code | 3 |
 | Open in browser | ✅ | Safe external Safari action | — |
-| Detail `问 AI` | ✅ | Safe metadata-only managed Assistant entry | project extension |
+| Detail `问 AI` | 🔵 | Removed from the public UI; Assistant Tool remains a separate optional entry | project extension |
 
 ## Reader
 
