@@ -1,0 +1,5 @@
+blank_issues_enabled: false
+contact_links:
+  - name: 请先阅读 README 与隐私说明
+    url: https://github.com/tudoutematou/scripting-ehentai/blob/main/PRIVACY.md
+    about: 提交前不要粘贴 Cookie、token URL、原始 HTML 或本地路径。
