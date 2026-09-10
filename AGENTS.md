@@ -159,7 +159,7 @@ No fake UI/settings for behavior that does not exist.
 - In native Scripting app code, use `Dialog.confirm()` / `Dialog.prompt()` (or the existing project compatibility wrapper). Never assume browser DOM globals such as bare `confirm()` / `prompt()` exist just because TypeScript DOM typings accept them. Browser-script code is a separate runtime.
 
 ## Repository / GitHub
-The repository may be private and the local workspace may be empty. Use Scripting's native GitHub integration/API for repository work.
+The repository is public. Use Scripting's native GitHub integration/API for repository work. Never put secrets in Issues, diagnostics, or source.
 
 - Never ask the user to paste a GitHub token.
 - Never put PATs, SSH keys, cookies, passwords, `apiuid`/`apikey`, gallery/page tokens, private paths, full sensitive URLs, user comments, or full HTML in source, prompts, logs, diagnostics, fixtures, runtime-QA output, or repository files.
