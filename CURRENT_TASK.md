@@ -5,7 +5,7 @@ Baseline: public `main` at `b6c1c01eaa4e5b69e64eb1ce921a6bd049fe0c4e`
 
 ## Goal
 
-Land the post-release Top 10 optimizations. Do not merge `main` unless the user explicitly asks.
+Post-release P0–P2 optimizations are implemented on this branch. Do not merge `main` unless the user explicitly asks. P3 items (download rewrite, Navigation rewrite, SQLite, Redux) stay out of scope.
 
 Do not rewrite the download system, Navigation, or GalleryFlow file layout.
 
