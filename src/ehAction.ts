@@ -69,7 +69,7 @@ function resolveGalleryRef(galleryRef: unknown): { ok: true; url: string } | EhA
     galleryRefs.delete(galleryRef);writeStoredGalleryRefs()
     return failure("GALLERY_REF_EXPIRED", "gallery-ref", "画廊引用已过期，请重新搜索。")
   }
-  if(!isGalleryRefSessionCurrent(entry.sessionGeneration)){galleryRefs.delete(galleryRef);return failure("GALLERY_REF_EXPIRED", "gallery-ref", "画廊引用已因账号或站点变更失效，请重新搜索。")}
+  if(!isGalleryRefSessionCurrent(entry.sessionGeneration)){galleryRefs.delete(galleryRef);writeStoredGalleryRefs();return failure("GALLERY_REF_EXPIRED", "gallery-ref", "画廊引用已因账号或站点变更失效，请重新搜索。")}
   return { ok: true, url: entry.url }
 }
 
