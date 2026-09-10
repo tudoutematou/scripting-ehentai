@@ -11,7 +11,7 @@
 
 为访问需要登录的站点功能，项目会处理 E-Hentai / ExHentai Cookie。Cookie 会在 Scripting 的 Keychain 边界内保存；项目使用它们向对应站点发起请求和接收站点更新的 Cookie。
 
-Cookie 助手用于从 Safari 导入会话。它可能在 Scripting 的浏览器脚本存储和本地候选目录中暂存一份 Cookie 草稿，以便主项目读取。成功导入后，主项目会清除其读取到的候选文件；浏览器脚本存储仍可能保留草稿，直到你在 Scripting 中清除浏览器脚本数据、停用或删除该助手。退出主项目账户会删除主项目 Keychain 中的会话，但不会替你清除 Safari、站点本身或浏览器脚本存储中的数据。
+Cookie 助手用于从 Safari 导入会话。它可能在 Scripting 的本机文档、App Group 和 Safari 扩展存储中暂存一份 Cookie 草稿，以便主项目读取。助手**不会**把 Cookie 草稿写入 iCloud Drive。成功导入后，主项目会删除这些候选文件，并清空 Safari 脚本存储中的 Cookie 草稿键。退出主项目账户会删除主项目 Keychain 中的会话，但不会替你清除 Safari、站点本身或浏览器脚本存储中的数据。
 
 **不要**将 Cookie、登录导出文件或完整请求头分享给任何人，也不要提交到 GitHub Issue。
 
