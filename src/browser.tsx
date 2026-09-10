@@ -175,10 +175,6 @@ type BrowserCookie = {
       if (appGroup) add(appGroup + "/ehviewer_cookie.txt");
     } catch {}
     try {
-      var icloud = Scripting.FileManager.iCloudDocumentsDirectory;
-      if (icloud) add(icloud + "/ehviewer_cookie.txt");
-    } catch {}
-    try {
       var safari = Scripting.FileManager.safariBrowserDirectory;
       if (safari) add(safari + "/ehviewer_cookie.txt");
     } catch {}
