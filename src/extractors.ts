@@ -11,6 +11,7 @@ export type GallerySummary = {
   uploader: string
   pages: number
   url: string
+  language?: string
 }
 
 export type SearchExtractData = {
