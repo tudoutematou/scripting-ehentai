@@ -14,6 +14,7 @@
 - 服务端收藏夹、本地书签、历史记录与继续阅读。
 - 整本或**部分页面**下载到离线书库、系统照片图库，或两者同时保存。
 - 下载暂停、继续、失败重试、启动恢复；已保存页面可在 Offline Reader 中阅读。
+- 画廊详情可调用系统分享。
 - 通过 Safari Cookie 助手导入 E-Hentai / ExHentai 会话，并在应用内验证。
 - 可选的 Scripting Assistant 搜索与推荐；其结果仍通过普通站内搜索流程展示。
 
@@ -28,7 +29,7 @@
 ## 安装
 
 1. 在 iPhone 或 iPad 安装并更新 **Scripting**。
-2. 从本仓库的发布页下载 v1.1.0 源码包并解压；在 Scripting 中导入其中的 **`src/` 文件夹**作为脚本项目。该文件夹包含项目所需的 `script.json` 和 `index.tsx`，不要将整个仓库根目录当作脚本项目导入。导入后的项目里不应出现 `commitPackage*.ts`、`bootstrapFromRemote.ts` 或 `readRemoteTask.ts`；若出现，说明导入了错误目录。
+2. 打开本仓库默认分支 `main`，在 Scripting 中导入 **`src/` 文件夹**作为脚本项目。该文件夹包含项目所需的 `script.json` 和 `index.tsx`，不要将整个仓库根目录当作脚本项目导入。导入后的项目里不应出现 `commitPackage*.ts`、`bootstrapFromRemote.ts` 或 `readRemoteTask.ts`；若出现，说明导入了错误目录。Releases 中的 v1.1.0 源码包是首个公开发布，不含此后进入 `main` 的稳定性与隐私修复。
 3. 首次运行时按 Scripting 的系统提示授予所需权限。离线下载、系统图库保存、Safari 登录辅助与 AI 功能均只在你实际使用对应功能时需要相关能力。
 4. 如需 Safari 一键导入登录会话，请在 Scripting 的浏览器脚本中安装并启用 `src/browser.tsx`（显示名为“E-Hentai 浏览器 Cookie 助手”）。
 5. 从 Scripting 运行项目。建议先完成登录验证，再使用收藏、Watched、My Tags、ExHentai 或需要账户权限的功能。
@@ -78,7 +79,7 @@ ExHentai 需要有效账户权限和 ExHentai 域名下可用的会话。若 E-H
 
 - 登录 Cookie 存储在 Scripting 的 Keychain 边界内；项目不会把 Cookie、密码、令牌或原始页面内容提交到本仓库。
 - 浏览记录、书签、阅读进度、下载清单、缓存与离线文件保存在本机的 Scripting 存储范围内。
-- 项目不包含项目运营方的分析、遥测或自建服务端。
+- 项目不包含项目运营方的分析、遥测或自建后端。
 - 使用 AI 搜索或推荐时，输入内容会发送给你在 Scripting 中配置的 Assistant 提供方；请先阅读该提供方的隐私政策。
 
 完整说明见 [PRIVACY.md](PRIVACY.md)。
@@ -95,8 +96,8 @@ ExHentai 需要有效账户权限和 ExHentai 域名下可用的会话。若 E-H
 
 提交反馈前，请先搜索现有 Issue，并升级到最新版本：
 
-- [报告 Bug](../../issues/new?template=bug_report.md)
-- [提出功能建议](../../issues/new?template=feature_request.md)
+- [报告 Bug](../../issues/new?template=bug_report.yml)
+- [提出功能建议](../../issues/new?template=feature_request.yml)
 - [查看更新记录](CHANGELOG.md)
 
 **不要**在 Issue、截图或日志中发布 Cookie、账号信息、完整私密链接、带 token 的 URL、原始页面 HTML 或本地文件路径。请使用 Issue 模板提供脱敏后的复现步骤。
@@ -107,7 +108,7 @@ ExHentai 需要有效账户权限和 ExHentai 域名下可用的会话。若 E-H
 
 ## 排障
 
-- **导入后出现 commitPackage / bootstrapFromRemote：** 你导入了仓库根目录。请只导入发布包里的 `src/` 文件夹。
+- **导入后出现 commitPackage / bootstrapFromRemote：** 你导入了仓库根目录。请只导入 `src/` 文件夹。
 - **ExHentai 仍不可用：** 普通 E-Hentai Cookie 不够。请在已登录的 ExHentai 会话中再次运行 Cookie 助手，或用账户页手工导入真实 Ex Cookie。
 - **系统图库出现重复图：** 保存中途被中断后，重试前会要求确认。不要在保存进行中再次点重试。已写入的照片请在“照片”App 中删除。
-- **发现页两个标题 / 搜索卡空白：** 请确认运行的是本分支最新源码；该布局已改为单标题和按内容高度的搜索卡。
+- **发现页两个标题 / 搜索卡空白：** 请确认运行的是 `main` 最新源码；该布局已改为单标题和按内容高度的搜索卡。
