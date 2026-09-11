@@ -1,15 +1,15 @@
-import { Button, HStack, Image, List, NavigationLink, Picker, ProgressView, Section, Spacer, Stepper, Text, TextField, Toggle, VStack, useEffect, useRef, useState } from "scripting"
+import { Button, EnvironmentValuesReader, HStack, Image, List, NavigationLink, Picker, ProgressView, Section, Spacer, Stepper, Text, TextField, Toggle, VStack, useEffect, useRef, useState } from "scripting"
 import { parseToplistHtml } from "./searchHtml"
 import { addLocalBookmark, cancelDownload, clearHistory, clearImageCache, clearLocalBookmarks, deleteDownload, deleteHistory, deleteSavedSearch, downloadCompletionTarget, downloadWritesLibrary, downloadWritesPhotos, historySummary, inventoryIsComplete, isDownloadComplete, loadDownloads, loadHistory, loadLocalBookmarks, loadPreferences, loadSavedSearches, localBookmarkSummary, offlinePagePaths, offlineReaderPages, pauseDownload, removeLocalBookmark, resetReadingProgress, restoreSavedSearch, retryUncertainPhotos, runDownload, savePreferences, savedSearchSummary, subscribeDownloads, subscribeHistory, subscribeLocalBookmarks, type HistoryRecordV1, type LocalBookmarkV1, type OfflineDownload, type ReaderPreferences, type SavedSearch } from "./libraryStore"
 import { GlassSurface, PageBackground, ShelfHeader } from "./GlassUI"
 import { EmptyState, ErrorText } from "./StateView"
-import { GalleryDetailView, GalleryRow, LibraryGalleryGrid, OfflineReaderView, ResultsView } from "./GalleryFlow"
+import { GalleryDetailView, GalleryRow, LibraryGalleryGrid, OfflineReaderView, ResultsView, galleryOpenMode, presentRootGallery } from "./GalleryFlow"
 import { getAccountSessionGeneration, getBaseUrl, getActiveSite } from "./account"
 import { fetchHtml, loadMyTags, searchGalleries } from "./ehentai"
 import { createHomeSearchState, createTagSearchState } from "./tourist"
 import { ensureTagTranslations, translateTag } from "./tagTranslation"
 import { favoriteCategoryRevision, isFavoriteRequestContextCurrent, loadFavoriteCategoryManagement, loadFavorites, renameFavoriteCategories, subscribeFavoriteCategoryChanges, type FavoriteCategory, type FavoritesPage } from "./favorites"
-function GalleryButton({item,onSelect}:{item:any;onSelect:(item:any)=>void}){return <Button buttonStyle="plain" action={()=>onSelect(item)}><GalleryRow item={item}/></Button>}
+function GalleryButton({item,onSelect}:{item:any;onSelect:(item:any)=>void}){return <EnvironmentValuesReader keys={["horizontalSizeClass"]}>{environment=><Button buttonStyle="plain" action={()=>galleryOpenMode(environment.horizontalSizeClass)==="push"?onSelect(item):presentRootGallery(item)}><GalleryRow item={item}/></Button>}</EnvironmentValuesReader>}
 export function FavoritesScene({sessionGeneration=getAccountSessionGeneration()}:{sessionGeneration?:number}={}){const content=<CloudFavoritesContent sessionGeneration={sessionGeneration}/>;return <List navigationTitle="收藏">{content}</List>}
 export type FavoriteCategorySelection = number | undefined
 export function favoriteCategoryChoices(categories: readonly FavoriteCategory[]){return [{index:undefined as FavoriteCategorySelection,name:"全部收藏",count:categories.reduce((total,item)=>total+Math.max(0,Number(item.count)||0),0)},...categories.map(item=>({index:item.index as FavoriteCategorySelection,name:item.name,count:item.count}))]}
