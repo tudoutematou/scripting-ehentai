@@ -15,6 +15,7 @@ const ROOTS:Array<{key:RootDestination;title:string;icon:string}>=[
 function SettingsRoot(){return <List navigationTitle="设置"><Section><NavigationLink destination={<AccountScene/>}><Text>账号与站点</Text></NavigationLink><NavigationLink destination={<SettingsScene/>}><Text>阅读、下载与缓存设置</Text></NavigationLink></Section></List>}
 function RootScene({value}:{value:RootDestination}){if(value==="library")return <LibraryScene sessionGeneration={getAccountSessionGeneration()}/>;if(value==="settings")return <SettingsRoot/>;return <HomeScene/>}
 export function regularRootNavigationKey(selected:RootDestination,epoch=0){return `regular-root:${selected}:${epoch}`}
+export function splitColumnVisibility(galleryPresented:boolean){return galleryPresented?"detailOnly":"doubleColumn"}
 function RegularShell({selected,onSelectedChanged}:{selected:RootDestination;onSelectedChanged:(value:RootDestination)=>void}){
   const[epoch,setEpoch]=useState(0)
   const[gallery,setGallery]=useState<GallerySummary|null>(null)
@@ -27,7 +28,7 @@ function RegularShell({selected,onSelectedChanged}:{selected:RootDestination;onS
     if(value!==selected){onSelectedChanged(value);setEpoch(0)}
     else if(!hadGallery)setEpoch(count=>count+1)
   }
-  return <NavigationSplitView sidebar={<List navigationTitle="E-Hentai" navigationSplitViewColumnWidth={{min:220,ideal:240,max:280}} selection={{value:selected,onChanged:value=>{if(value)choose(value as RootDestination)}}}><Section>{ROOTS.map(item=><Button key={item.key} tag={item.key} action={()=>choose(item.key)} buttonStyle="plain"><Label title={item.title} systemImage={item.icon}/></Button>)}</Section></List>}>
+  return <NavigationSplitView columnVisibility={{value:splitColumnVisibility(Boolean(gallery)),onChanged:value=>{if(value!=="detailOnly")presentRootGallery(null)}}} sidebar={<List navigationTitle="E-Hentai" navigationSplitViewColumnWidth={{min:220,ideal:240,max:280}} selection={{value:selected,onChanged:value=>{if(value)choose(value as RootDestination)}}}><Section>{ROOTS.map(item=><Button key={item.key} tag={item.key} action={()=>choose(item.key)} buttonStyle="plain"><Label title={item.title} systemImage={item.icon}/></Button>)}</Section></List>}>
     <ZStack>
       <NavigationStack key={regularRootNavigationKey(selected,epoch)}><RootScene value={selected}/></NavigationStack>
       {gallery?<NavigationStack><GalleryDetailView summary={gallery} onClose={()=>presentRootGallery(null)}/></NavigationStack>:null}
