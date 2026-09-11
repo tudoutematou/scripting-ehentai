@@ -1,27 +1,19 @@
-# CURRENT_TASK — Post-release optimization (v1.1.0)
+# CURRENT_TASK — Post-release optimization landed on main
 
-Branch: `feat/1.1-gallery-interaction`  
-Baseline: public `main` at `b6c1c01eaa4e5b69e64eb1ce921a6bd049fe0c4e`
+Branch: `main`  
+HEAD at last code sync: `e61a1cebfecf8b4d99776355d83b062a0b03ad53`  
+Source branch: `feat/1.1-gallery-interaction` (file content matched; git history diverged)
 
-## Goal
+## Status
 
-Post-release P0–P2 optimizations are implemented on this branch. Do not merge `main` unless the user explicitly asks. P3 items (download rewrite, Navigation rewrite, SQLite, Redux) stay out of scope.
+P0–P2 post-release optimizations are on `main`. Do not start P3.
 
-Do not rewrite the download system, Navigation, or GalleryFlow file layout.
+Remaining work is device QA, not new features:
 
-## Scope
-
-1. Unfavorited galleries must not display the default/first favorite folder.
-2. Cookie drafts must not be written to iCloud; successful import clears GM drafts.
-3. Published `src/` must not include DEV commit/bootstrap helpers.
-4. Discover has one title and a compact search card.
-5. Continuous Reader resolves pages after they appear.
-6. “查看全部” renders a preview window, not the full inventory grid.
-7. Download UI publish is throttled; pause does not overwrite completed/failed.
-8. Photos pending cannot start a second retry while a worker is still running.
-9. Image memory cache has a hard cap.
-10. Docs/privacy/issue templates match the public release.
+- 1000–2000 page “查看全部” window and continuous Reader
+- download pause / publish throttle / Photos retry
+- Cookie helper import without iCloud drafts
 
 ## Out of scope
 
-Redux, EventBus, Repository/Factory, SQLite, background downloads, H@H, splitting files because they are long.
+Redux, EventBus, Repository/Factory, SQLite, download rewrite, Navigation rewrite, splitting GalleryFlow because it is long, background downloads, H@H, Wi-Fi transfer, DoH.
