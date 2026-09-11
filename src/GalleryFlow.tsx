@@ -56,10 +56,11 @@ export function GalleryRow({item}:{item:GallerySummary}){return <GlassSurface pa
 export function galleryIdentity(item:Pick<GallerySummary,"id"|"gid"|"token"|"url">){return item.id||[item.gid,item.token].filter(Boolean).join(":")||item.url||""}
 export function galleryGridColumnCount(sizeClass:string|null|undefined){return sizeClass==="compact"?1:3}
 export function selectGallery<T>(current:T|null,next:T|null){return next}
-export function galleryOpenMode(sizeClass:string|null|undefined){return sizeClass==="compact"?"push":"split"}
+let rootGalleryPresented=false
+export function galleryOpenMode(sizeClass:string|null|undefined){return sizeClass==="compact"||rootGalleryPresented?"push":"split"}
 type RootGalleryListener=(item:GallerySummary|null)=>void
 const rootGalleryListeners=new Set<RootGalleryListener>()
-export function presentRootGallery(item:GallerySummary|null){rootGalleryListeners.forEach(listener=>listener(item))}
+export function presentRootGallery(item:GallerySummary|null){rootGalleryPresented=item!=null;rootGalleryListeners.forEach(listener=>listener(item))}
 export function subscribeRootGallery(listener:RootGalleryListener){rootGalleryListeners.add(listener);return()=>{rootGalleryListeners.delete(listener)}}
 function openListedGallery(sizeClass:string|null|undefined,item:GallerySummary,setSelected:(item:GallerySummary|null)=>void){if(galleryOpenMode(sizeClass)==="push")setSelected(item);else presentRootGallery(item)}
 function listedGalleryDestination(sizeClass:string|null|undefined,selected:GallerySummary|null,setSelected:(item:GallerySummary|null)=>void){return galleryOpenMode(sizeClass)==="push"?{isPresented:Boolean(selected),onChanged:(presented:boolean)=>{if(!presented)setSelected(null)},content:selected?<GalleryDetailView summary={selected}/>:<VStack/>}:undefined}
