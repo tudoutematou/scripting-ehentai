@@ -83,6 +83,15 @@ function findClassText(block: string, className: string): string {
   return match ? cleanText(match[3]) : ""
 }
 
+function findLanguage(block: string): string {
+  const languages: string[] = []
+  for (const match of block.matchAll(/\btitle\s*=\s*(["'])(.*?)\1/gi)) {
+    const value = decodeHtml(match[2] || "").trim().match(/^language:\s*(.+)$/i)?.[1]?.trim().toLowerCase() || ""
+    if (value && !languages.includes(value)) languages.push(value)
+  }
+  return languages.find(value => value !== "translated" && value !== "rewrite") || languages[0] || ""
+}
+
 function findUploader(block: string): string {
   const anchors = block.match(/<a\b[^>]*>[\s\S]*?<\/a>/gi) || []
   for (const anchor of anchors) {
@@ -149,6 +158,7 @@ export function parseSearchHtml(html: string, baseUrl: string): SearchExtractDat
       uploader: findUploader(block),
       pages: pagesMatch ? Number(pagesMatch[1].replace(/,/g, "")) : 0,
       url,
+      language: findLanguage(block),
     })
     seen.add(id)
   }
