@@ -1,10 +1,10 @@
-# EhViewer Feature Parity Map — refreshed 2026-08-31
+# EhViewer Feature Parity Map — refreshed 2026-09-11
 
 Reference: `xiaojieonly/Ehviewer_CN_SXJ`
 Reference branch: `BiLi_PC_Gamer`
 Reference head checked: `daa1510554c7109a586a20ee69ea348c63ffaa05` (2026-08-28)
 Target: Scripting iOS/iPadOS client
-Active branch: `feat/1.1-gallery-interaction`
+Active branch: `main`
 
 This map tracks current code capability and meaningful behavioral parity. It does **not** claim the Android architecture should be copied. Runtime-dependent capabilities still require the real Scripting environment.
 
@@ -50,7 +50,7 @@ Legend: ✅ implemented | 🟡 partial / active bug | 🔴 missing | ⚪ platfor
 | Comment vote | ✅ | Native up/down/cancel behavior via server response | — |
 | Torrent list | ✅ | Internal parser/list; known-positive real gallery fixed during Runtime Bug Sweep | — |
 | Archive choices | 🟡 | Internal archive option parsing/request works, but not EhViewer's newest managed archive-download service/progress/pause-resume UX | 2 |
-| Native share | 🔴 | No system Share action yet | 2 |
+| Native share | ✅ | Detail resources uses system ShareSheet with title + URL | — |
 | H@H action/client | ⚪ | Not implemented; low-value/platform-specific for this Scripting client | deferred |
 | Gallery newer-version/update detection | 🔴 | No EhViewer-style new-version/update flow identified in current Scripting code | 3 |
 | Open in browser | ✅ | Safe external Safari action | — |
@@ -134,7 +134,7 @@ Legend: ✅ implemented | 🟡 partial / active bug | 🔴 missing | ⚪ platfor
 3. **Reader navigation polish:** in-reader thumbnail navigator, start-position and orientation/keep-awake only where Scripting supports them cleanly.
 4. **Download Manager parity:** better queue/order/progress, richer quality options, maintenance/restore; background behavior only if supported.
 5. **Data backup/import:** export local Library/History/Search Bookmarks/Reader preferences without credentials.
-6. **Small Detail actions:** native Share, explicit Similar flow, gallery newer-version handling where protocol behavior is clear.
+6. **Small Detail actions:** explicit Similar flow, gallery newer-version handling where protocol behavior is clear.
 
 ## Do not copy merely for parity
 
