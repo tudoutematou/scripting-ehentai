@@ -1,7 +1,9 @@
+import { imageDiagnosticSnapshot } from "./GalleryFlow"
+import { createImageDiagnostics, diagnosticImageHost } from "./imageDiagnostics"
 import { favoriteCategoryChanged } from "./LibraryScene"
 import { AbortController, AbortSignal } from "scripting"
 import { mapGalleryActionItem, runEhAction, isGalleryRefSessionCurrent } from "./ehAction"
-import { GalleryGrid, GalleryRow, enqueueImageTask, imageQueueIdle, imageConsumers, IMAGE_MEMORY_CACHE_LIMIT, MOBILE_DETAIL_SECTION_ORDER, applySelectionGesture, clampReaderOffset, clampReaderScale, detailCoverRequestOptions, downloadSelectionSnapshot, dragSelectionTarget, eagerHomeThumb, galleryGridColumnCount, hashText, imageCacheDirectory, imageRequestCacheKey, imageRequestLimit, imageRequestOptions, imageStagePriority, imageTimeoutMs, isPublicThumbHost, mobilePreviewSummaryPages, mergeOfflineReaderPages, offlineReaderIndexForGalleryIndex, offlineReaderPositionLabel, photosProgressLabel, previewBrowserWindow, previewNeedsMore, previewPageRangeForIndexes, previewSummaryPages, readerOverlayAfterAction, readerTapAction, readerTargetIndex, readerViewportFrame, readerZoomAfterPageChange, readerZoomed, relationSummary, selectGallery, selectedPreviewPages, selectionModeAfterDone, shouldScheduleAutoPage, validCachedImagePayload } from "./GalleryFlow"
+import { GalleryGrid, GalleryRow, enqueueImageTask, imageQueueIdle, imageConsumers, imageHostRequestLimit, imageTaskHost, shouldRetryImageLoad, IMAGE_MEMORY_CACHE_LIMIT, MOBILE_DETAIL_SECTION_ORDER, applySelectionGesture, clampReaderOffset, clampReaderScale, detailCoverRequestOptions, downloadSelectionSnapshot, dragSelectionTarget, eagerHomeThumb, galleryGridColumnCount, hashText, imageCacheDirectory, imageRequestCacheKey, imageRequestLimit, imageRequestOptions, imageStagePriority, imageTimeoutMs, isPublicThumbHost, mobilePreviewSummaryPages, mergeOfflineReaderPages, offlineReaderIndexForGalleryIndex, offlineReaderPositionLabel, photosProgressLabel, previewBrowserWindow, previewNeedsMore, previewPageRangeForIndexes, previewSummaryPages, readerOverlayAfterAction, readerTapAction, readerTargetIndex, readerViewportFrame, readerZoomAfterPageChange, readerZoomed, relationSummary, selectGallery, selectedPreviewPages, selectionModeAfterDone, shouldScheduleAutoPage, validCachedImagePayload } from "./GalleryFlow"
 import { buildFavoritesUrl, buildUConfigRenameSubmission, favoriteLoginError, isFavoriteRequestContextCurrent, mergeFavoriteCategoryNames, parseFavoriteCategories, parseFavoritePopupHtml, parseUConfigFavoriteCategories, validateFavoriteCategoryNames, verifiedFavoriteCategories, verifyFavoriteMutation } from "./favorites"
 import { addLocalBookmark, assertDownloadCapacity, createSelectedDownload, deleteHistory, deleteOfflineDirectoryTransaction, deleteSavedSearch, downloadCompletionTarget, downloadWritesLibrary, downloadWritesPhotos, historySummary, inventoryIsComplete, isDownloadComplete, inventoryPreparedPages, appendDownloadInventory, isImagePayload, loadDownloads, loadHistory, loadLocalBookmarks, loadPreferences, loadSavedSearches, localBookmarkSummary, markDownloadRunning, normalizeAutoPageSeconds, offlineReaderPages, parseDownloads, pauseDownload, reconcileOfflineDownloadState, recoverDeletingDirectories, recoverInterruptedDownloads, recordHistory, removeLocalBookmark, restoreSavedSearch, resumeIndex, runDownload, savePreferences, saveSearch, updateReadingProgress, writeOfflinePageAtomically, type HistoryStore } from "./libraryStore"
 import { browserCookiePaths, chooseBrowserCookieDraft, cookieAuthPresence, cookieHeaderFor, cookiesForImportedAccount, getAccountSessionGeneration, getAccountStatus, getBaseUrl, importBrowserCookieDraft, isAccountRequestContextCurrent, isStructurallyValidIgneous, listAccountProfiles, manualCookiesForImport, manualCookieSummary, manualCookieTarget, mergeCookies, parseCookieText, parseCookieTextForSite, productionRequestAuth, removeAccountProfile, routeUrlForSite, SAFARI_LOGIN_URL, sanitizeCookies, setActiveSite, signOut, activeSiteAfterCredentialImport, storeResponseCookies, switchAccountProfile, upsertAccountProfile } from "./account"
@@ -41,6 +43,45 @@ export type SelfTestOptions = { network?: boolean }
 
 export async function runSelfTests(options: SelfTestOptions = {}): Promise<SelfTestResult[]> {
   const checks: Check[] = [
+    { name: "account.ex-image-host-cookies", run: () => {
+      const cookies=[{name:"ipb_member_id",value:"1",domain:"exhentai.org",path:"/",hostOnly:true},{name:"ipb_pass_hash",value:"h",domain:"exhentai.org",path:"/",hostOnly:true},{name:"igneous",value:"ok",domain:"exhentai.org",path:"/",hostOnly:true}] as any;
+      const header=cookieHeaderFor(cookies,"https://s.exhentai.org/t/cover.jpg");
+      assert(header.includes("ipb_member_id=1")&&header.includes("igneous=ok"),"host-only Ex Cookie 未发给 s.exhentai.org 封面");
+      assert(!cookieHeaderFor(cookies,"https://ehgt.org/t/cover.jpg").includes("ipb_member_id"),"Ex Cookie 不应发给 ehgt.org");
+    } },
+    { name: "image-queue.slow-host-limit-and-timeout-no-retry", run: async () => {
+      assert(imageQueueIdle(),"每主机上限自测需要空闲队列");
+      assert(imageHostRequestLimit("s.exhentai.org")===2&&imageHostRequestLimit("ehgt.org")>=8&&imageTaskHost("https://s.exhentai.org/a.jpg")==="s.exhentai.org","封面慢主机并发上限不正确");
+      assert(!shouldRetryImageLoad({name:"ImageTimeout"})&&!shouldRetryImageLoad({name:"ImageSessionCancelled"})&&shouldRetryImageLoad({name:"Error"}),"超时封面仍会自动重试");
+      const release:Array<()=>void>=[];let slow=0,fast=0;
+      const slowTasks=Array.from({length:3},(_,i)=>enqueueImageTask("home-thumbnail",async()=>{slow++;await new Promise<void>(resolve=>release.push(resolve));return "slow"},undefined,`https://s.exhentai.org/t/${i}.jpg`).then(()=>"done",()=>"cancelled"));
+      const other=enqueueImageTask("home-thumbnail",async()=>{fast++;return "fast"},undefined,"https://ehgt.org/t/ok.jpg");
+      try{
+        assert(slow===2,"s.exhentai.org 仍占用全部8路");
+        assert(fast===1,"ehgt 封面被 s.exhentai.org 超时堵住");
+        assert(await other==="fast","其他主机封面未完成");
+      }finally{(globalThis as any).__ehentaiClearImageMemoryCache();release.forEach(resolve=>resolve());await Promise.all(slowTasks)}
+    } },
+
+    {name:"image-diagnostics.hung-body-after-abort",run:async()=>{
+      assert(imageQueueIdle(),"挂起诊断验证需要空闲队列");const owner=new AbortController();let release!:()=>void;
+      const task=enqueueImageTask("home-thumbnail",async(_ms,signal,trace)=>{trace.step("body");trace.timeout();await new Promise<void>(resolve=>{release=resolve});return "late"},owner.signal,"https://ehgt.org/test.jpg").catch(()=>"cancelled");
+      try{owner.abort();const waiting=imageDiagnosticSnapshot(),record=waiting.pending[waiting.pending.length-1];assert(waiting.active===1&&record.phase==="body"&&record.timeoutAt!==null&&record.cancelAt!==null&&record.outcome===null,"取消后的真实挂起任务未被诊断识别");release();await task;const done=imageDiagnosticSnapshot();assert(done.active===0&&done.recent[0].id===record.id&&done.recent[0].outcome==="cancelled","真正结束后诊断或槽位未更新")}
+      finally{release();await task}
+    }},
+
+    {name:"image-diagnostics.phase-timeout-and-privacy",run:()=>{
+      let clock=0;const diagnostics=createImageDiagnostics(()=>clock),trace=diagnostics.begin("home-thumbnail","https://user:secret@ehgt.org/private/image.jpg?token=SECRET",true);
+      clock=10;trace.step("started");clock=20;trace.step("fetch");clock=50;trace.response(200,"image/webp;private=SECRET");trace.step("body");clock=100;trace.timeout();clock=110;trace.cancel();clock=150;
+      const captured=diagnostics.snapshot(),item=captured.pending[0];assert(item.phase==="body"&&item.timeoutWaitMs===50&&item.cancelWaitMs===40&&item.queueMs===10&&item.phaseMs===100,"超时/取消覆盖了停滞阶段或耗时错误");
+      assert(!JSON.stringify(captured).includes("SECRET")&&!JSON.stringify(captured).includes("private")&&item.host==="ehgt.org","诊断保留了URL或响应头原文");
+      clock=200;trace.finish("cancelled");trace.finish("failed");const ended=diagnostics.snapshot();assert(ended.pending.length===0&&ended.recent.length===1&&ended.recent[0].outcome==="cancelled"&&ended.recent[0].timeoutWaitMs===100,"结算诊断重复或未保留超时后等待");assert(captured.pending[0].ended===null,"快照被后续记录篡改");
+      assert(diagnosticImageHost("https://secret.host.invalid/path")==="other"&&diagnosticImageHost("bad")==="unknown","域名未白名单化");
+    }},
+    {name:"image-diagnostics.bounded-memory",run:()=>{
+      const diagnostics=createImageDiagnostics(()=>0);const tasks=Array.from({length:520},()=>diagnostics.begin("home-thumbnail"));assert(diagnostics.snapshot().pending.length===512&&diagnostics.snapshot().dropped===8,"诊断无限增长");tasks.forEach(task=>task.finish("success"));const final=diagnostics.snapshot();assert(final.pending.length===0&&final.recent.length===80,"完成记录不受限或pending泄漏");
+    }},
+
     {name:"favorites.same-category-keeps-load",run:()=>{assert(!favoriteCategoryChanged(undefined,undefined)&&!favoriteCategoryChanged(2,2)&&favoriteCategoryChanged(undefined,2)&&favoriteCategoryChanged(2,undefined),"重选当前分类不应取消正在进行的加载")}},
     { name: "image-cache.shared-consumers", run: async () => {
       let unused=0,resolveTask!:(value:string)=>void;const task=new Promise<string>(resolve=>{resolveTask=resolve}),consume=imageConsumers(task,()=>unused++);
