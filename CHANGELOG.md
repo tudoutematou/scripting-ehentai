@@ -3,6 +3,7 @@
 本项目遵循 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/) 的简化格式；版本号遵循语义化版本的意图。
 
 ## [Unreleased]
+- 修复切换账号后旧封面排队任务与未完成 Promise 继续占用新账号加载链路；取消旧请求并保留 URL 磁盘缓存，实际并发仍不超过 8。
 
 发布后优化已进入 `main`（2026-09-10）。尚未切新的 GitHub Release；从 `main` 的 `src/` 导入即可获得这些改动。
 
