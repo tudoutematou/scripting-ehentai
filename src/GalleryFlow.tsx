@@ -29,7 +29,7 @@ function enqueueImageTask<T>(stage:ImageStage,work:(queueMs:number)=>Promise<T>)
 export function hashText(value:string){const part=(seed:number)=>{let hash=seed;for(let i=0;i<value.length;i++){hash^=value.charCodeAt(i);hash=Math.imul(hash,16777619)}return(hash>>>0).toString(16).padStart(8,"0")};return part(2166136261)+part(0x811c9dc5^value.length)}
 function imageHost(url:string){try{return new URL(url).host}catch{return "invalid-host"}}
 export function validCachedImagePayload(contentType:string,data:any){return isImagePayload(contentType,data)}
-export function imageRequestCacheKey(url:string,stage:ImageStage,referer=""){return `${getAccountSessionGeneration()}|${stage}|${referer}|${url}`}
+export function imageRequestCacheKey(url:string,stage:ImageStage,referer=""){const session=stage==="reader-image"?`${getAccountSessionGeneration()}|`:"";return `${session}${stage}|${referer}|${url}`}
 export async function cachedImagePath(url:string,stage:ImageStage,options?:any,refresh=false){
   const cacheKey=imageRequestCacheKey(url,stage,String(options?.headers?.Referer||""))
   const existing=imagePathCache.get(cacheKey);if(existing)return existing
