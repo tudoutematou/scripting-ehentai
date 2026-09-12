@@ -28,23 +28,27 @@ export function imageRequestLimit(){return MAX_IMAGE_REQUESTS}
 export function imageTimeoutMs(stage:ImageStage){return stage==="reader-image"?20_000:IMAGE_TIMEOUT_MS}
 export function eagerHomeThumb(index:number){return Number(index)<EAGER_HOME_THUMBS}
 export function isPublicThumbHost(url:string){try{const host=new URL(url).hostname.toLowerCase();return host==="ehgt.org"||host.endsWith(".ehgt.org")}catch{return false}}
+export function imageCacheDirectory(manager:any=fileManager){const root=String(manager?.temporaryDirectory||"").trim().replace(/\/$/,"");return `${root}/ehentai-image-cache`}
+let legacyImageCacheAbandoned=false
+async function abandonLegacyImageCache(){if(legacyImageCacheAbandoned)return;legacyImageCacheAbandoned=true;try{const legacy=`${String((Script as any).directory||"").replace(/\/$/,"")}/.image-cache`;if(legacy.endsWith("/.image-cache")&&await fileManager.exists(legacy))await fileManager.remove(legacy)}catch{}}
 const pendingImageTasks:PendingImageTask[]=[];let activeImageTasks=0;let imageTaskSequence=0
 function drainImageTasks(){while(activeImageTasks<MAX_IMAGE_REQUESTS&&pendingImageTasks.length){pendingImageTasks.sort((a,b)=>IMAGE_PRIORITY[b.stage]-IMAGE_PRIORITY[a.stage]||a.sequence-b.sequence);pendingImageTasks.shift()?.start()}}
 function enqueueImageTask<T>(stage:ImageStage,work:(queueMs:number)=>Promise<T>):Promise<T>{const enqueuedAt=Date.now();return new Promise((resolve,reject)=>{const start=()=>{activeImageTasks+=1;void work(Date.now()-enqueuedAt).then(resolve,reject).finally(()=>{activeImageTasks-=1;drainImageTasks()})};pendingImageTasks.push({stage,sequence:imageTaskSequence++,enqueuedAt,start});drainImageTasks()})}
 export function hashText(value:string){const part=(seed:number)=>{let hash=seed;for(let i=0;i<value.length;i++){hash^=value.charCodeAt(i);hash=Math.imul(hash,16777619)}return(hash>>>0).toString(16).padStart(8,"0")};return part(2166136261)+part(0x811c9dc5^value.length)}
 function imageHost(url:string){try{return new URL(url).host}catch{return "invalid-host"}}
 export function validCachedImagePayload(contentType:string,data:any){return isImagePayload(contentType,data)}
-export function imageRequestCacheKey(url:string,stage:ImageStage,referer=""){const session=stage==="reader-image"?`${getAccountSessionGeneration()}|`:"";return `${session}${stage}|${referer}|${url}`}
+export function imageRequestCacheKey(url:string,stage:ImageStage,_referer=""){const session=stage==="reader-image"?`${getAccountSessionGeneration()}|`:"";return `${session}${url}`}
 export async function cachedImagePath(url:string,stage:ImageStage,options?:any,refresh=false){
   const cacheKey=imageRequestCacheKey(url,stage,String(options?.headers?.Referer||""))
   const existing=imagePathCache.get(cacheKey);if(existing)return existing
+  void abandonLegacyImageCache()
   const run=async(queueMs:number)=>{const started=Date.now();let fetchStarted=0;let response:any
-    try{const dir=`${Script.directory}/.image-cache`;await fileManager.createDirectory(dir,true);const ext=new URL(url).pathname.match(/\.(jpg|jpeg|png|webp|gif)$/i)?.[1]?.toLowerCase()||"jpg";const path=`${dir}/${hashText(cacheKey)}.${ext}`
+    try{const dir=imageCacheDirectory();await fileManager.createDirectory(dir,true);const ext=new URL(url).pathname.match(/\.(jpg|jpeg|png|webp|gif)$/i)?.[1]?.toLowerCase()||"jpg";const path=`${dir}/${hashText(cacheKey)}.${ext}`
       try{if(refresh&&await fileManager.isFile(path))await fileManager.remove(path);if(!refresh&&await fileManager.isFile(path)){await reportSafe({stage,ok:true,request:{url,status:200,statusText:"cache"},notes:`host=${imageHost(url)}; queueMs=${queueMs}; fetchMs=0; totalMs=${queueMs+Date.now()-started}; contentType=cache; settle=cache-hit`});return path}}catch{}
       fetchStarted=Date.now();response=await fetch(url,{...(options||{}),signal:AbortSignal.timeout(imageTimeoutMs(stage))} as any);const contentType=String(response.headers?.get?.("content-type")||"");if(!response.ok)throw new Error(`HTTP ${response.status}`);const data=await response.data();if(!validCachedImagePayload(contentType,data))throw new Error("图片响应无效。");const fetchMs=Date.now()-fetchStarted;await fileManager.writeAsData(path,data)
       await reportSafe({stage,ok:true,request:{url,status:Number(response.status||0),statusText:String(response.statusText||"")},notes:`host=${imageHost(url)}; queueMs=${queueMs}; fetchMs=${fetchMs}; totalMs=${queueMs+Date.now()-started}; contentType=${contentType||"unknown"}; settle=written`});return path
     }catch(error){imagePathCache.delete(cacheKey);await reportSafe({stage,ok:false,error,request:{url,status:Number(response?.status||0),statusText:String(response?.statusText||"")},notes:`host=${imageHost(url)}; queueMs=${queueMs}; fetchMs=${fetchStarted?Date.now()-fetchStarted:0}; totalMs=${queueMs+Date.now()-started}; settle=failed`});throw error}
-  };const task=stage!=="reader-image"&&isPublicThumbHost(url)?run(0):enqueueImageTask(stage,run);rememberImageCache(cacheKey,task);return task
+  };const task=enqueueImageTask(stage,run);rememberImageCache(cacheKey,task);return task
 }
 export function imageRequestOptions(url:string,referer=getBaseUrl()){const cookie=getCookieHeader(url);return{headers:{Accept:"image/webp,image/png,image/jpeg,image/gif,image/*,*/*;q=0.8",Referer:referer,...(cookie?{Cookie:cookie}:{})}}}
 function thumbPlaceholder(frame:any,failed=false){return failed?<Image systemName="photo" frame={frame} foregroundStyle="tertiaryLabel"/>:<ProgressView progressViewStyle="circular" frame={frame}/>}
