@@ -1,18 +1,18 @@
-# CURRENT_TASK — Post-release optimization landed on main
+# CURRENT_TASK — Local DEV landed on main
 
 Branch: `main`  
-HEAD at last code sync: `f720d521ac36b6c3e95dea906dbc78c1f2660dc3`
+HEAD at last code sync: `3b045efec733737be531dfc8320b82a6e7231065`
 
 ## Status
 
-P0–P2 post-release optimizations are on `main`. Do not start P3.
+2026-09-13 之后的本地 DEV 改动已写入 `main`（2026-09-22）：原生 UI 统一、收藏搜索、账户概览、阅读器真实加载进度、回车搜索、保存书签与导航抢点击修复。Do not start P3.
 
 ## Device QA
 
-- Cookie drafts: candidate paths exclude iCloud; no `ehviewer_cookie.txt` in documents / App Group / Safari / iCloud.
-- Live search→detail→first image passed earlier this session (core 1.33s / image 200).
-- Later searches aborted at the 20s HTML timeout; large-gallery window and download-pause runtime were not re-checked in that window.
-- Still needs a person: 「查看全部」scrolling, continuous Reader, Photos retry confirmation.
+- 保存搜索应弹出命名框并留在当前页，不应跳进搜索书签列表。
+- 大 GIF 阅读页应显示真实下载进度。
+- 发现页回车搜索应进入结果页。
+- iPad 侧栏收放、详情返回、预览点指定页、继续阅读跨首批仍需真机确认。
 
 ## Out of scope
 
