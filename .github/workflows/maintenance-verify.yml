@@ -1,0 +1,116 @@
+name: Verify state ownership candidate
+on:
+  push:
+    branches: [maintenance/state-ownership-20260923]
+    paths:
+      - .github/workflows/maintenance-verify.yml
+      - .maintenance/state-ownership.part1.b64
+      - .maintenance/state-ownership.part2.b64
+permissions:
+  contents: write
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: input
+          persist-credentials: false
+      - uses: actions/checkout@v4
+        with:
+          ref: 86ba36b3f642d934b85503a2f8d0f639b9ce8789
+          path: target
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Prepare compiler and immutable baseline
+        run: |
+          npm install --prefix "$RUNNER_TEMP/check-tools" --ignore-scripts --no-save typescript@5.8.3
+          echo "NODE_PATH=$RUNNER_TEMP/check-tools/node_modules" >> "$GITHUB_ENV"
+          mkdir -p "$RUNNER_TEMP/baseline" "$RUNNER_TEMP/changed" "$RUNNER_TEMP/dts" "$RUNNER_TEMP/results"
+          git -C target archive HEAD | tar -x -C "$RUNNER_TEMP/baseline"
+      - name: Apply locally verified exact-byte patch
+        run: |
+          python - <<'PY'
+          import base64, gzip, hashlib, json, os, subprocess
+          from pathlib import Path
+          data = ''.join(Path(f'input/.maintenance/state-ownership.part{i}.b64').read_text().strip() for i in (1,2))
+          compressed = base64.b64decode(data, validate=True)
+          assert hashlib.sha256(compressed).hexdigest() == '2270e7c719f33aa39eb0e1905e82d27808a8e5f9b00018ffe19c1a81e3094155', 'transport hash mismatch'
+          bundle = json.loads(gzip.decompress(compressed))
+          assert bundle['baseline'] == subprocess.check_output(['git','-C','target','rev-parse','HEAD'],text=True).strip()
+          allowed = {'CURRENT_TASK.md','src/GalleryFlow.tsx','src/LibraryScene.tsx','src/ehentai.ts','tools/check_view_ownership.cjs'}
+          assert len(bundle['files']) == len(allowed) and {f['path'] for f in bundle['files']} == allowed
+          temp = Path(os.environ['RUNNER_TEMP'])
+          manifest = []
+          for entry in bundle['files']:
+              path = Path('target') / entry['path']
+              assert path.exists() == entry['exists'], entry['path']
+              original = path.read_bytes() if path.exists() else b''
+              assert hashlib.sha256(original).hexdigest() == entry['before'], entry['path']
+              text = original.decode('utf-8')
+              for start,end,replacement in reversed(entry['ops']):
+                  assert 0 <= start <= end <= len(text)
+                  text = text[:start] + replacement + text[end:]
+              updated = text.encode('utf-8')
+              assert hashlib.sha256(updated).hexdigest() == entry['after'], entry['path']
+              assert hashlib.sha1(b'blob '+str(len(updated)).encode()+b'\0'+updated).hexdigest() == entry['blob'], entry['path']
+              path.parent.mkdir(parents=True,exist_ok=True)
+              path.write_bytes(updated)
+              copy = temp/'changed'/entry['path']
+              copy.parent.mkdir(parents=True,exist_ok=True)
+              copy.write_bytes(updated)
+              manifest.append({k:v for k,v in entry.items() if k!='ops'})
+          (temp/'type-regression.cjs').write_text(bundle['type_check'])
+          (temp/'results'/'manifest.json').write_text(json.dumps(manifest,indent=2))
+          print('Exact-byte patch verified for all five files.')
+          PY
+      - name: Fetch pinned declaration snapshots for comparison only
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for entry in global.d.ts:090fb52fde39138bd6378bc4882d214c960b8189 scripting.d.ts:0b891993b72d733364f62c29fb6453ddbed4154a; do
+            file=${entry%%:*}
+            sha=${entry##*:}
+            gh api repos/Yii-An/Scripting-Scripts/git/blobs/$sha --jq .content | base64 -d > "$RUNNER_TEMP/dts/$file"
+            test "$(git hash-object "$RUNNER_TEMP/dts/$file")" = "$sha"
+          done
+      - name: Focused production-code regression checks
+        run: |
+          node target/tools/check_view_ownership.cjs target | tee "$RUNNER_TEMP/results/ownership.txt"
+          set +e
+          node target/tools/check_view_ownership.cjs "$RUNNER_TEMP/baseline" > "$RUNNER_TEMP/results/baseline.txt" 2>&1
+          baseline_status=$?
+          set -e
+          test "$baseline_status" = 1
+          grep -F '1/18 ownership checks passed' "$RUNNER_TEMP/results/baseline.txt"
+          node --check target/tools/check_view_ownership.cjs
+          git -C target diff --check
+          python target/tools/scan_sensitive_artifacts.py "$RUNNER_TEMP/changed" | tee "$RUNNER_TEMP/results/changed-secrets.txt"
+      - name: Compare diagnostics without hiding existing errors
+        run: node "$RUNNER_TEMP/type-regression.cjs" "$RUNNER_TEMP/baseline" target "$RUNNER_TEMP/dts" | tee "$RUNNER_TEMP/results/diagnostic-comparison.json"
+      - name: Publish clean candidate only (do not update main)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          test "$(gh api repos/tudoutematou/scripting-ehentai/git/ref/heads/main --jq .object.sha)" = 86ba36b3f642d934b85503a2f8d0f639b9ce8789
+          cd target
+          git add CURRENT_TASK.md src/GalleryFlow.tsx src/LibraryScene.tsx src/ehentai.ts tools/check_view_ownership.cjs
+          python - <<'PY'
+          import subprocess
+          expected = {'CURRENT_TASK.md','src/GalleryFlow.tsx','src/LibraryScene.tsx','src/ehentai.ts','tools/check_view_ownership.cjs'}
+          assert set(subprocess.check_output(['git','diff','--cached','--name-only'],text=True).splitlines()) == expected
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix: own navigation and async writes by gallery view session' -m 'Scope detail, preview, and reader updates to their owning view/account; guard selection and jump races; record only visible reading progress. Add 18 focused production-component regression checks. Native Scripting device QA remains pending.'
+          git push origin HEAD:refs/heads/maintenance/state-ownership-verified-20260923
+          git rev-parse HEAD | tee "$RUNNER_TEMP/results/candidate.sha"
+          git show --stat --oneline HEAD
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: state-ownership-verification
+          path: ${{ runner.temp }}/results
+          retention-days: 1
