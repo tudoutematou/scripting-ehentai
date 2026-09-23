@@ -1,0 +1,28 @@
+name: Maintenance declaration snapshot
+on:
+  push:
+    branches: [maintenance/state-ownership-20260923]
+    paths: [.github/workflows/maintenance-types.yml]
+permissions:
+  contents: read
+jobs:
+  declarations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch and verify public declaration snapshots
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p dts
+          for entry in global.d.ts:090fb52fde39138bd6378bc4882d214c960b8189 scripting.d.ts:0b891993b72d733364f62c29fb6453ddbed4154a; do
+            file=${entry%%:*}
+            sha=${entry##*:}
+            gh api repos/Yii-An/Scripting-Scripts/git/blobs/$sha --jq .content | base64 -d > dts/$file
+            test "$(git hash-object dts/$file)" = "$sha"
+          done
+      - uses: actions/upload-artifact@v4
+        with:
+          name: scripting-declarations-snapshot
+          path: dts
+          retention-days: 1
