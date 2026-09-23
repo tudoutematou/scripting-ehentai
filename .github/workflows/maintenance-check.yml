@@ -1,0 +1,22 @@
+name: Isolated maintenance check
+on:
+  push:
+    branches: [maintenance/state-ownership-20260923]
+permissions:
+  contents: read
+jobs:
+  source:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 86ba36b3f642d934b85503a2f8d0f639b9ce8789
+          persist-credentials: false
+      - name: Export authoritative baseline
+        run: git archive --format=zip --output=source.zip HEAD
+      - uses: actions/upload-artifact@v4
+        with:
+          name: maintenance-source-86ba36b
+          path: source.zip
+          retention-days: 1
