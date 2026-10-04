@@ -1,4 +1,5 @@
-import { FormData } from "scripting"
+import { sharedRequestConsumers } from "./sharedRequest"
+import { AbortController, FormData } from "scripting"
 import { GallerySummary, PageExtractData, SearchExtractData } from "./extractors"
 import { GalleryPageLink, buildSearchUrl, dedupeAndSortPageLinks, normalizePageLinks, withPreviewPage } from "./pure"
 import { parseSearchHtml } from "./searchHtml"
@@ -16,8 +17,10 @@ export type ResolvedImagePage = PageExtractData & { pageUrl: string }
 const detailCoreCache = new Map<string, GalleryDetail>()
 const previewPageCache = new Map<string, GalleryPageLink[]>()
 const imagePageCache = new Map<string, Promise<ResolvedImagePage>>()
+const imagePageConsumers=new Map<string,{task:Promise<ResolvedImagePage>;consume:(signal?:RequestAbortSignal)=>Promise<ResolvedImagePage>;owner:AbortController}>()
+function htmlCancellation(){const error=new Error("请求已取消。");error.name="AbortError";return error}
 function galleryCacheKey(url:string,context:Pick<AccountRequestContext,"site"|"generation">){return `${context.site}|${context.generation}|${url}`}
-export function invalidateGalleryCaches(){detailCoreCache.clear();previewPageCache.clear();imagePageCache.clear()}
+export function invalidateGalleryCaches(){detailCoreCache.clear();previewPageCache.clear();imagePageCache.clear();for(const entry of imagePageConsumers.values())entry.owner.abort();imagePageConsumers.clear()}
 ;(globalThis as any).__ehentaiInvalidateGalleryCaches=invalidateGalleryCaches
 
 function httpError(message: string, response: any, url: string): Error {
@@ -108,8 +111,8 @@ export function nextPreviewPageIndex(detail: Pick<GalleryDetail, "previewPages" 
 export async function loadPreviewPageBatch(detail:GalleryDetail,startPage?:number,count=2,signal?:RequestAbortSignal,context:AccountRequestContext=captureAccountRequestContext()):Promise<PreviewLoadResult>{
   const started = Date.now(), previewPages = Math.max(1, Number(detail.previewPages || 1)); startPage ??= nextPreviewPageIndex(detail); if (startPage == null) return { pageLinks: detail.pageLinks, loadedPreviewPages: detail.loadedPreviewPages, failedPreviewPages: detail.failedPreviewPages, elapsedMs: 0 }
   const loaded = new Set(detail.loadedPreviewPages || [0]), failed = new Set(detail.failedPreviewPages || []), results = new Map<number, GalleryPageLink[]>(); const pending = Array.from({ length: Math.max(0, Math.min(count, previewPages - startPage)) }, (_, offset) => startPage + offset)
-  const worker = async () => { while (pending.length) { const page = pending.shift(); if (page == null) return; try { results.set(page, await fetchPreviewPage(withPreviewPage(detail.sourceUrl,page),page,signal,context)); loaded.add(page); failed.delete(page) } catch { failed.add(page) } } }
-  await Promise.all(Array.from({ length: Math.min(2, pending.length) }, worker)); const result = { pageLinks: dedupeAndSortPageLinks([...detail.pageLinks, ...[...results.values()].flat()]), loadedPreviewPages: [...loaded].sort((a,b) => a-b), failedPreviewPages: [...failed].sort((a,b) => a-b), elapsedMs: Date.now() - started }
+  const worker = async () => { while (pending.length) { if(signal?.aborted)throw htmlCancellation();const page = pending.shift(); if (page == null) return; try { results.set(page, await fetchPreviewPage(withPreviewPage(detail.sourceUrl,page),page,signal,context)); loaded.add(page); failed.delete(page) } catch(error) { if(signal?.aborted)throw htmlCancellation();failed.add(page) } } }
+  await Promise.all(Array.from({ length: Math.min(2, pending.length) }, worker)); if(signal?.aborted)throw htmlCancellation();const result = { pageLinks: dedupeAndSortPageLinks([...detail.pageLinks, ...[...results.values()].flat()]), loadedPreviewPages: [...loaded].sort((a,b) => a-b), failedPreviewPages: [...failed].sort((a,b) => a-b), elapsedMs: Date.now() - started }
   await reportSafely({ stage: "gallery-detail-preview-batch", ok: result.failedPreviewPages.length === 0, request: { url: detail.sourceUrl, status: 0, statusText: "" }, notes: `previewMs=${result.elapsedMs}; loadedPreviewPages=${result.loadedPreviewPages.length}/${previewPages}; loadedImages=${result.pageLinks.length}` }); return result
 }
 export async function loadPreviewPageRange(detail:GalleryDetail,firstPage:number,lastPage:number,signal?:RequestAbortSignal,context:AccountRequestContext=captureAccountRequestContext()):Promise<PreviewLoadResult>{const total=Math.max(1,Number(detail.previewPages||1)),first=Math.floor(firstPage),last=Math.floor(lastPage);if(!Number.isInteger(first)||!Number.isInteger(last)||first<0||last<first||last>=total)throw new Error("预览分页范围无效。");return loadPreviewPageBatch(detail,first,last-first+1,signal,context)}
@@ -117,31 +120,36 @@ export function applyPreviewLoadResult(core: GalleryDetail, previews: PreviewLoa
 export function hasCompletePreviewInventory(detail: Pick<GalleryDetail, "metadata" | "pageLinks" | "previewPages" | "loadedPreviewPages" | "failedPreviewPages">): boolean { const total=galleryPageCount(detail),indexes=new Set(detail.pageLinks.map(page=>page.index)); return total>0 && detail.pageLinks.length===total && indexes.size===total && Array.from({length:total},(_,index)=>index+1).every(index=>indexes.has(index)) && (detail.loadedPreviewPages || []).length >= Math.max(1, Number(detail.previewPages || 1)) && detail.failedPreviewPages.length === 0 }
 export function assertCompletePreviewInventory(detail: Pick<GalleryDetail, "metadata" | "pageLinks" | "previewPages" | "loadedPreviewPages" | "failedPreviewPages">): void { if (!hasCompletePreviewInventory(detail)) throw new Error("页面库存不完整，请重试预览加载后再下载。") }
 
-async function resolveImagePageFresh(pageUrl:string,context:AccountRequestContext):Promise<ResolvedImagePage>{
+async function resolveImagePageFresh(pageUrl:string,context:AccountRequestContext,signal?:RequestAbortSignal):Promise<ResolvedImagePage>{
   try{
-    const {html,finalUrl,response}=await fetchHtml(pageUrl,"image-page","",undefined,context)
+    const {html,finalUrl,response}=await fetchHtml(pageUrl,"image-page","",signal,context)
     let parsed:PageExtractData
     try{parsed=parseImagePageHtml(html,finalUrl)}catch(error){throw stageError("image-page.parse",error)}
     if(parsed.error)throw httpError(parsed.error,response,finalUrl)
     const resolved={...parsed,pageUrl:finalUrl}
     await reportSafely({stage:"gallery-image-page",ok:true,request:{url:finalUrl,status:Number(response?.status||0),statusText:String(response?.statusText||"")},notes:`imageUrl=${resolved.imageUrl?"yes":"no"}; originalUrl=${resolved.originalUrl?"yes":"no"}`})
-    return resolved
+    if(signal?.aborted||!isAccountRequestContextCurrent(context))throw htmlCancellation();return resolved
   }catch(error){
     const value=error as any
     await reportSafely({stage:"gallery-image-page",ok:false,error,request:{url:String(value?.url||pageUrl),status:Number(value?.status||0),statusText:String(value?.statusText||"")}})
     throw error
   }
 }
-export function resolveImagePage(pageUrl:string,refresh=false):Promise<ResolvedImagePage>{
+// Diagnostic-only direct resolver: never removes or populates the normal Promise cache.
+export function resolveImagePageForPerformance(pageUrl:string,signal?:RequestAbortSignal){return resolveImagePageFresh(pageUrl,captureAccountRequestContext(),signal)}
+export function resolveImagePage(pageUrl:string,refresh=false,signal?:RequestAbortSignal):Promise<ResolvedImagePage>{
+  if(signal?.aborted)return Promise.reject(htmlCancellation())
   const context=captureAccountRequestContext(),key=galleryCacheKey(pageUrl,context)
   if(refresh)imagePageCache.delete(key)
-  const existing=imagePageCache.get(key)
-  if(existing)return existing
-  const task=resolveImagePageFresh(pageUrl,context).catch(error=>{if(imagePageCache.get(key)===task)imagePageCache.delete(key);throw error})
-  imagePageCache.set(key,task)
-  return task
+  const existing=imagePageCache.get(key),pending=imagePageConsumers.get(key)
+  if(existing)return pending?.task===existing?pending.consume(signal):existing
+  const owner=new AbortController(),task=resolveImagePageFresh(pageUrl,context,owner.signal)
+  const forget=()=>{if(imagePageCache.get(key)===task)imagePageCache.delete(key);if(imagePageConsumers.get(key)?.task===task)imagePageConsumers.delete(key)}
+  const consume=sharedRequestConsumers(task,()=>{forget();owner.abort()},htmlCancellation)
+  imagePageCache.set(key,task);imagePageConsumers.set(key,{task,consume,owner})
+  void task.then(()=>{if(imagePageConsumers.get(key)?.task===task)imagePageConsumers.delete(key)},forget)
+  return consume(signal)
 }
-
 export async function loadTorrentList(torrentUrl:string,sourceUrl:string):Promise<TorrentItem[]>{let target:URL;let source:URL;try{target=new URL(torrentUrl);source=new URL(sourceUrl)}catch{throw new Error("种子入口无效。")}if(target.protocol!=="https:"||target.hostname!==source.hostname||!/(?:^|\.)e-hentai\.org$|(?:^|\.)exhentai\.org$/i.test(target.hostname))throw new Error("种子入口无效。");const result=await fetchHtml(target.toString(),"torrent-list",source.toString());return parseTorrentListHtml(result.html,result.finalUrl)}
 
 export async function submitGalleryComment(detail:Pick<GalleryDetail,"sourceUrl">,text:string,commentId?:number):Promise<GalleryComment[]>{const value=String(text||"").trim();if(!value)throw new Error("评论内容不能为空。");const fields=commentId?{commenttext_edit:value,edit_comment:String(commentId)}:{commenttext_new:value};const result=await postForm(detail.sourceUrl,fields,"gallery-comment");return parseCommentMutationHtml(result.html)}
