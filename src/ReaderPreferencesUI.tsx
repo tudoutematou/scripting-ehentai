@@ -1,5 +1,5 @@
 import { Picker, Section, Stepper, Text, Toggle } from "scripting"
-import type { ReaderPreferences } from "./libraryStore"
+import { READER_PRELOAD_MAX, type ReaderPreferences } from "./libraryStore"
 
 export function ReaderPreferenceSections({prefs,onChange}:{prefs:ReaderPreferences;onChange:(update:Partial<ReaderPreferences>)=>void}){
   const directionHelp=prefs.direction==="rtl"?"右滑下一页 · 左滑上一页":"左滑下一页 · 右滑上一页"
@@ -20,8 +20,8 @@ export function ReaderPreferenceSections({prefs,onChange}:{prefs:ReaderPreferenc
       <Toggle title="适应屏幕" value={prefs.fit==="screen"} onChanged={enabled=>onChange({fit:enabled?"screen":"width"})}/>
       <Toggle title="优先原图" value={prefs.preferOriginal} onChanged={preferOriginal=>onChange({preferOriginal})}/>
     </Section>
-    <Section title="加载">
-      <Stepper title={`相邻预加载：${prefs.preload}`} onIncrement={()=>onChange({preload:Math.min(4,prefs.preload+1)})} onDecrement={()=>onChange({preload:Math.max(0,prefs.preload-1)})}/>
+    <Section header={<Text textCase={null}>加载</Text>} footer={<Text>单页阅读向前预载所设页数，并保留前一页；页面地址提前准备，后台最多同时预取 3 张图片。翻页不取消已开始的预载，当前页优先。</Text>}>
+      <Stepper title={`相邻预加载：${prefs.preload}`} onIncrement={()=>onChange({preload:Math.min(READER_PRELOAD_MAX,prefs.preload+1)})} onDecrement={()=>onChange({preload:Math.max(0,prefs.preload-1)})}/>
     </Section>
     <Section header={<Text textCase={null}>自动阅读</Text>} footer={<Text>阅读器中的播放与暂停使用这里设置的间隔。</Text>}>
       <Stepper title={`自动翻页间隔：${prefs.autoPageSeconds} 秒`} onIncrement={()=>onChange({autoPageSeconds:Math.min(30,prefs.autoPageSeconds+1)})} onDecrement={()=>onChange({autoPageSeconds:Math.max(2,prefs.autoPageSeconds-1)})}/>
