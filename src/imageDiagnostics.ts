@@ -6,7 +6,7 @@ const noTrace={id:0,step:(_phase:ImagePhase)=>{},cancel:()=>{},timeout:()=>{},ca
 const stages = ["home-thumbnail", "detail-cover", "preview-thumbnail", "reader-image"]
 export function diagnosticImageHost(url:string){try{const host=new URL(url).hostname.toLowerCase();return host==="ehgt.org"||host.endsWith(".ehgt.org")?"ehgt.org":host==="s.exhentai.org"?host:host==="exhentai.org"?host:host==="e-hentai.org"?host:"other"}catch{return "unknown"}}
 type RecordEntry = {id:number;stage:string;host:string;retry:boolean;phase:ImagePhase;created:number;changed:number;started:number|null;ended:number|null;cancelAt:number|null;timeoutAt:number|null;status:number;mime:string;bytes:number;cacheHit:boolean;cacheError:boolean;outcome:Outcome|null;failurePhase:ImagePhase|null;durations:Partial<Record<ImagePhase,number>>}
-export function createImageDiagnostics(now=()=>Date.now()){
+export function createImageDiagnostics(now=()=>Date.now(),onSettled?:()=>void){
   let sequence=0,dropped=0,memoryHits=0,sharedHits=0
   const pending=new Map<number,RecordEntry>(),history:RecordEntry[]=[]
   const countReuse=(shared:boolean)=>{if(shared)sharedHits++;else memoryHits++}
@@ -24,11 +24,16 @@ export function createImageDiagnostics(now=()=>Date.now()){
       cacheHit:()=>{item.cacheHit=true},cacheError:()=>{item.cacheError=true},
       response:(status:number,mime:string)=>{item.status=Number.isFinite(status)?Math.max(0,Math.min(599,Math.trunc(status))):0;const type=String(mime).split(";")[0].trim().toLowerCase();item.mime=["image/jpeg","image/png","image/gif","image/webp","image/avif","text/html","application/octet-stream"].includes(type)?type:"other"},
       bytes:(bytes:number)=>{item.bytes=Number.isFinite(bytes)?Math.max(0,bytes):0},
-      finish:(outcome:Outcome)=>{if(item.ended!==null)return;const at=now();item.durations[item.phase]=(item.durations[item.phase]||0)+Math.max(0,at-item.changed);item.ended=at;item.outcome=outcome;pending.delete(id);history.push(item);if(history.length>80)history.shift()},
+      finish:(outcome:Outcome)=>{if(item.ended!==null)return;const at=now();item.durations[item.phase]=(item.durations[item.phase]||0)+Math.max(0,at-item.changed);item.ended=at;item.outcome=outcome;pending.delete(id);history.push(item);if(history.length>80)history.shift();onSettled?.()},
     }
   }
   function snapshot(){const at=now();const copy=(item:RecordEntry)=>{const end=item.ended??at;return {...item,durations:{...item.durations},elapsedMs:Math.max(0,end-item.created),phaseMs:Math.max(0,end-item.changed),queueMs:Math.max(0,(item.started??end)-item.created),cancelWaitMs:item.cancelAt===null?null:Math.max(0,end-item.cancelAt),timeoutWaitMs:item.timeoutAt===null?null:Math.max(0,end-item.timeoutAt)}};return{capturedAt:at,total:sequence,dropped,memoryHits,sharedHits,pending:[...pending.values()].map(copy),recent:history.slice().reverse().map(copy)}}
   return {begin,snapshot,countReuse}
 }
 export type ImageTrace = ReturnType<ReturnType<typeof createImageDiagnostics>["begin"]>
-export const imageDiagnostics=createImageDiagnostics()
+// Local App Group only: no iCloud, no remote upload, no URLs/headers/titles in records.
+const localSnapshotPath=`${FileManager.appGroupDocumentsDirectory}/ehentai-image-diagnostics-v1.json`
+let snapshotTimer:ReturnType<typeof setTimeout>|null=null
+function scheduleLocalSnapshot(){if(snapshotTimer)return;snapshotTimer=setTimeout(()=>{snapshotTimer=null;const value=imageDiagnostics.snapshot();const copy={build:IMAGE_DIAGNOSTIC_BUILD,...value,pending:value.pending.slice(0,24),recent:value.recent.slice(0,80)};void FileManager.writeAsString(localSnapshotPath,JSON.stringify(copy)).catch(()=>{})},1500)}
+export const imageDiagnostics=createImageDiagnostics(undefined,scheduleLocalSnapshot)
+export function localImageSnapshotFile(){return localSnapshotPath}
