@@ -122,7 +122,7 @@ export async function loadFavoriteState(item:GallerySummary,context:AccountReque
   if(login)throw new Error(login)
   return mergeFavoriteCategoryNames(parseFavoritePopupHtml(result.html),categories)
 }
-export function verifyFavoriteMutationFromState(state:FavoriteState,category:number|null,note=""){if(state.category!==category)throw new Error("收藏操作未被服务器确认，请稍后刷新后重试。");if(category!=null&&String(note||"").trim()&&state.note!==String(note||"").trim().slice(0,200))throw new Error("收藏备注未被服务器确认，请稍后刷新后重试。");return state}
+export function verifyFavoriteMutationFromState(state:FavoriteState,category:number|null,note=""){if(state.category!==category)throw new Error("收藏操作未被服务器确认，请稍后刷新后重试。");if(category!=null&&state.note!==String(note||"").trim().slice(0,200))throw new Error("收藏备注未被服务器确认，请稍后刷新后重试。");return state}
 export function verifyFavoriteMutation(html:string,category:number|null,note=""){const login=favoriteLoginError(html);if(login)throw new Error(login);return verifyFavoriteMutationFromState(parseFavoritePopupHtml(html),category,note)}
 export async function changeFavorite(item:GallerySummary,category:number|null,note=""):Promise<FavoriteState>{
   if(!getAccountStatus().loggedIn)throw new Error("请先登录后管理收藏。")
