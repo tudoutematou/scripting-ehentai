@@ -1,34 +1,24 @@
-# CURRENT_TASK - Navigation and async view ownership
+# CURRENT_TASK — 发现与阅读体验优化
 
-Branch: `main`
-Audit baseline: `86ba36b3f642d934b85503a2f8d0f639b9ce8789` (read from GitHub, not prior chat)
-Updated: 2026-09-23. Do not start P3.
+## 同步状态
+2026-10-04：用户确认本轮阅读体验已有明显改善，并授权将优化同步到 main。此次仅更新源码与文档，不创建新 Release。用户确认解除此前“等待真机反馈后再推送”的限制；不将确认扩大为所有设备和异常场景均已验收。
 
-## Implemented
+## 本轮变化
+- 发现页改为内容优先的统一网格：热门首批五张同规格封面卡，轻量搜索导航、右侧书签、紧凑继续阅读与真实最近更新。
+- 详情页强化开始/继续阅读的视觉顺序，预览前移，标签和资料按需展开，保留原生导航。
+- 全部预览保留每批60页跳转和滑块，顺序浏览在底部追加相邻批，不混入远跳缓存缺口；批量选择保留点选和范围选择。
+- 单页 Reader 使用会话级滑动窗口：前方 preload 页＋前一页，缺页主动补库存，前台与预取共享解析/图片 Promise；翻页不取消在途预取。
+- 页面地址提前准备，最多两路后台准备，不等待图片下载结束；Reader 图片后台预取三路，当前页优先，全局图片上限8与原有主机限制不扩张。
+- 已下载目标页优先离线续读；边下边看减少不必要数组刷新，自动翻页保留当前页倒计时。
+- 临时图片性能诊断默认不采样，用户主动执行并发1/2/3/4/6的隔离测试，生成本机可复制报告；不写阅读进度、不自动调参、不记录完整URL或Cookie。
+- 收藏备注清空仍需服务器回读确认；作品状态和阅读进度文案统一。
 
-- Detail and AllPreviews own one native destination each. Responsive PreviewGrid only reports a page tap; it no longer owns a competing Reader destination. Gallery details are keyed by gallery identity. Rapid pushes, old dismissals, and delayed offline-open results cannot replace another navigation session.
-- View/retry/account scope invalidates late async UI writes. Detail preview results merge against one synchronous detail reference, preserve metadata changes, and reject obsolete results before returning to child views. The mounted-detail/sidebar counter remains unchanged.
-- Favorite reads use request order; a late confirmation cannot initiate a mutation after exit. Initial download reads cannot overwrite newer subscription notifications.
-- Range selection and download preparation have separate busy ownership. Done cancels pending selection; completing a download preparation does not erase a newer selection. Drag paging uses the first missing page number, not inventory length.
-- Reader jumps are latest-request-wins, including cached-page jumps. Failed target jumps remain visible over the current image and retry the target. Inventory merges happen after await. Continuous progress is recorded for the visible loaded page, not speculative image loads. Continue-reader bootstrap and prefetch consumers respect exit.
+## 验证与边界
+- 提交前运行确定性 selfTest；新增回归覆盖窗口去重、成功/失败不无限重排、退出取消、快速100页、后台图片优先级与解析提前准备。
+- 已完成原生无网络 Reader 跨20页补库存及会话定位隔离。该证据不是实际网络/手势 E2E。
+- 用户提供真实小图片性能报告并确认优化体验；图片响应等待仍受节点、网络及代理影响，不承诺秒开或量化提速百分比。
+- DNS/连接/精确TTFB未被当前API公开。报告仅给JS响应/首块观测；阅读汇总解析均值仍包含复用事件，解读时应区分独立网络样本。
+- 连续阅读尚未接入单页滑动预取窗口；不同窗口、动态字体、离线增量播放和失败重试仍需持续观察。
 
-## Checks and limits
-
-- Node 22 / TypeScript 5.8.3: `NODE_PATH=$(npm root -g) node tools/check_view_ownership.cjs`.
-- 18/18 deterministic checks pass against production component code with simulated hooks/native rendering and I/O. Against the audit baseline, 17 fail and the abort-bridge control passes. These are not device UI tests.
-- TSX syntax and `git diff --check` pass. Changed-file sensitive-artifact scan: zero findings. Full-tree scanner still flags the unchanged synthetic sanitizer fixture in `src/selfTest.ts` (`PRIVATE_PATH`); scanner rules were not weakened.
-- Type-diagnostic comparison with public declaration snapshots: baseline 72, patched 71, zero new diagnostics. This is NOT a clean full native typecheck. Existing issues include host/DOM declaration mismatches and existing code types. Recheck with declarations synced from the actual DEV runtime.
-- Declaration provenance: `Yii-An/Scripting-Scripts`, `global.d.ts` blob `090fb52fde39138bd6378bc4882d214c960b8189`, `scripting.d.ts` blob `0b891993b72d733364f62c29fb6453ddbed4154a`. Snapshot files are not redistributed here.
-- Runtime checked: no. No connected Scripting DEV device/runtime was available; stable app was not touched.
-
-## Needs user test - DEV only
-
-1. On iPad, open detail / AllPreviews / Reader, rotate or resize, rapidly tap two pages, then back out. Confirm one destination, correct page, and correct sidebar restoration.
-2. With slow loading, select a distant range and immediately Done/back out; reopen or change gallery/account. Confirm no selection resurrection, stale page mixture, or stuck preparation flag.
-3. Jump beyond the first preview batch, immediately jump to a cached page, exercise failed-target retry, then continuous reading and resume. Confirm the displayed page and saved progress agree.
-
-Earlier pending QA is not claimed fixed by this batch: save-search naming dialog, large-GIF real progress, and discovery Enter-to-search.
-
-## Out of scope
-
-Redux, EventBus, Repository/Factory, SQLite, download rewrite, Navigation rewrite, splitting GalleryFlow because it is long, background downloads, H@H, Wi-Fi transfer, DoH.
+## 仓库边界
+只同步业务模块及已有自测入口的依赖。排除本机 Cookie、日志、测速报告、缓存、截图、故障版备份、临时 QA/隔离预览和推送辅助脚本。保留当前源码版本号，不发布新版本标签。
