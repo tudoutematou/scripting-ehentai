@@ -7,7 +7,7 @@ import { AbortController, AbortSignal, Button, Canvas, Device, DragGesture, Envi
 import { GalleryDetail, GalleryPageLink, GallerySummary, galleryPageCount, accountOverviewUnavailableMessage, loadAccountOverview, imageSearch, loadGalleryDetailCore, loadPreviewPageBatch, loadPreviewPageRange, loadTorrentList, loadArchiveOptions, resolveArchiveDownload, submitGalleryComment, loadEditableGalleryComment, voteGalleryComment, submitGalleryRating, resolveImagePage, resolveImagePageForPerformance, searchGalleries } from "./ehentai"
 import { parseGalleryRef } from "./pure"
 import { changeFavorite, loadFavoriteState, subscribeFavoriteCategoryChanges, type FavoriteState } from "./favorites"
-import { READER_PRELOAD_MAX, loadPreferences, type ReaderPreferences } from "./libraryStore"
+import { READER_PRELOAD_MAX, imageCacheDirectory, loadPreferences, type ReaderPreferences } from "./libraryStore"
 import { getAccountSessionGeneration, getAccountStatus, getBaseUrl, getCookieHeader, importAndValidateBrowserCookies, listAccountProfiles, manualCookieSummary, openSafariExSync, openSafariLogin, refreshAccountStatus, removeAccountProfile, routeUrlForSite, saveAndValidateManualCookie, setActiveSite, signOut, switchAccountProfile } from "./account"
 import { reportDiagnostic } from "./githubBridge"
 import { GalleryCategoryKey, GallerySearchState, GallerySearchTag, GALLERY_CATEGORIES, QUICK_FILTERS, QuickFilterKey, buildGallerySearchUrl, categoryExclusionSummary, cloneSearchState, composeGallerySearchState, createGallerySearchTag, createHomeSearchState, createPopularSearchState, createTagSearchState, createUploaderSearchState, galleryLanguageLabel, getQuickFilter, localizeCategory, localizeCommonTag, localizeMetadataKey, localizeTagNamespace, removeGallerySearchTag, searchRawQuery, searchTitle, selectGallerySearchTag, toggleExcludedCategory } from "./tourist"
@@ -39,7 +39,7 @@ function imageTimeoutError(){const error=new Error("图片请求超时");error.n
 export function imageTimeoutMs(stage:ImageStage){return stage==="reader-image"?20_000:IMAGE_TIMEOUT_MS}
 export function eagerHomeThumb(index:number){return Number(index)<EAGER_HOME_THUMBS}
 export function isPublicThumbHost(url:string){try{const host=new URL(url).hostname.toLowerCase();return host==="ehgt.org"||host.endsWith(".ehgt.org")}catch{return false}}
-export function imageCacheDirectory(manager:any=fileManager){const root=String(manager?.temporaryDirectory||"").trim().replace(/\/$/,"");return `${root}/ehentai-image-cache`}
+export { imageCacheDirectory }
 let legacyImageCacheAbandoned=false
 async function abandonLegacyImageCache(){if(legacyImageCacheAbandoned)return;legacyImageCacheAbandoned=true;try{const legacy=`${String((Script as any).directory||"").replace(/\/$/,"")}/.image-cache`;if(legacy.endsWith("/.image-cache")&&await fileManager.exists(legacy))await fileManager.remove(legacy)}catch{}}
 let performanceNormalRequests=0
