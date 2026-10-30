@@ -72,6 +72,15 @@ function detectPageError(html: string): string {
   return ""
 }
 
+// 额度用尽时图片页仍正常返回，但 <img id="img"> 指向 ehgt.org/g/509.gif 占位图。
+function isQuotaExceededImage(imageUrl: string): boolean {
+  try {
+    return /\/509\.gif$/i.test(new URL(imageUrl).pathname)
+  } catch {
+    return /\/509\.gif(?:$|[?#])/i.test(imageUrl)
+  }
+}
+
 export function parseImagePageHtml(html: string, baseUrl: string): PageExtractData {
   const imageTag = findImageTag(html)
   const imageUrl = imageTag
@@ -82,6 +91,6 @@ export function parseImagePageHtml(html: string, baseUrl: string): PageExtractDa
   return {
     imageUrl,
     originalUrl,
-    error: detectPageError(html) || (!imageUrl ? "没有解析到图片地址，图片页结构可能已变化。" : ""),
+    error: detectPageError(html) || (isQuotaExceededImage(imageUrl) ? "已达到 E-Hentai 图片浏览额度限制。" : "") || (!imageUrl ? "没有解析到图片地址，图片页结构可能已变化。" : ""),
   }
 }
