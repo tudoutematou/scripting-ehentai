@@ -136,6 +136,15 @@ async function rejects(promise: Promise<unknown>, message: string) {
 }
 const tests: { name: string; run: () => Promise<void> }[] = [
   {
+    name: "failure.explicit-retry-refreshes-failed-address",
+    run: async () => {
+      const refreshes:boolean[]=[]
+      let attempts=0
+      const session=createReaderPrefetchSession({totalPages:1,prepareAhead:true,isCurrent:()=>true,getPage:()=>({index:1,pageUrl:"virtual:page/1"}),loadPage:async()=>({index:1,pageUrl:"virtual:page/1"}),resolve:async(_link,_signal,refresh)=>{refreshes.push(refresh);return{imageUrl:refresh?"virtual:fresh":"virtual:stale",pageUrl:"virtual:page/1"}},cache:async value=>{attempts++;if(value.url==="virtual:stale")throw new Error("virtual network failure");return "memory:fresh"},promote:()=>{}})
+      try{const first=session.foreground(1,false);await first.image.catch(()=>{});await turns();const revisit=session.foreground(1,false,true);equal(await revisit.image,"memory:fresh","foreground revisit retained rejected image or stale preparation");equal(refreshes,[false,true],"failed page must re-resolve exactly once");equal(attempts,2,"retry should download once");await turns();equal(attempts,2,"failed page must not auto-loop") }finally{session.dispose()}
+    }
+  },
+  {
     name: "window.preload6-and-boundaries",
     run: async () => {
       equal(readerPrefetchWindow(10, 100, 6), [11, 12, 13, 14, 15, 16, 9], "forward six plus previous")
