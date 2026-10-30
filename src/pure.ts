@@ -1,3 +1,23 @@
+/** Decode the site's 16px star sprite. Unknown styles remain unknown. */
+export function parseListRatingStyle(style: string): number | null {
+  const position = style.match(/(?:^|;)\s*background-position\s*:\s*(-?\d+)(?:px)?\s+(-?\d+)px\s*(?:;|$)/i)
+  if (!position) return null
+  const x = Number(position[1]), y = Number(position[2])
+  if (x > 0 || x < -80 || x % 16 !== 0 || (y !== -1 && y !== -21)) return null
+  const rating = 5 + x / 16 - (y === -21 ? 0.5 : 0)
+  return rating >= 0 && rating <= 5 ? rating : null
+}
+function validListRating(rating: number | null | undefined): rating is number {
+  return typeof rating === "number" && Number.isFinite(rating) && rating >= 0 && rating <= 5
+}
+export function galleryRatingLabel(rating: number | null | undefined): string {
+  return validListRating(rating) ? `≈${rating.toFixed(1)}` : "评分未知"
+}
+export function galleryRatingStars(rating: number | null | undefined): string[] {
+  const value = validListRating(rating) ? rating : 0
+  return [1, 2, 3, 4, 5].map(slot => value >= slot ? "star.fill" : value >= slot - 0.5 ? "star.leadinghalf.filled" : "star")
+}
+
 export const E_HENTAI_BASE = "https://e-hentai.org/"
 
 export type GalleryRef = { gid: string; token: string }
