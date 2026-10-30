@@ -12,6 +12,8 @@ export type GallerySummary = {
   pages: number
   url: string
   language?: string
+  /** List sprite rating, rounded by the site to half-star steps; not the exact average. */
+  rating?: number | null
 }
 
 export type SearchExtractData = {
