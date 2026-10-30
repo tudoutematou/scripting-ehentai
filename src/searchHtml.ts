@@ -1,3 +1,4 @@
+import { parseListRatingStyle } from "./pure"
 import type { GallerySummary, SearchExtractData } from "./extractors"
 
 function decodeHtml(value: string): string {
@@ -59,9 +60,26 @@ function findBlock(html: string, anchorIndex: number): string {
   const rows = [...html.matchAll(/<tr\b[^>]*>[\s\S]*?<\/tr\s*>/gi)]
   const row = rows.find(match => (match.index || 0) <= anchorIndex && anchorIndex < (match.index || 0) + match[0].length)
   if (row) return row[0]
-  const markers = [...html.matchAll(/<div\b(?=[^>]*\bclass\s*=\s*(["'])[^"']*\bgl(?:1[et]|3[cm]|ft|name|ink)\b[^"']*\1)[^>]*>/gi)]
-  const markerIndex = markers.findIndex((match, index) => (match.index || 0) <= anchorIndex && (index + 1 === markers.length || (markers[index + 1].index || html.length) > anchorIndex))
-  if (markerIndex >= 0) { const start = markers[markerIndex].index || 0; const end = markerIndex + 1 < markers.length ? markers[markerIndex + 1].index || html.length : html.length; return html.slice(start, end) }
+  // Keep the whole containing gallery, not an inner glname/glink slice.
+  const stack: Array<{start:number; tag:string}> = []
+  const divs = [...html.matchAll(/<\/?div\b[^>]*>/gi)]
+  for (const match of divs) {
+    const index = match.index || 0
+    if (index > anchorIndex) break
+    if (/^<\/div/i.test(match[0])) stack.pop()
+    else stack.push({start:index,tag:match[0]})
+  }
+  const container = stack.find(entry => /\bgl(?:1[etmc]|3[cm]|ft)\b/.test(getAttribute(entry.tag,"class")))
+    || stack.find(entry => /\bgl(?:name|ink)\b/.test(getAttribute(entry.tag,"class")))
+  if (container) {
+    let depth = 0
+    for (const match of divs) {
+      const index = match.index || 0
+      if (index < container.start) continue
+      depth += /^<\/div/i.test(match[0]) ? -1 : 1
+      if (depth === 0) return html.slice(container.start,index + match[0].length)
+    }
+  }
   return ""
 }
 
@@ -81,6 +99,17 @@ function findClassText(block: string, className: string): string {
   const pattern = new RegExp(`<([a-z0-9]+)\\b[^>]*class\\s*=\\s*(["'])[^"']*\\b${escaped}\\b[^"']*\\2[^>]*>([\\s\\S]*?)<\\/\\1>`, "i")
   const match = block.match(pattern)
   return match ? cleanText(match[3]) : ""
+}
+
+function findListRating(block: string): number | null {
+  for (const tag of block.match(/<[a-z][^>]*>/gi) || []) {
+    const classes = getAttribute(tag, "class").split(/\s+/)
+    if (!classes.includes("ir")) continue
+    // Rated sprites can represent a personal vote. Do not label them as the public average.
+    if (classes.some(value => ["irr", "irg", "irb"].includes(value))) return null
+    return parseListRatingStyle(getAttribute(tag, "style"))
+  }
+  return null
 }
 
 function findLanguage(block: string): string {
@@ -159,6 +188,7 @@ export function parseSearchHtml(html: string, baseUrl: string): SearchExtractDat
       pages: pagesMatch ? Number(pagesMatch[1].replace(/,/g, "")) : 0,
       url,
       language: findLanguage(block),
+      rating: findListRating(block),
     })
     seen.add(id)
   }
