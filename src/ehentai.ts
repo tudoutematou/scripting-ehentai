@@ -137,6 +137,12 @@ async function resolveImagePageFresh(pageUrl:string,context:AccountRequestContex
 }
 // Diagnostic-only direct resolver: never removes or populates the normal Promise cache.
 export function resolveImagePageForPerformance(pageUrl:string,signal?:RequestAbortSignal){return resolveImagePageFresh(pageUrl,captureAccountRequestContext(),signal)}
+// Invalidate only the resolved address that actually failed. Never evict a newer refresh.
+export async function invalidateFailedImagePage(pageUrl:string,imageUrl:string){
+  const key=galleryCacheKey(pageUrl,captureAccountRequestContext()),task=imagePageCache.get(key)
+  if(!task)return
+  try{const value=await task;if(imagePageCache.get(key)===task&&(value.imageUrl===imageUrl||value.originalUrl===imageUrl))imagePageCache.delete(key)}catch{}
+}
 export function resolveImagePage(pageUrl:string,refresh=false,signal?:RequestAbortSignal):Promise<ResolvedImagePage>{
   if(signal?.aborted)return Promise.reject(htmlCancellation())
   const context=captureAccountRequestContext(),key=galleryCacheKey(pageUrl,context)
