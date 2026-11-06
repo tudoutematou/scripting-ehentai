@@ -111,3 +111,11 @@
 
 [unreleased]: ../../compare/v1.1.0...main
 [1.1.0]: ../../releases/tag/v1.1.0
+
+
+## Review branch — 2026-11-06 client modularization
+
+- Extract image pipeline, error/recovery policy, Reader variants, shared gallery presentation, discovery/search, detail/previews/resources and library scene assembly.
+- Remove runtime scene-import cycles through explicit typed navigation composition.
+- Split150 checks into7 domains without changing test bodies/order.
+- Review-only, not merged/released. Existing83 TypeScript diagnostics, single-batch preview Slider warning and real-device acceptance limits are documented in REVIEW_MODULARIZATION.md.
