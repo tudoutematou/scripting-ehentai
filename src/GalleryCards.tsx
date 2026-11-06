@@ -1,0 +1,22 @@
+import { Button, HStack, Image, Text, VStack } from "scripting"
+import { GallerySummary } from "./ehentai"
+import { galleryRatingLabel, galleryRatingStars } from "./pure"
+import { galleryLanguageLabel, localizeCategory } from "./tourist"
+import { GlassSurface } from "./GlassUI"
+import { workTitle, workTitleFont, workTitleLines } from "./galleryCopy"
+import { heartFillForSlot, galleryCardTitleLines } from "./galleryModel"
+import { CachedThumbnail } from "./GalleryImages"
+
+export function GalleryRating({rating,compact=false}:{rating?:number|null;compact?:boolean}){
+  const label=galleryRatingLabel(rating),known=label!=="评分未知";
+  return <HStack spacing={5} accessibilityElement="ignore" accessibilityLabel={known?`大众星级约 ${Number(rating).toFixed(1)}，满分5星，列表半星近似值`:"大众评分未知"}>
+    {known?<HStack spacing={2}>{galleryRatingStars(rating).map((symbol,index)=><Image key={index} systemName={symbol} font="caption2" foregroundStyle="systemOrange" accessibilityHidden/>)}</HStack>:null}
+    <Text font={compact?"caption2":"caption"} fontWeight={known?"semibold":"regular"} foregroundStyle={known?"label":"secondaryLabel"} lineLimit={1}>{label}</Text>
+  </HStack>
+}
+export function GalleryMetadata({item}:{item:GallerySummary}){return <VStack alignment="leading" spacing={3} frame={{maxWidth:"infinity",alignment:"leading"}}><GalleryRating rating={item.rating}/><Text font="caption" foregroundStyle="secondaryLabel" lineLimit={1}>上传者 · {item.uploader||"未知"}</Text><Text font="caption" fontWeight="semibold" foregroundStyle="label" lineLimit={1}>页数 · {item.pages?`${item.pages} 页`:"未知"}</Text><Text font="caption" foregroundStyle="secondaryLabel" lineLimit={1}>上传时间 · {item.posted||"未知"}</Text></VStack>}
+export function GalleryBadges({item}:{item:GallerySummary}){const category=item.category?localizeCategory(item.category):"",language=galleryLanguageLabel(item.language||"");if(!category&&!language)return null;return <HStack spacing={6}>{category?<Text font="caption" padding={{horizontal:8,vertical:3}} background="secondarySystemBackground" clipShape={{type:"rect",cornerRadius:7}}>{category}</Text>:null}{language?<Text font="caption" padding={{horizontal:8,vertical:3}} background="secondarySystemBackground" clipShape={{type:"rect",cornerRadius:7}}>{language}</Text>:null}</HStack>}
+export function GalleryRow({item,note="",eager=false}:{item:GallerySummary;note?:string;eager?:boolean}){return <GlassSurface padding={10}><HStack spacing={12}>{item.thumb?<CachedThumbnail url={item.thumb} stage="home-thumbnail" frame={{width:82,height:112}} cornerRadius={9} eager={eager}/>:<Image systemName="photo" frame={{width:82,height:112}} foregroundStyle="secondaryLabel"/>}<VStack alignment="leading" spacing={7} frame={{maxWidth:"infinity"}}><Text font={workTitleFont()} fontWeight="semibold" lineLimit={workTitleLines("row")}>{workTitle(item.title)}</Text><GalleryBadges item={item}/><GalleryMetadata item={item}/>{note?<Text font="caption" foregroundStyle="systemBlue" lineLimit={2}>{note}</Text>:null}</VStack></HStack></GlassSurface>}
+export function GalleryCard({item,note="",eager=false}:{item:GallerySummary;note?:string;eager?:boolean}){return <GlassSurface padding={10}><VStack alignment="leading" spacing={7} frame={{maxWidth:"infinity",minHeight:320,alignment:"topLeading"}}>{item.thumb?<CachedThumbnail url={item.thumb} stage="home-thumbnail" frame={{maxWidth:"infinity",height:190}} cornerRadius={10} eager={eager}/>:<Image systemName="photo" frame={{maxWidth:"infinity",height:190}} foregroundStyle="secondaryLabel"/>}<Text font={workTitleFont()} fontWeight="semibold" lineLimit={galleryCardTitleLines()} frame={{minHeight:44,alignment:"topLeading"}}>{workTitle(item.title)}</Text><GalleryBadges item={item}/><GalleryMetadata item={item}/>{note?<Text font="caption" foregroundStyle="systemBlue" lineLimit={2}>{note}</Text>:null}</VStack></GlassSurface>}
+export function HeartRatingPicker({rating,disabled=false,onPick}:{rating:number;disabled?:boolean;onPick:(slot:number)=>void}){return <HStack spacing={8}>{[1,2,3,4,5].map(slot=>{const fill=heartFillForSlot(slot,rating);return <Button key={slot} buttonStyle="plain" disabled={disabled} action={()=>onPick(slot)}><Image systemName={fill==="empty"?"heart":"heart.fill"} foregroundStyle={fill==="empty"?"secondaryLabel":"systemRed"} opacity={fill==="half"?0.55:1} frame={{width:36,height:32}}/></Button>})}</HStack>}
+// Count mounted details, not visible screens: pushing a reader must keep the sidebar hidden.
