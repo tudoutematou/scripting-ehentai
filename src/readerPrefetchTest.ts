@@ -145,6 +145,14 @@ const tests: { name: string; run: () => Promise<void> }[] = [
     }
   },
   {
+    name: "failure.background-promoted-once-after-network-recovers",
+    run: async () => {
+      let online=false;const resolves:boolean[]=[]
+      const session=createReaderPrefetchSession({totalPages:2,prepareAhead:true,isCurrent:()=>true,getPage:page=>({index:page,pageUrl:String(page)}),loadPage:async page=>({index:page,pageUrl:String(page)}),resolve:async(link,_signal,refresh)=>{resolves.push(refresh);if(!online)throw new Error("virtual offline");return{imageUrl:"virtual:fresh",pageUrl:link.pageUrl}},cache:async()=>"memory:fresh",promote:()=>{}})
+      try{session.update(1,1,false);await turns();const failed=session.prefetchInFlight.get("2|0")!;equal(failed.state,"failed","background must first fail");const before=resolves.length;for(let i=0;i<30;i++){session.update(1,1,false);await turns()}equal(resolves.length,before,"background failures must not loop");online=true;const visible=session.foreground(2,false);assert(visible!==failed,"foreground reused a settled background failure");equal(await visible.image,"memory:fresh","network recovery must load visible page");assert(resolves.at(-1)===true,"promotion must bypass failed preparation");equal(session.foreground(2,false),visible,"foreground success must remain shared")}finally{session.dispose()}
+    }
+  },
+  {
     name: "window.preload6-and-boundaries",
     run: async () => {
       equal(readerPrefetchWindow(10, 100, 6), [11, 12, 13, 14, 15, 16, 9], "forward six plus previous")
@@ -269,7 +277,10 @@ const tests: { name: string; run: () => Promise<void> }[] = [
       const calls = f.calls
       for (let i = 0; i < 100; i++) { f.session.update(1, 6, false); await f.tick() }
       equal(f.calls, calls, "failure must not create retry loop")
-      assert(f.session.foreground(2, false) === failedResolve, "default foreground must not silently retry failed job")
+      const promoted=f.session.foreground(2,false)
+      assert(promoted!==failedResolve,"first foreground visit must replace background failure once")
+      f.resolves.at(-1)!.gate.reject(new Error("foreground still offline"));await f.tick()
+      assert(f.session.foreground(2,false)===promoted,"failed foreground must not auto-retry repeatedly")
       const retry = f.session.foreground(2, false, true)
       assert(retry !== failedResolve, "explicit refresh must create new job")
       await f.drain()
