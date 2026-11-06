@@ -43,3 +43,8 @@
 
 ## 仓库边界
 只同步业务模块及已有自测入口的依赖。排除本机 Cookie、日志、测速报告、缓存、截图、故障版备份、临时 QA/隔离预览和推送辅助脚本。保留当前源码版本号，不发布新版本标签。
+
+
+## 2026-11-06 Client modularization review branch
+
+Synced complete local client modularization to review/client-modularization from main 55d49ed8; main and PR #32 branch untouched. Pending independent agent review and user approval before merge. See REVIEW_MODULARIZATION.md for review targets, MODULARIZATION.md for module map, verification and known limits. Local regression150/150, prefetch21/21; existing83 TS diagnostics and single-batch Slider warning remain. Preserved src/assistant_tool.json and import configuration; no private local state uploaded.
