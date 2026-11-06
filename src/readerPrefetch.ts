@@ -1,3 +1,4 @@
+import { shouldRefreshReader } from "./readerRecovery"
 import { AbortController } from "scripting"
 
 export type ReaderPrefetchImage={url:string;referer:string;original:string}
@@ -29,7 +30,7 @@ export function createReaderPrefetchSession(options:Options){
     check();const id=key(page,mode),existing=prefetchInFlight.get(id)
     // Retry a settled background failure once when it first becomes visible.
     // Foreground failures remain settled until explicit user retry; no pump loop.
-    if(foreground&&existing?.state==="failed"&&!existing.foreground)refresh=true
+    if(foreground&&existing&&shouldRefreshReader({kind:"background-promotion",failed:existing.state==="failed",wasForeground:existing.foreground}))refresh=true
     if(foreground&&queuedForeground&&queuedForeground.job!==existing){queuedForeground.reject();queuedForeground=null}
     if(existing&&!refresh){if(foreground){if(existing.value)options.observeReuse?.(page,existing.value,existing.state==="active");else void existing.resolved.then(value=>{if(valid())options.observeReuse?.(page,value,true)}).catch(()=>{});existing.foreground=true;if(existing.value)options.promote(existing.value)}return existing}
     let resolveImage!:(value:ReaderPrefetchImage)=>void,rejectResolved!:(error:Error)=>void,resolvePath!:(value:string)=>void,rejectImage!:(error:Error)=>void
