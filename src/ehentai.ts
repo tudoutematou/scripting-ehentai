@@ -17,6 +17,7 @@ export type ResolvedImagePage = PageExtractData & { pageUrl: string }
 const detailCoreCache = new Map<string, GalleryDetail>()
 const previewPageCache = new Map<string, GalleryPageLink[]>()
 const imagePageCache = new Map<string, Promise<ResolvedImagePage>>()
+/** Layer 3 of reader "retry once" (see src/readerRecovery.ts): official same-page nl= reload URLs, capped. */
 const imagePageReloadUrls=new Map<string,string>()
 const imagePageConsumers=new Map<string,{task:Promise<ResolvedImagePage>;consume:(signal?:RequestAbortSignal)=>Promise<ResolvedImagePage>;owner:AbortController}>()
 function htmlCancellation(){const error=new Error("请求已取消。");error.name="AbortError";return error}

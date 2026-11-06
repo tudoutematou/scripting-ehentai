@@ -27,8 +27,9 @@ export function createReaderPrefetchSession(options:Options){
   const pumpPrepare=()=>{if(!options.prepareAhead||!valid()||!enabled)return;for(const page of desired()){if(preparationActive>=2)break;if(!prepared.has(page))prepare(page)}}
   const start=(page:number,mode:boolean,foreground:boolean,refresh=false):ReaderPrefetchJob=>{
     check();const id=key(page,mode),existing=prefetchInFlight.get(id)
-    // Retry a settled background failure once when it first becomes visible.
-    // Foreground failures remain settled until explicit user retry; no pump loop.
+    // Layer 1 of reader "retry once" (see src/readerRecovery.ts): promote a
+    // background failure once when it first becomes visible. Foreground failures
+    // stay settled until explicit user retry; no pump loop.
     if(foreground&&existing?.state==="failed"&&!existing.foreground)refresh=true
     if(foreground&&queuedForeground&&queuedForeground.job!==existing){queuedForeground.reject();queuedForeground=null}
     if(existing&&!refresh){if(foreground){if(existing.value)options.observeReuse?.(page,existing.value,existing.state==="active");else void existing.resolved.then(value=>{if(valid())options.observeReuse?.(page,value,true)}).catch(()=>{});existing.foreground=true;if(existing.value)options.promote(existing.value)}return existing}
