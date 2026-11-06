@@ -6,7 +6,7 @@ import { parseSearchHtml } from "./searchHtml"
 import { parseDetailHtml, parsePreviewPageHtml, parseTorrentListHtml, buildGalleryRatingRequest, parseRatingResponse, parseCommentMutationHtml, parseEditableCommentResponse, parseCommentVoteResponse, parseArchiveOptionsHtml, buildArchiveDownloadRequest, parseArchiveDownloadHtml, type RatingResult, type TorrentItem, type GalleryComment, type CommentVoteResult, type ArchiveOption } from "./detailHtml"
 import { parseImagePageHtml } from "./pageHtml"
 import { reportDiagnostic } from "./githubBridge"
-import { captureAccountRequestContext, getBaseUrl, getCookieHeader, isAccountRequestContextCurrent, productionRequestAuth, storeResponseCookies, type AccountRequestContext } from "./account"
+import { captureAccountRequestContext, routeUrlForSite, getBaseUrl, getCookieHeader, isAccountRequestContextCurrent, productionRequestAuth, storeResponseCookies, type AccountRequestContext } from "./account"
 
 export type { GalleryPageLink, GallerySummary }
 export type SearchPage = SearchExtractData & { url: string }
@@ -17,10 +17,11 @@ export type ResolvedImagePage = PageExtractData & { pageUrl: string }
 const detailCoreCache = new Map<string, GalleryDetail>()
 const previewPageCache = new Map<string, GalleryPageLink[]>()
 const imagePageCache = new Map<string, Promise<ResolvedImagePage>>()
+const imagePageReloadUrls=new Map<string,string>()
 const imagePageConsumers=new Map<string,{task:Promise<ResolvedImagePage>;consume:(signal?:RequestAbortSignal)=>Promise<ResolvedImagePage>;owner:AbortController}>()
 function htmlCancellation(){const error=new Error("请求已取消。");error.name="AbortError";return error}
 function galleryCacheKey(url:string,context:Pick<AccountRequestContext,"site"|"generation">){return `${context.site}|${context.generation}|${url}`}
-export function invalidateGalleryCaches(){detailCoreCache.clear();previewPageCache.clear();imagePageCache.clear();for(const entry of imagePageConsumers.values())entry.owner.abort();imagePageConsumers.clear()}
+export function invalidateGalleryCaches(){detailCoreCache.clear();previewPageCache.clear();imagePageCache.clear();imagePageReloadUrls.clear();for(const entry of imagePageConsumers.values())entry.owner.abort();imagePageConsumers.clear()}
 ;(globalThis as any).__ehentaiInvalidateGalleryCaches=invalidateGalleryCaches
 
 function httpError(message: string, response: any, url: string): Error {
@@ -75,6 +76,7 @@ async function fetchPreviewPage(url:string,previewPageIndex:number,signal?:Reque
   const {html,finalUrl}=await fetchHtml(url,`preview[${previewPageIndex}]`,"",signal,context)
   try{
     const links=normalizePageLinks(parsePreviewPageHtml(html,finalUrl),previewPageIndex)
+    if(signal?.aborted)throw htmlCancellation()
     if(isAccountRequestContextCurrent(context)){
       previewPageCache.set(key,links)
       previewPageCache.set(galleryCacheKey(finalUrl,context),links)
@@ -83,16 +85,18 @@ async function fetchPreviewPage(url:string,previewPageIndex:number,signal?:Reque
   }catch(error){throw stageError(`preview[${previewPageIndex}].parse`,error)}
 }
 
-export async function loadGalleryDetailCore(url:string,context:AccountRequestContext=captureAccountRequestContext()):Promise<GalleryDetail>{
+export async function loadGalleryDetailCore(url:string,context:AccountRequestContext=captureAccountRequestContext(),signal?:RequestAbortSignal):Promise<GalleryDetail>{
+  if(signal?.aborted)throw htmlCancellation()
   const key=galleryCacheKey(url,context),cached=detailCoreCache.get(key)
   if(cached)return cached
   const started=Date.now()
   try{
-    const {html,finalUrl,response}=await fetchHtml(url,"detail-core","",undefined,context)
+    const {html,finalUrl,response}=await fetchHtml(url,"detail-core","",signal,context)
     let parsed:ReturnType<typeof parseDetailHtml>
     try{parsed=parseDetailHtml(html,finalUrl)}catch(error){throw stageError("detail.parseDetailHtml",error)}
     if(parsed.error){const error=httpError(parsed.error,response,finalUrl);(error as any).responseLength=html.length;throw error}
     const detail:GalleryDetail={...parsed,pageLinks:dedupeAndSortPageLinks(normalizePageLinks(parsed.pageLinks||[],0)),sourceUrl:finalUrl,loadedPreviewPages:[0],truncatedPreviewPages:false,failedPreviewPages:[]}
+    if(signal?.aborted)throw htmlCancellation()
     if(isAccountRequestContextCurrent(context)){
       detailCoreCache.set(key,detail)
       detailCoreCache.set(galleryCacheKey(finalUrl,context),detail)
@@ -120,13 +124,15 @@ export function applyPreviewLoadResult(core: GalleryDetail, previews: PreviewLoa
 export function hasCompletePreviewInventory(detail: Pick<GalleryDetail, "metadata" | "pageLinks" | "previewPages" | "loadedPreviewPages" | "failedPreviewPages">): boolean { const total=galleryPageCount(detail),indexes=new Set(detail.pageLinks.map(page=>page.index)); return total>0 && detail.pageLinks.length===total && indexes.size===total && Array.from({length:total},(_,index)=>index+1).every(index=>indexes.has(index)) && (detail.loadedPreviewPages || []).length >= Math.max(1, Number(detail.previewPages || 1)) && detail.failedPreviewPages.length === 0 }
 export function assertCompletePreviewInventory(detail: Pick<GalleryDetail, "metadata" | "pageLinks" | "previewPages" | "loadedPreviewPages" | "failedPreviewPages">): void { if (!hasCompletePreviewInventory(detail)) throw new Error("页面库存不完整，请重试预览加载后再下载。") }
 
+function imagePageRequestUrl(pageUrl:string,context:Pick<AccountRequestContext,"site">){const url=new URL(routeUrlForSite(pageUrl,context.site));url.searchParams.delete("nl");return url.toString()}
 async function resolveImagePageFresh(pageUrl:string,context:AccountRequestContext,signal?:RequestAbortSignal):Promise<ResolvedImagePage>{
+  pageUrl=routeUrlForSite(pageUrl,context.site)
   try{
     const {html,finalUrl,response}=await fetchHtml(pageUrl,"image-page","",signal,context)
     let parsed:PageExtractData
     try{parsed=parseImagePageHtml(html,finalUrl)}catch(error){throw stageError("image-page.parse",error)}
     if(parsed.error)throw httpError(parsed.error,response,finalUrl)
-    const resolved={...parsed,pageUrl:finalUrl}
+    const resolved={...parsed,pageUrl:imagePageRequestUrl(finalUrl,context)}
     await reportSafely({stage:"gallery-image-page",ok:true,request:{url:finalUrl,status:Number(response?.status||0),statusText:String(response?.statusText||"")},notes:`imageUrl=${resolved.imageUrl?"yes":"no"}; originalUrl=${resolved.originalUrl?"yes":"no"}`})
     if(signal?.aborted||!isAccountRequestContextCurrent(context))throw htmlCancellation();return resolved
   }catch(error){
@@ -139,21 +145,21 @@ async function resolveImagePageFresh(pageUrl:string,context:AccountRequestContex
 export function resolveImagePageForPerformance(pageUrl:string,signal?:RequestAbortSignal){return resolveImagePageFresh(pageUrl,captureAccountRequestContext(),signal)}
 // Invalidate only the resolved address that actually failed. Never evict a newer refresh.
 export async function invalidateFailedImagePage(pageUrl:string,imageUrl:string){
-  const key=galleryCacheKey(pageUrl,captureAccountRequestContext()),task=imagePageCache.get(key)
+  const context=captureAccountRequestContext(),key=galleryCacheKey(imagePageRequestUrl(pageUrl,context),context),task=imagePageCache.get(key)
   if(!task)return
   try{const value=await task;if(imagePageCache.get(key)===task&&(value.imageUrl===imageUrl||value.originalUrl===imageUrl))imagePageCache.delete(key)}catch{}
 }
 export function resolveImagePage(pageUrl:string,refresh=false,signal?:RequestAbortSignal):Promise<ResolvedImagePage>{
   if(signal?.aborted)return Promise.reject(htmlCancellation())
-  const context=captureAccountRequestContext(),key=galleryCacheKey(pageUrl,context)
+  const context=captureAccountRequestContext();pageUrl=imagePageRequestUrl(pageUrl,context);const key=galleryCacheKey(pageUrl,context)
   if(refresh)imagePageCache.delete(key)
   const existing=imagePageCache.get(key),pending=imagePageConsumers.get(key)
   if(existing)return pending?.task===existing?pending.consume(signal):existing
-  const owner=new AbortController(),task=resolveImagePageFresh(pageUrl,context,owner.signal)
+  const owner=new AbortController(),task=resolveImagePageFresh(refresh?(imagePageReloadUrls.get(key)||pageUrl):pageUrl,context,owner.signal)
   const forget=()=>{if(imagePageCache.get(key)===task)imagePageCache.delete(key);if(imagePageConsumers.get(key)?.task===task)imagePageConsumers.delete(key)}
   const consume=sharedRequestConsumers(task,()=>{forget();owner.abort()},htmlCancellation)
   imagePageCache.set(key,task);imagePageConsumers.set(key,{task,consume,owner})
-  void task.then(()=>{if(imagePageConsumers.get(key)?.task===task)imagePageConsumers.delete(key)},forget)
+  void task.then(value=>{if(imagePageCache.get(key)===task){if(value.reloadUrl)imagePageReloadUrls.set(key,value.reloadUrl);else imagePageReloadUrls.delete(key);while(imagePageReloadUrls.size>128)imagePageReloadUrls.delete(imagePageReloadUrls.keys().next().value!)}if(imagePageConsumers.get(key)?.task===task)imagePageConsumers.delete(key)},forget)
   return consume(signal)
 }
 export async function loadTorrentList(torrentUrl:string,sourceUrl:string):Promise<TorrentItem[]>{let target:URL;let source:URL;try{target=new URL(torrentUrl);source=new URL(sourceUrl)}catch{throw new Error("种子入口无效。")}if(target.protocol!=="https:"||target.hostname!==source.hostname||!/(?:^|\.)e-hentai\.org$|(?:^|\.)exhentai\.org$/i.test(target.hostname))throw new Error("种子入口无效。");const result=await fetchHtml(target.toString(),"torrent-list",source.toString());return parseTorrentListHtml(result.html,result.finalUrl)}
