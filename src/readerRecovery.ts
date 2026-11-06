@@ -33,3 +33,13 @@ export function createReaderRecovery() {
     },
   }
 }
+
+/** Explicit refresh must bypass the settled foreground Promise (which may be a failure). */
+export function foregroundImageLoad<T extends { url: string; referer: string }>(
+  job: { image: Promise<string>; value?: T | null },
+  refresh: boolean,
+  refetch: (value: T) => Promise<string>,
+): Promise<string> {
+  if (!refresh || !job.value) return job.image
+  return refetch(job.value)
+}
