@@ -1,3 +1,4 @@
+import { preserveNetworkErrorMetadata } from "./networkErrors"
 import { sharedRequestConsumers } from "./sharedRequest"
 import { AbortController, FormData } from "scripting"
 import { GallerySummary, PageExtractData, SearchExtractData } from "./extractors"
@@ -29,7 +30,7 @@ function httpError(message: string, response: any, url: string): Error {
   error.status = Number(response?.status || 0); error.statusText = String(response?.statusText || ""); error.url = String(response?.url || url); return error
 }
 export function userSafeError(error:unknown,fallback="操作未完成，请稍后重试。"){const message=String((error as any)?.message||error||"");return /https?:|cookie|ipb_|apiuid|apikey|\/var\/|\/private\/|token/i.test(message)?fallback:message||fallback}
-function stageError(stage: string, error: unknown): Error { const value = error as any; const wrapped = new Error(`[${stage}] ${userSafeError(value?.message || error)}`); wrapped.name = String(value?.name || "Error"); return wrapped }
+function stageError(stage: string, error: unknown): Error { const value = error as any; const wrapped = new Error(`[${stage}] ${userSafeError(value?.message || error)}`); wrapped.name = String(value?.name || "Error"); return preserveNetworkErrorMetadata(wrapped,error) }
 async function reportSafely(input: Parameters<typeof reportDiagnostic>[0]) { try { await reportDiagnostic(input) } catch {} }
 // Only the abort operations used here; accepts both native Scripting and web signals.
 export type RequestAbortSignal = { readonly aborted: boolean; addEventListener(type: "abort", listener: () => void): void; removeEventListener(type: "abort", listener: () => void): void }
