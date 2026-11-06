@@ -1,5 +1,5 @@
 import { AbortController } from "scripting"
-import { enqueueImageTask,imageQueueIdle,imageRequestCacheKey,promoteReaderImage } from "./GalleryFlow"
+import { enqueueImageTask,imageQueueIdle,imageRequestCacheKey,promoteReaderImage } from "./imageLoader"
 function assert(value:unknown,message:string){if(!value)throw new Error(message)}
 function deferred(){let resolve!:()=>void;return {promise:new Promise<void>(yes=>{resolve=yes}),release:()=>resolve()}}
 async function turns(){for(let i=0;i<80;i++)await Promise.resolve()}
