@@ -1,23 +1,22 @@
+import { type RootDestination, regularRootNavigationKey, resolvedSplitColumnVisibility } from "./appNavigationModel"
+export { SETTINGS_ROOT_SECTIONS, regularRootNavigationKey, splitColumnVisibility, resolvedSplitColumnVisibility } from "./appNavigationModel"
 import { Button, EnvironmentValuesReader, Label, List, Navigation, NavigationLink, NavigationSplitView, NavigationStack, Section, TabView, Text, useEffect, useState } from "scripting"
-import { AccountScene, HomeScene, subscribeGalleryDetailCount } from "./GalleryFlow"
-import { CacheScene, DownloadsScene, HistoryScene, LibraryScene, SettingsScene } from "./LibraryScene"
+import { AccountScene } from "./AccountScene"
+import { HomeScene } from "./GalleryFlow"
+import { subscribeGalleryDetailCount } from "./galleryLifecycle"
+import { CacheScene, DownloadsScene, HistoryScene, LibraryScene, SettingsScene } from "./GalleryFlow"
 import { recoverDownloadsOnStartup } from "./libraryStore"
 import { getAccountSessionGeneration } from "./account"
 import { SettingsRowLabel } from "./GlassUI"
 
-type RootDestination="discover"|"library"|"settings"
 const ROOTS:Array<{key:RootDestination;title:string;icon:string}>=[
   {key:"discover",title:"发现",icon:"safari"},
   {key:"library",title:"书库",icon:"books.vertical"},
   {key:"settings",title:"设置",icon:"gearshape"},
 ]
 
-export const SETTINGS_ROOT_SECTIONS=["account","reading","downloads","data"] as const
 function SettingsRoot(){return <List navigationTitle="设置" navigationBarTitleDisplayMode="large" listStyle="insetGroup" listSectionSpacing="compact"><Section title="账号"><NavigationLink destination={<AccountScene/>}><SettingsRowLabel title="账号与站点" subtitle="登录、切换账号与选择 E / Ex 站点" systemImage="person.crop.circle"/></NavigationLink></Section><Section title="阅读"><NavigationLink destination={<SettingsScene/>}><SettingsRowLabel title="阅读设置" subtitle="阅读模式、方向、图片显示与自动翻页" systemImage="book"/></NavigationLink></Section><Section title="下载与缓存"><NavigationLink destination={<DownloadsScene/>}><SettingsRowLabel title="下载与离线阅读" subtitle="管理下载任务与离线画廊" systemImage="arrow.down.circle"/></NavigationLink><NavigationLink destination={<CacheScene/>}><SettingsRowLabel title="图片缓存管理" subtitle="清理在线封面和阅读图片缓存" systemImage="externaldrive"/></NavigationLink></Section><Section title="数据"><NavigationLink destination={<HistoryScene/>}><SettingsRowLabel title="历史记录与继续阅读" subtitle="查看历史、重置或清除阅读进度" systemImage="clock.arrow.circlepath"/></NavigationLink><NavigationLink destination={<LibraryScene titleMode="inline"/>}><SettingsRowLabel title="完整书库" subtitle="收藏、书签、历史与下载内容" systemImage="books.vertical"/></NavigationLink></Section></List>}
 function RootScene({value}:{value:RootDestination}){if(value==="library")return <LibraryScene sessionGeneration={getAccountSessionGeneration()}/>;if(value==="settings")return <SettingsRoot/>;return <HomeScene/>}
-export function regularRootNavigationKey(selected:RootDestination,epoch=0){return `regular-root:${selected}:${epoch}`}
-export function splitColumnVisibility(galleryPresented:boolean){return galleryPresented?"detailOnly":"doubleColumn"}
-export function resolvedSplitColumnVisibility(galleryPresented:boolean,userVisibility:string){return galleryPresented?"detailOnly":userVisibility||"doubleColumn"}
 function RegularShell({selected,onSelectedChanged}:{selected:RootDestination;onSelectedChanged:(value:RootDestination)=>void}){
   const[epoch,setEpoch]=useState(0)
   const[galleryCount,setGalleryCount]=useState(0)
