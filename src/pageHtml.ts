@@ -81,6 +81,14 @@ function isQuotaExceededImage(imageUrl: string): boolean {
   }
 }
 
+function findReloadUrl(html:string,baseUrl:string):string{
+  const tag=(html.match(/<a\b(?=[^>]*\bid\s*=\s*(["'])loadfail\1)[^>]*>/i)||[])[0]
+  if(!tag)return ""
+  const token=getAttribute(tag,"onclick").match(/^(?:return\s+)?nl\(\s*['"]([0-9]+-[0-9]+)['"]\s*\)\s*;?$/i)?.[1]
+  if(!token||token.length>80)return ""
+  try{const url=new URL(baseUrl);if(url.protocol!=="https:"||!['e-hentai.org','exhentai.org'].includes(url.hostname)||!url.pathname.startsWith('/s/'))return "";url.searchParams.set("nl",token);return url.toString()}catch{return ""}
+}
+
 export function parseImagePageHtml(html: string, baseUrl: string): PageExtractData {
   const imageTag = findImageTag(html)
   const imageUrl = imageTag
@@ -91,6 +99,7 @@ export function parseImagePageHtml(html: string, baseUrl: string): PageExtractDa
   return {
     imageUrl,
     originalUrl,
-    error: detectPageError(html) || (isQuotaExceededImage(imageUrl) ? "已达到 E-Hentai 图片浏览额度限制。" : "") || (!imageUrl ? "没有解析到图片地址，图片页结构可能已变化。" : ""),
+    reloadUrl:findReloadUrl(html,baseUrl),
+    error: (!html.trim() ? "图片页返回了空内容，请检查网络或当前站点登录状态后重试。" : "") || detectPageError(html) || (isQuotaExceededImage(imageUrl) ? "已达到 E-Hentai 图片浏览额度限制。" : "") || (!imageUrl ? "没有解析到图片地址，图片页结构可能已变化。" : ""),
   }
 }
