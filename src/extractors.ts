@@ -70,6 +70,8 @@ export type PageExtractData = {
   imageUrl: string
   originalUrl: string
   error: string
+  /** Same-page reload link offered by the site's Load failed control. */
+  reloadUrl?: string
 }
 
 export const SEARCH_EXTRACT_SCRIPT = String.raw`
